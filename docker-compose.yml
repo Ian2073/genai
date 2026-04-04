@@ -1,0 +1,61 @@
+# ============================================================
+# 多模態兒童故事生成系統 — Docker Compose
+# ============================================================
+# 使用方式:
+#   docker compose up          # 生成 1 本故事
+#   docker compose run --rm genai --count 5 --age 6-8
+# ============================================================
+
+services:
+  genai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: genai:latest
+    container_name: genai
+    working_dir: /app
+    init: true
+
+    gpus: all
+
+    # GPU 支援 (需要 nvidia-container-toolkit)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+    volumes:
+      # 專案程式碼熱掛載：本機修改可立即反映到容器（無須重建 image）
+      - ./:/app
+
+      # 模型目錄 (必須，~36GB)
+      - ./models:/app/models:ro
+
+      # 輸出目錄
+      - ./output:/app/output
+
+      # 日誌
+      - ./logs:/app/logs
+
+      # 可觀測性報告
+      - ./runs:/app/runs
+      # XTTS 說話人樣本 (語音合成用)
+      # - ./samples:/app/models/XTTS-v2/samples:ro
+
+      # 預設生成 1 本書
+    command: [ "--count", "1" ]
+
+    # 環境變數
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+
+    # 共享記憶體 (PyTorch DataLoader 需要)
+    shm_size: '2gb'
+
+    # 重啟策略
+    restart: "no"

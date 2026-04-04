@@ -1,0 +1,73 @@
+# --- 注意 ---
+# 本檔僅維護套件版本，不在此檔設定 index。
+# PyTorch cu128 的來源由 Dockerfile（或安裝指令）單獨處理，
+# 以避免影響 torchcodec 等其他套件的來源解析。
+
+# --- 核心 PyTorch 生態（支援 RTX 40/50 系列）---
+torch==2.8.0+cu128
+torchvision==0.23.0+cu128
+torchaudio==2.8.0+cu128
+torchcodec==0.7.0
+
+# --- GPTQ 推理核心（請維持此組版本同步）---
+# 若版本被覆蓋/漂移，常見錯誤：
+# - ImportError: Loading a GPTQ quantized model requires optimum
+# - NameError: QuantizeConfig is not defined
+# - ImportError: auto_gptq not found
+accelerate==1.12.0
+diffusers==0.30.0
+transformers==4.46.1
+tokenizers==0.20.3
+safetensors==0.4.3
+bitsandbytes>=0.43.0
+optimum==1.23.3
+auto-gptq==0.7.1
+exllamav2==0.3.2
+peft==0.18.1
+ninja>=1.11.1
+
+# --- 非 pip 先決條件（Windows）---
+# 1) Visual Studio C++ Build Tools (cl.exe 需可在 PATH 被找到)
+# 2) CUDA Toolkit (與已安裝 PyTorch CUDA 版本相容)
+
+# --- 科學運算 / 資料處理 ---
+numpy==1.26.4
+scipy==1.11.4
+scikit-learn==1.3.0
+pandas==1.5.3
+pyarrow==14.0.2
+openpyxl==3.1.2
+psutil==5.9.8
+py-cpuinfo==9.0.0
+nvidia-ml-py==12.535.108
+
+# --- 影像 / 圖像處理 ---
+pillow==10.3.0
+rembg==2.0.56
+
+# --- NLP / Tokenizer ---
+sentencepiece==0.1.99
+spacy==3.4.4
+spacy-transformers==1.1.9
+spacy-experimental==0.6.4
+en-core-web-sm==3.4.0
+en-coreference-web-trf==3.4.0a2
+pyyaml==6.0.3
+
+# --- 音訊 / 語音 ---
+soundfile==0.12.1
+TTS==0.22.0
+
+# --- 進度列 / 視覺化 / 圖結構 ---
+tqdm==4.66.5
+plotly==5.20.0
+networkx==2.8.8
+
+# --- 其他音訊輔助 ---
+pydub==0.25.1
+
+# --- 日文處理 (XTTS Ja Support) ---
+cutlet
+unidic-lite
+fugashi
+

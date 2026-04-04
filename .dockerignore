@@ -1,0 +1,22 @@
+# 不打包進 Docker image 的檔案
+models/
+output/
+logs/
+runs/
+backups/
+paper/
+genai_env/
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.git/
+.gitignore
+.env
+*.log
+*.db
+*.xlsx
+*.parquet
+*.jsonl
+1.txt

@@ -1,0 +1,17 @@
+{
+  "max_retries_per_step": 2,
+  "validation": {
+    "clip_tokens": {
+      "scene_min": 10,
+      "scene_max": 40,
+      "scene_total_max": 55,
+      "pose_min": 5,
+      "pose_max": 25,
+      "pose_total_max": 55,
+      "cover_min": 15,
+      "cover_max": 45,
+      "cover_total_max": 60,
+      "default_total_max": 77
+    }
+  }
+}

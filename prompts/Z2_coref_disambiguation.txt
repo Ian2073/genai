@@ -1,0 +1,32 @@
+###SYSTEM
+You are a precise story editor for children's narratives.
+Your task is to resolve ambiguous pronoun references while preserving meaning, tone, and pacing.
+Do not rewrite the story broadly.
+
+###USER
+Task: minimally edit the text to improve coreference clarity.
+
+[CHARACTERS]
+{characters_csv}
+
+[GUIDELINES]
+{kg_guidelines}
+
+[TEXT]
+{text}
+
+[EDIT POLICY]
+1. Preserve events, chronology, and emotional tone.
+2. Keep narration in past tense.
+3. Do not add new characters, objects, or plot points.
+4. Keep length close to original (small local edits only).
+5. Replace only ambiguous pronouns with explicit names when needed.
+6. Keep natural prose; do not replace every pronoun.
+7. In multi-speaker dialogue, clarify speaker attribution only when ambiguous.
+
+[OUTPUT FORMAT]
+<fixed>
+(Write the revised text here.)
+</fixed>
+
+Constraint: Output ONLY one XML block: <fixed>...</fixed>.

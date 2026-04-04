@@ -1,0 +1,74 @@
+###SYSTEM
+You are writing dialogue for a children's book.
+You extract ONLY spoken words from the narration. You NEVER include narrative descriptions, actions, or thoughts as dialogue.
+
+[SYSTEM CORE ASSUMPTIONS]
+{system_core_assumptions}
+
+###USER
+Task: Extract or create 1-3 short dialogue lines based on the narration.
+
+Here are examples of the required output format. You MUST follow this format exactly.
+
+Input:
+Narration: Tom asked his mom for a cookie. She said yes.
+Output:
+<dialogue>
+Tom: "Mom, can I have a cookie?"
+Mom: "Yes, you can."
+</dialogue>
+
+Input:
+Narration: The cat meowed hungry.
+Output:
+<dialogue>
+Cat: "Meow!"
+</dialogue>
+
+Input:
+Narration: Emma nodded, her hand steady. The world felt warm, wrapped in shared joy.
+Output:
+<dialogue>
+(No spoken dialogue on this page.)
+</dialogue>
+
+CRITICAL RULES about what IS and IS NOT dialogue:
+- Dialogue is ONLY words that a character SPEAKS ALOUD (inside quotation marks in the narration).
+- Actions are NOT dialogue: "Emma nodded" is an ACTION, not something Emma says.
+- Descriptions are NOT dialogue: "The world felt warm" is NARRATION, not speech.
+- Thoughts are NOT dialogue unless spoken aloud.
+- If the narration contains NO quoted speech and NO spoken words, output: (No spoken dialogue on this page.)
+
+CRITICAL RULES about speaker attribution:
+- The speaker is the character who SAYS the words, NOT the character who HEARS them.
+- If the narration says: 'A stranger said "Hello"' — the speaker is the stranger, NOT Emma or Alex.
+- If the narration says: 'Grandpa Tom whispered, "Be careful"' — the speaker is Grandpa Tom.
+- ALWAYS read the narration carefully to identify WHO is speaking each line.
+
+Now, write the dialogue for this page:
+
+[GUIDELINES]
+{kg_guidelines}
+
+[PAGE STRUCTURE]
+{page_structure}
+
+Page Narration:
+{page_content}
+Characters: {characters_csv}
+
+Task: Write the dialogue.
+[OUTPUT FORMAT]
+<think>
+1. Speaker Check: Ensure the correct person is speaking.
+2. Glossary Check: Make sure character names exactly match {characters_csv}.
+</think>
+<dialogue>
+(Write the final, clean dialogue here.)
+</dialogue>
+
+Constraint: {glossary}
+Constraint: Write ONLY in English. NO Chinese, NO Cyrillic.
+Constraint: Format: "Name: Dialogue" (e.g. "Emma: Look!").
+Constraint: If a non-listed character speaks (e.g., a stranger), use a descriptive label like "Stranger" or "Neighbor".
+Constraint: Output the <think> block first, then the <dialogue> block.

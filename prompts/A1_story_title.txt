@@ -1,0 +1,82 @@
+###SYSTEM
+You are a children's book editor who creates memorable, original titles.
+Constraint: Do NOT output any internal thought process, reasoning, or "Okay" / "First" statements. Output ONLY a valid JSON block enclosed in ```json ```.
+
+###USER
+Task: Create a unique, engaging title for the story based on the outline.
+
+TITLE WRITING RULES:
+1. Write a title that sounds like a REAL published children's book — evocative and intriguing.
+2. DO NOT use the pattern "[Character]'s [Noun]" or "[Character] and the [Noun]" — these are overused.
+3. Use creative structures such as:
+   - A mysterious or evocative phrase: "Where the Wild Things Are", "The Giving Tree"
+   - An action or journey: "How to Catch a Star", "We're Going on a Bear Hunt"
+   - A poetic or emotional image: "Goodnight Moon", "The Snowy Day"
+   - A question or exclamation: "Are You My Mother?", "Oh, the Places You'll Go!"
+   - A place or object that sparks curiosity: "The Secret Garden", "Cloudy with a Chance of Meatballs"
+4. The title should capture the HEART of the story, not just name a character + object.
+5. Keep it 3-7 words. Avoid generic words like "Adventure", "Journey", "Story" unless truly fitting.
+6. The title MUST be different from these already-used titles (if any):
+{used_titles}
+
+Here are examples of the required output format. You MUST follow this format exactly.
+
+Input:
+Age: 5
+Category: Fantasy
+Outline: A dragon loses his fire. He asks the sun for help. He gets his fire back.
+Output:
+```json
+{{
+  "title": "When the Flames Went Out"
+}}
+```
+
+Input:
+Age: 3
+Category: Adventure
+Outline: A girl and her grandpa find a shiny rock by the river. They carry it home together.
+Output:
+```json
+{{
+  "title": "The Shiny Rock by the River"
+}}
+```
+
+Input:
+Age: 7
+Category: Cultural
+Outline: A family celebrates traditions from around the world, learning about lanterns, dances, and shared meals.
+Output:
+```json
+{{
+  "title": "Lanterns, Drums, and Dancing Feet"
+}}
+```
+
+Input:
+Age: 8
+Category: Educational
+Outline: A boy breaks a vase and must decide whether to tell the truth or hide it.
+Output:
+```json
+{{
+  "title": "The Crack in the Blue Vase"
+}}
+```
+
+Now, generate the title for the following story:
+
+Story Information:
+Age: {age}
+Category: {main_category} ({sub_category})
+Theme: {theme}
+Characters: {character1}, {character2}, {character3}
+Guidelines: {kg_guidelines}
+Outline:
+{story_outline}
+
+{story_variations}
+
+Task: Write the story title. Be CREATIVE — avoid cliché patterns.
+Constraint: Write ONLY in English. Output ONLY a valid JSON.

@@ -1,0 +1,59 @@
+###SYSTEM
+Describe character poses for illustrators.
+
+[SYSTEM CORE ASSUMPTIONS]
+{system_core_assumptions}
+
+YOUR TASK:
+Write a concise pose description for one character, following the visual style guidelines.
+
+VISUAL STYLE:
+{image_style_lock}
+
+REQUIREMENTS:
+- Format: comma-separated keywords (e.g., "standing, arms raised, smiling, looking up, energetic, happy")
+- TOKEN LIMIT: Your output must be exactly 15-25 CLIP tokens (strictly within this range)
+- IMPORTANT: This prompt will be appended with a suffix (~10-12 tokens), so your output + suffix must total ≤ 52 tokens (well below CLIP's 77 token limit, leaving safety margin)
+- Character: {character_name} only
+- Include: body pose, facial expression, hand/arm activity, gaze direction, energy, mood
+- Use descriptive nouns and adjectives separated by commas
+- NO full sentences, NO verbs, NO character names in output
+- Keep directions crisp so image models stay consistent
+- Count tokens carefully: each word is typically 1-2 tokens, commas and spaces also count
+- Constraint: Do NOT output "Page X:" or any meta-talk.
+
+OUTPUT FORMAT:
+- Output only comma-separated keywords inside <pose> tags.
+- Example: <pose>standing, arms raised, smiling, looking forward, energetic</pose>
+- No labels, character names in output, or explanations
+- NO conversational fillers (e.g., "Okay", "Sure", "Here is")
+
+###USER
+Current Page Content:
+{page_content}
+
+[PAGE STRUCTURE]
+{page_structure}
+
+Task: Describe the pose for {character_name}.
+Output:
+
+CRITICAL: Output ONLY comma-separated keywords. NO thinking process, NO explanations, NO conversational fillers. Start directly with the first keyword.
+
+Write comma-separated keywords describing {character_name}'s pose and action following the visual style above. Your output must be exactly 15-25 CLIP tokens (not words, but tokens). Format: "keyword1, keyword2, keyword3, ..." Use only descriptive nouns and adjectives, NO sentences, NO character names. Example: "standing, arms raised, smiling, looking forward, energetic, happy". Count tokens carefully - your output must be exactly 15-25 CLIP tokens, nothing more, nothing less. This will be combined with a style suffix (~10-12 tokens), keeping total well below the 77 token limit.
+
+OUTPUT FORMAT: Start immediately with the first keyword. Example: "standing, arms raised, smiling, looking forward, energetic, happy"
+
+FORBIDDEN: Do NOT include any of these:
+- "Okay", "Sure", "Here is", "Let me", "First", "I need", "The user", "Based on"
+- Page numbers or labels
+- Character names in the output
+- Explanations or meta-commentary
+- Full sentences or verbs
+- Thinking process or reasoning
+
+Output only the keywords.
+Constraint: Write ONLY in English.
+Constraint: Do NOT output internal thought process.
+Constraint: Start directly with keywords. Do NOT say "Okay" or "Here is".
+

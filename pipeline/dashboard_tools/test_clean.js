@@ -1,0 +1,2508 @@
+
+    const STORE_KEY = 'genai.dashboard.form.v4';
+    const LANG_STORE_KEY = 'genai.dashboard.lang.v1';
+    const GENERATE_MODE_STORE_KEY = 'genai.dashboard.generate_mode.v1';
+    const ROLE_PRESET_STORE_KEY = 'genai.dashboard.role_preset.v1';
+
+    const I18N = {
+      'en': {
+        'title.dashboard': 'GenAI Chief Control Plane',
+        'hero.eyebrow': 'GenAI Operations',
+        'hero.title': 'Chief Control Plane',
+        'hero.sub': 'Operate runs, inspect alerts, manage queue priority, and audit production history from one dashboard.',
+        'label.auto_refresh': 'Auto refresh',
+        'label.language': 'Language',
+        'kpi.system_state': 'System State',
+        'kpi.queue_depth': 'Queue Depth',
+        'kpi.success_rate': 'Success Rate',
+        'kpi.avg_duration': 'Avg Duration',
+        'kpi.gpu_cost': 'Est. GPU Cost',
+        'tab.overview': 'Generate',
+        'tab.ops': 'Operations',
+        'tab.detail': 'Run Detail',
+        'tab.modules': 'Modules',
+        'overview.composer.title': 'Run Composer',
+        'overview.composer.sub': 'Product mode supports queueing with priority and versioned run profiles.',
+        'overview.telemetry.title': 'Live Telemetry',
+        'generate.mode.label': 'Interface Mode',
+        'generate.mode.basic': 'Basic',
+        'generate.mode.advanced': 'Advanced',
+        'generate.mode.hint.basic': 'Basic mode focuses on normal story generation. Switch to Advanced for fine-grained controls.',
+        'generate.mode.hint.advanced': 'Advanced mode unlocks fine-grained pipeline, retry, voice-clone, and prompt controls.',
+        'role.preset.label': 'Role Preset',
+        'role.preset.parent': 'Parent',
+        'role.preset.teacher': 'Teacher',
+        'role.preset.research': 'Research',
+        'role.preset.hint.parent': 'Parent preset prioritizes simple operation and stable bedtime-story output.',
+        'role.preset.hint.teacher': 'Teacher preset favors classroom use, reading control, and bilingual output.',
+        'role.preset.hint.research': 'Research preset enables advanced controls for experiments and diagnostics.',
+        'msg.role_preset_applied': 'Role preset applied: {role}',
+        'label.count': 'Book Count',
+        'label.max_retries': 'Retry Per Book',
+        'label.priority': 'Queue Priority',
+        'label.age': 'Age',
+        'label.category': 'Category',
+        'label.theme': 'Theme Hint (optional)',
+        'label.subcategory': 'Subcategory Hint (optional)',
+        'label.story_input_mode': 'Story Input Mode',
+        'label.speaker_wav': 'Speaker WAV (optional)',
+        'label.pages': 'Pages (0 = auto)',
+        'label.seed': 'Seed (empty = auto)',
+        'label.story_prompt': 'Story Prompt (free text)',
+        'label.story_materials': 'Materials / Elements',
+        'label.speaker_dir': 'Speaker Samples Dir (optional)',
+        'label.voice_script': 'Recording Script (recommended)',
+        'label.version_name': 'Config Version Name',
+        'label.version_note': 'Version Note',
+        'option.auto': 'Auto',
+        'option.priority.high': 'high',
+        'option.priority.normal': 'normal',
+        'option.priority.low': 'low',
+        'toggle.photo_enabled': 'Photo',
+        'toggle.translation_enabled': 'Translation',
+        'toggle.voice_enabled': 'Voice',
+        'toggle.verify_enabled': 'Verify',
+        'toggle.low_vram': 'Low VRAM',
+        'toggle.strict_translation': 'Strict translation',
+        'toggle.strict_voice': 'Strict voice',
+        'preset.balanced': 'Balanced',
+        'preset.speed': 'Speed',
+        'preset.quality': 'Quality',
+        'label.metric_total': 'Total',
+        'label.metric_completed': 'Completed',
+        'label.metric_success': 'Success',
+        'label.metric_failed': 'Failed',
+        'label.metric_elapsed': 'Elapsed',
+        'label.metric_eta': 'ETA',
+        'label.meta_run_id': 'Run ID',
+        'label.meta_pid': 'PID',
+        'label.meta_exit_code': 'Exit Code',
+        'label.meta_queue_depth': 'Queue Depth',
+        'label.raw_status_json': 'Raw status JSON',
+        'label.module_story_count': 'Book Count',
+        'label.module_story_pages': 'Pages (0 = auto)',
+        'label.module_story_priority': 'Priority',
+        'label.module_story_age': 'Age',
+        'label.module_story_category': 'Category',
+        'label.module_story_input_mode': 'Input Mode',
+        'label.module_story_theme': 'Theme Hint',
+        'label.module_story_subcategory': 'Subcategory Hint',
+        'label.module_story_seed': 'Seed (optional)',
+        'label.module_story_prompt': 'Story Prompt (custom mode)',
+        'label.module_story_materials': 'Story Materials (custom mode)',
+        'label.module_trans_story_root': 'Story Root (optional)',
+        'label.module_trans_priority': 'Priority',
+        'label.module_trans_source_folder': 'Source Folder',
+        'label.module_trans_source_lang': 'Source Language Code',
+        'label.module_trans_beam': 'Beam Size',
+        'label.module_trans_length_penalty': 'Length Penalty',
+        'label.module_trans_device': 'Device',
+        'label.module_trans_dtype': 'DType',
+        'label.module_trans_target_langs': 'Target Languages (comma or newline separated)',
+        'label.module_voice_story_root': 'Story Root (optional)',
+        'label.module_voice_language': 'Language (blank = auto detect)',
+        'label.module_voice_speaker_wav': 'Speaker WAV (optional)',
+        'label.module_voice_speaker_dir': 'Speaker Dir (optional)',
+        'label.module_voice_page_start': 'Page Start (optional)',
+        'label.module_voice_page_end': 'Page End (optional)',
+        'label.module_voice_priority': 'Priority',
+        'label.module_voice_gain': 'Gain',
+        'label.module_voice_speed': 'Speed',
+        'label.module_voice_device': 'Device',
+        'toggle.module_story_low_vram': 'Low VRAM',
+        'toggle.module_voice_concat': 'Concat full narration',
+        'toggle.module_voice_keep_raw': 'Keep raw files',
+        'ops.queue.title': 'Queue and Priority',
+        'ops.alert.title': 'Alert Center',
+        'ops.capacity.title': 'Capacity and Cost',
+        'ops.config.title': 'Config Versions',
+        'ops.logs.title': 'Live Logs',
+        'ops.recent.title': 'Recent Runs',
+        'detail.selector.title': 'Run Detail Selector',
+        'detail.summary.title': 'Run Summary',
+        'detail.timeline.title': 'Timeline and Alerts',
+        'detail.related_alerts.title': 'Related Alerts',
+        'detail.logs.title': 'Run Logs',
+        'module.jobs.title': 'Module Jobs',
+        'module.job_detail.title': 'Module Job Detail',
+        'module.job_events.title': 'Events',
+        'module.job_logs.title': 'Logs',
+        'module.workbenches.title': 'Module Workbenches',
+        'module.workbenches.sub': 'Run text, image, translation, and voice independently without executing the full pipeline.',
+        'module.tab.story': 'Text Studio',
+        'module.tab.image': 'Image Studio',
+        'module.tab.translation': 'Translation Studio',
+        'module.tab.voice': 'Voice Studio',
+        'image.live_preview.title': 'Live Image Preview',
+        'image.hint': 'Select one image to inspect original prompt and parameters, then regenerate with edits.',
+        'image.selected': 'Selected Image',
+        'image.positive': 'Positive Prompt',
+        'image.negative': 'Negative Prompt',
+        'btn.refresh_now': 'Refresh now',
+        'btn.start': 'Start / Queue',
+        'btn.stop': 'Stop Active',
+        'btn.save_local': 'Save Local',
+        'btn.load_local': 'Load Local',
+        'btn.save_version': 'Save Config Version',
+        'btn.record_start': 'Start Recording',
+        'btn.record_stop': 'Stop Recording',
+        'btn.record_save': 'Save As Speaker WAV',
+        'btn.clear': 'Clear',
+        'btn.refresh_detail': 'Refresh Detail',
+        'btn.refresh_jobs': 'Refresh Jobs',
+        'btn.stop_selected': 'Stop Selected',
+        'btn.refresh_images': 'Refresh Images',
+        'btn.regen_selected': 'Regenerate Selected',
+        'btn.queue_image_module': 'Queue Image Module Job',
+        'btn.regen_with_edits': 'Regenerate This (With Edits)',
+        'btn.run_text_module': 'Run Text Module',
+        'btn.run_translation_module': 'Run Translation Module',
+        'btn.run_voice_module': 'Run Voice Module',
+        'th.job': 'Job',
+        'th.state': 'State',
+        'th.priority': 'Priority',
+        'th.books': 'Books',
+        'th.category': 'Category',
+        'th.age': 'Age',
+        'th.action': 'Action',
+        'th.version': 'Version',
+        'th.created': 'Created',
+        'th.note': 'Note',
+        'th.usage': 'Usage',
+        'th.run': 'Run',
+        'th.started': 'Started',
+        'th.duration': 'Duration',
+        'th.result': 'Result',
+        'th.config': 'Config',
+        'th.type': 'Type',
+        'th.status': 'Status',
+        'th.story_root': 'Story Root',
+        'msg.request_failed': 'Request failed',
+        'msg.refresh_failed': 'Refresh failed.',
+        'msg.select_module_job_first': 'Select a module job first.',
+        'msg.no_module_jobs': 'No module jobs.',
+        'msg.no_module_job_selected': 'No module job selected.',
+        'msg.no_events': 'No events.',
+        'msg.no_module_logs': 'No module logs.',
+        'msg.submitting_module_job': 'Submitting module job...',
+        'msg.module_job_queued': 'Module job queued: {id}',
+        'msg.failed_run_module_job': 'Failed to run module job.',
+        'msg.stop_requested_for_module_job': 'Stop requested for module job {id}',
+        'msg.failed_stop_module_job': 'Failed to stop module job.',
+        'msg.none_selected': 'None selected.',
+        'msg.no_generated_images': 'No generated images yet.',
+        'msg.select_at_least_one_image': 'Please select at least one image item.',
+        'msg.regenerating_selected_images': 'Regenerating selected images...',
+        'msg.regenerated_images': 'Regenerated {ok}/{total} images.',
+        'msg.failed_regenerate_selected_images': 'Failed to regenerate selected images.',
+        'msg.select_image_for_regen': 'Select one image to regenerate with edits.',
+        'msg.regenerating_image_with_edits': 'Regenerating selected image with edited parameters...',
+        'msg.image_regenerated_successfully': 'Image regenerated successfully.',
+        'msg.image_regeneration_failed': 'Image regeneration failed.',
+        'msg.failed_regenerate_image': 'Failed to regenerate image.',
+        'msg.recording_read_script': 'Recording... please read the script naturally.',
+        'msg.microphone_access_failed': 'Microphone access failed.',
+        'msg.recording_captured': 'Recording captured. You can preview and save it as speaker WAV.',
+        'msg.no_recording_available': 'No recording available.',
+        'msg.speaker_sample_saved': 'Speaker sample saved: {path}',
+        'msg.failed_save_recording': 'Failed to save recording.',
+        'msg.saved_local_profile': 'Saved local form profile.',
+        'msg.preset_applied': 'Preset applied: {name}',
+        'msg.no_run_history': 'No run history yet.',
+        'msg.no_runs_available': 'No runs available',
+        'msg.queue_empty': 'Queue is empty.',
+        'msg.no_alerts': 'No alerts.',
+        'msg.no_trend_data': 'No trend data yet.',
+        'msg.no_saved_versions': 'No saved versions.',
+        'msg.no_related_alerts': 'No related alerts.',
+        'msg.no_run_logs': 'No run logs.',
+        'msg.book_count_min': 'Book count must be >= 1.',
+        'msg.submitting_run_request': 'Submitting run request...',
+        'msg.run_started': 'Run started: {id}',
+        'msg.run_queued': 'Run queued at position {pos}.',
+        'msg.failed_start_run': 'Failed to start run.',
+        'msg.stopping_active_run': 'Stopping active run...',
+        'msg.stopped_and_started_next': 'Stopped current run and started next queued run.',
+        'msg.stopped': 'Stopped.',
+        'msg.failed_stop_run': 'Failed to stop run.',
+        'msg.saved_config_version': 'Saved config version: {id}',
+        'msg.failed_save_config_version': 'Failed to save config version.',
+        'msg.applied_config_version': 'Applied config version: {id}',
+        'msg.failed_apply_config_version': 'Failed to apply config version.',
+        'msg.updated_priority': 'Updated priority for job {id}.',
+        'msg.failed_reprioritize_job': 'Failed to reprioritize job.',
+        'msg.canceled_job': 'Canceled queued job {id}.',
+        'msg.failed_cancel_job': 'Failed to cancel job.',
+        'msg.failed_ack_alert': 'Failed to acknowledge alert.',
+        'msg.loaded_local_profile': 'Loaded local profile.',
+        'meta.book': 'book',
+        'meta.stage': 'stage',
+        'meta.updated': 'updated',
+        'state.idle': 'idle',
+        'state.running': 'running',
+        'state.completed': 'completed',
+        'state.failed': 'failed',
+        'state.stopped': 'stopped',
+        'state.queued': 'queued',
+        'state.error': 'error',
+        'state.active': 'active',
+        'placeholder.theme': 'ex: friendship, courage, mystery',
+        'placeholder.subcategory': 'ex: forest, tradition, science',
+        'placeholder.seed': 'auto',
+        'placeholder.story_prompt': 'Describe style, plot direction, constraints, or desired emotional arc.',
+        'placeholder.story_materials': 'One line per item, e.g.\\nmagic map\\nold tree\\nrainy night',
+        'placeholder.story_prompt_preset': 'Preset mode: direct generation (no conversion layer).',
+        'placeholder.story_materials_preset': 'Preset mode: direct generation (no conversion layer).',
+        'placeholder.story_prompt_custom': 'Use concise requirements: mood, values, characters, conflict, ending style.',
+        'placeholder.story_materials_custom': 'Paste notes, outlines, facts, classroom material, or family context.',
+        'option.story_input_mode.preset': 'preset (use KG defaults)',
+        'option.story_input_mode.custom': 'custom (convert user input)',
+        'option.module_story_input_mode.preset': 'preset',
+        'option.module_story_input_mode.custom': 'custom',
+      },
+      'zh-TW': {
+        'title.dashboard': 'GenAI 故事生成控制台',
+        'hero.eyebrow': 'GenAI 營運面板',
+        'hero.title': '故事生成總控台',
+        'hero.sub': '在同一個儀表板管理生成任務、監看警示、調整佇列優先序，並追蹤執行歷史。',
+        'label.auto_refresh': '自動刷新',
+        'label.language': '語言',
+        'kpi.system_state': '系統狀態',
+        'kpi.queue_depth': '佇列深度',
+        'kpi.success_rate': '成功率',
+        'kpi.avg_duration': '平均耗時',
+        'kpi.gpu_cost': '預估 GPU 成本',
+        'tab.overview': '故事生成',
+        'tab.ops': '營運中心',
+        'tab.detail': '執行明細',
+        'tab.modules': '模組工作台',
+        'overview.composer.title': '主流程生成設定',
+        'overview.composer.sub': '主介面用於一般故事生成流程，支援排隊、優先序與版本化設定。',
+        'overview.telemetry.title': '即時執行監控',
+        'generate.mode.label': '介面模式',
+        'generate.mode.basic': '基本',
+        'generate.mode.advanced': '進階',
+        'generate.mode.hint.basic': '基本模式聚焦一般故事生成，適合日常操作。切到進階可調整更多細節參數。',
+        'generate.mode.hint.advanced': '進階模式提供重試、佇列優先序、語音樣本與提示詞等細部控制。',
+        'role.preset.label': '角色預設',
+        'role.preset.parent': '家長',
+        'role.preset.teacher': '教師',
+        'role.preset.research': '研究',
+        'role.preset.hint.parent': '家長預設以易用與穩定為優先，適合日常睡前故事生成。',
+        'role.preset.hint.teacher': '教師預設偏向教學情境，強調閱讀控制與雙語輸出。',
+        'role.preset.hint.research': '研究預設開啟進階控制，適合實驗、比較與診斷用途。',
+        'msg.role_preset_applied': '已套用角色預設：{role}',
+        'label.count': '生成本數',
+        'label.max_retries': '每本重試次數',
+        'label.priority': '佇列優先序',
+        'label.age': '年齡層',
+        'label.category': '類別',
+        'label.theme': '主題提示（可選）',
+        'label.subcategory': '子類別提示（可選）',
+        'label.story_input_mode': '故事輸入模式',
+        'label.speaker_wav': '說話人 WAV（可選）',
+        'label.pages': '頁數（0 = 自動）',
+        'label.seed': '隨機種子（空白 = 自動）',
+        'label.story_prompt': '故事提示（自由文字）',
+        'label.story_materials': '素材 / 元素',
+        'label.speaker_dir': '說話人樣本資料夾（可選）',
+        'label.voice_script': '錄音腳本（建議）',
+        'label.version_name': '設定版本名稱',
+        'label.version_note': '版本說明',
+        'option.auto': '自動',
+        'option.priority.high': '高',
+        'option.priority.normal': '一般',
+        'option.priority.low': '低',
+        'toggle.photo_enabled': '圖片',
+        'toggle.translation_enabled': '翻譯',
+        'toggle.voice_enabled': '語音',
+        'toggle.verify_enabled': '驗證',
+        'toggle.low_vram': '低顯存模式',
+        'toggle.strict_translation': '嚴格翻譯檢查',
+        'toggle.strict_voice': '嚴格語音檢查',
+        'preset.balanced': '平衡',
+        'preset.speed': '速度',
+        'preset.quality': '品質',
+        'label.metric_total': '總數',
+        'label.metric_completed': '已完成',
+        'label.metric_success': '成功',
+        'label.metric_failed': '失敗',
+        'label.metric_elapsed': '已耗時',
+        'label.metric_eta': '預估剩餘',
+        'label.meta_run_id': '執行編號',
+        'label.meta_pid': '程序 PID',
+        'label.meta_exit_code': '結束碼',
+        'label.meta_queue_depth': '佇列深度',
+        'label.raw_status_json': '原始狀態 JSON',
+        'label.module_story_count': '生成本數',
+        'label.module_story_pages': '頁數（0 = 自動）',
+        'label.module_story_priority': '優先序',
+        'label.module_story_age': '年齡層',
+        'label.module_story_category': '類別',
+        'label.module_story_input_mode': '輸入模式',
+        'label.module_story_theme': '主題提示',
+        'label.module_story_subcategory': '子類別提示',
+        'label.module_story_seed': '隨機種子（可選）',
+        'label.module_story_prompt': '故事提示（自訂模式）',
+        'label.module_story_materials': '故事素材（自訂模式）',
+        'label.module_trans_story_root': '故事路徑（可選）',
+        'label.module_trans_priority': '優先序',
+        'label.module_trans_source_folder': '來源資料夾',
+        'label.module_trans_source_lang': '來源語言代碼',
+        'label.module_trans_beam': 'Beam 大小',
+        'label.module_trans_length_penalty': '長度懲罰',
+        'label.module_trans_device': '裝置',
+        'label.module_trans_dtype': '資料型別',
+        'label.module_trans_target_langs': '目標語言（逗號或換行分隔）',
+        'label.module_voice_story_root': '故事路徑（可選）',
+        'label.module_voice_language': '語言（空白 = 自動偵測）',
+        'label.module_voice_speaker_wav': '說話人 WAV（可選）',
+        'label.module_voice_speaker_dir': '說話人資料夾（可選）',
+        'label.module_voice_page_start': '起始頁（可選）',
+        'label.module_voice_page_end': '結束頁（可選）',
+        'label.module_voice_priority': '優先序',
+        'label.module_voice_gain': '音量增益',
+        'label.module_voice_speed': '語速',
+        'label.module_voice_device': '裝置',
+        'toggle.module_story_low_vram': '低顯存模式',
+        'toggle.module_voice_concat': '合併完整旁白音檔',
+        'toggle.module_voice_keep_raw': '保留分段原始檔',
+        'ops.queue.title': '佇列與優先序',
+        'ops.alert.title': '警示中心',
+        'ops.capacity.title': '容量與成本',
+        'ops.config.title': '設定版本庫',
+        'ops.logs.title': '即時日誌',
+        'ops.recent.title': '近期執行紀錄',
+        'detail.selector.title': '執行明細選擇器',
+        'detail.summary.title': '執行摘要',
+        'detail.timeline.title': '時間線與警示',
+        'detail.related_alerts.title': '相關警示',
+        'detail.logs.title': '執行日誌',
+        'module.jobs.title': '模組任務佇列',
+        'module.job_detail.title': '模組任務明細',
+        'module.job_events.title': '事件',
+        'module.job_logs.title': '日誌',
+        'module.workbenches.title': '獨立模組工作台',
+        'module.workbenches.sub': '文字、圖像、翻譯、語音可分別獨立執行，不必跑完整主流程。',
+        'module.tab.story': '文字工作台',
+        'module.tab.image': '圖像工作台',
+        'module.tab.translation': '翻譯工作台',
+        'module.tab.voice': '語音工作台',
+        'image.live_preview.title': '即時圖像預覽',
+        'image.hint': '可先選一張圖查看原始提示詞與參數，再用編輯後設定重生成。',
+        'image.selected': '目前選取影像',
+        'image.positive': '正向提示詞',
+        'image.negative': '負向提示詞',
+        'btn.refresh_now': '立即刷新',
+        'btn.start': '開始 / 加入佇列',
+        'btn.stop': '停止目前任務',
+        'btn.save_local': '儲存本機設定',
+        'btn.load_local': '載入本機設定',
+        'btn.save_version': '儲存設定版本',
+        'btn.record_start': '開始錄音',
+        'btn.record_stop': '停止錄音',
+        'btn.record_save': '儲存為說話人 WAV',
+        'btn.clear': '清除',
+        'btn.refresh_detail': '刷新明細',
+        'btn.refresh_jobs': '刷新任務',
+        'btn.stop_selected': '停止選取任務',
+        'btn.refresh_images': '刷新圖片',
+        'btn.regen_selected': '重生成選取項目',
+        'btn.queue_image_module': '加入圖像模組任務',
+        'btn.regen_with_edits': '用目前編輯參數重生成',
+        'btn.run_text_module': '執行文字模組',
+        'btn.run_translation_module': '執行翻譯模組',
+        'btn.run_voice_module': '執行語音模組',
+        'th.job': '任務',
+        'th.state': '狀態',
+        'th.priority': '優先序',
+        'th.books': '書本數',
+        'th.category': '類別',
+        'th.age': '年齡層',
+        'th.action': '操作',
+        'th.version': '版本',
+        'th.created': '建立時間',
+        'th.note': '備註',
+        'th.usage': '使用次數',
+        'th.run': '執行編號',
+        'th.started': '開始時間',
+        'th.duration': '耗時',
+        'th.result': '結果',
+        'th.config': '設定',
+        'th.type': '類型',
+        'th.status': '狀態',
+        'th.story_root': '故事路徑',
+        'msg.request_failed': '請求失敗',
+        'msg.refresh_failed': '刷新失敗。',
+        'msg.select_module_job_first': '請先選擇一個模組任務。',
+        'msg.no_module_jobs': '目前沒有模組任務。',
+        'msg.no_module_job_selected': '尚未選擇模組任務。',
+        'msg.no_events': '目前沒有事件。',
+        'msg.no_module_logs': '目前沒有模組日誌。',
+        'msg.submitting_module_job': '正在提交模組任務...',
+        'msg.module_job_queued': '模組任務已加入佇列：{id}',
+        'msg.failed_run_module_job': '執行模組任務失敗。',
+        'msg.stop_requested_for_module_job': '已送出停止請求：{id}',
+        'msg.failed_stop_module_job': '停止模組任務失敗。',
+        'msg.none_selected': '尚未選取。',
+        'msg.no_generated_images': '目前尚無生成圖片。',
+        'msg.select_at_least_one_image': '請至少選擇一個圖片項目。',
+        'msg.regenerating_selected_images': '正在重生成已選圖片...',
+        'msg.regenerated_images': '已重生成 {ok}/{total} 張圖片。',
+        'msg.failed_regenerate_selected_images': '重生成選取圖片失敗。',
+        'msg.select_image_for_regen': '請先選擇一張圖片再重生成。',
+        'msg.regenerating_image_with_edits': '正在用編輯後參數重生成圖片...',
+        'msg.image_regenerated_successfully': '圖片重生成成功。',
+        'msg.image_regeneration_failed': '圖片重生成失敗。',
+        'msg.failed_regenerate_image': '圖片重生成失敗。',
+        'msg.recording_read_script': '錄音中...請自然朗讀腳本。',
+        'msg.microphone_access_failed': '麥克風權限或裝置無法使用。',
+        'msg.recording_captured': '錄音已完成，可預聽並儲存為說話人樣本。',
+        'msg.no_recording_available': '目前沒有可儲存的錄音。',
+        'msg.speaker_sample_saved': '說話人樣本已儲存：{path}',
+        'msg.failed_save_recording': '儲存錄音失敗。',
+        'msg.saved_local_profile': '已儲存本機設定。',
+        'msg.preset_applied': '已套用預設：{name}',
+        'msg.no_run_history': '目前沒有執行紀錄。',
+        'msg.no_runs_available': '目前沒有可選的執行紀錄',
+        'msg.queue_empty': '佇列目前為空。',
+        'msg.no_alerts': '目前沒有警示。',
+        'msg.no_trend_data': '目前沒有趨勢資料。',
+        'msg.no_saved_versions': '目前沒有儲存版本。',
+        'msg.no_related_alerts': '目前沒有相關警示。',
+        'msg.no_run_logs': '目前沒有執行日誌。',
+        'msg.book_count_min': '生成本數必須 >= 1。',
+        'msg.submitting_run_request': '正在提交執行請求...',
+        'msg.run_started': '已啟動任務：{id}',
+        'msg.run_queued': '任務已加入佇列，位置 {pos}。',
+        'msg.failed_start_run': '啟動任務失敗。',
+        'msg.stopping_active_run': '正在停止目前任務...',
+        'msg.stopped_and_started_next': '已停止目前任務，並啟動下一個排隊任務。',
+        'msg.stopped': '已停止。',
+        'msg.failed_stop_run': '停止任務失敗。',
+        'msg.saved_config_version': '設定版本已儲存：{id}',
+        'msg.failed_save_config_version': '儲存設定版本失敗。',
+        'msg.applied_config_version': '已套用設定版本：{id}',
+        'msg.failed_apply_config_version': '套用設定版本失敗。',
+        'msg.updated_priority': '已更新任務優先序：{id}',
+        'msg.failed_reprioritize_job': '更新優先序失敗。',
+        'msg.canceled_job': '已取消排隊任務：{id}',
+        'msg.failed_cancel_job': '取消任務失敗。',
+        'msg.failed_ack_alert': '警示確認失敗。',
+        'msg.loaded_local_profile': '已載入本機設定。',
+        'meta.book': '書本',
+        'meta.stage': '階段',
+        'meta.updated': '更新',
+        'state.idle': '閒置',
+        'state.running': '執行中',
+        'state.completed': '已完成',
+        'state.failed': '失敗',
+        'state.stopped': '已停止',
+        'state.queued': '排隊中',
+        'state.error': '錯誤',
+        'state.active': '執行中',
+        'placeholder.theme': '例如：友情、勇氣、冒險',
+        'placeholder.subcategory': '例如：森林、傳統、科學',
+        'placeholder.seed': '自動',
+        'placeholder.story_prompt': '描述希望的風格、劇情方向、限制條件或情感走向。',
+        'placeholder.story_materials': '每行一個素材，例如：\\n魔法地圖\\n古老大樹\\n雨夜',
+        'placeholder.story_prompt_preset': '預設模式：直接生成（不走轉換層）。',
+        'placeholder.story_materials_preset': '預設模式：直接生成（不走轉換層）。',
+        'placeholder.story_prompt_custom': '輸入精簡需求：情緒、價值、角色、衝突、結局風格。',
+        'placeholder.story_materials_custom': '可貼上筆記、大綱、教材重點或家庭情境。',
+        'option.story_input_mode.preset': '預設（使用 KG 預設）',
+        'option.story_input_mode.custom': '自訂（轉換使用者輸入）',
+        'option.module_story_input_mode.preset': '預設',
+        'option.module_story_input_mode.custom': '自訂',
+      },
+    };
+
+    const ui = {
+      timer: null,
+      logCursor: 0,
+      activeLogRunId: null,
+      historyRows: [],
+      selectedRunId: '',
+      latestStatus: null,
+      activeTab: 'overview',
+      refreshTick: 0,
+      recorder: null,
+      recordChunks: [],
+      recordSampleRate: 16000,
+      recordBlob: null,
+      recordStream: null,
+      recordContext: null,
+      recordSource: null,
+      recordProcessor: null,
+      imageItems: [],
+      imageStoryRoot: '',
+      imageSelectedTaskIds: {},
+      imageDetailTaskId: '',
+      moduleJobs: [],
+      moduleSelectedJobId: '',
+      moduleStudio: 'story',
+      language: 'zh-TW',
+      generateMode: 'basic',
+      rolePreset: 'parent',
+    };
+
+    function getPreferredLanguage() {
+      const saved = localStorage.getItem(LANG_STORE_KEY);
+      if (saved && (saved === 'en' || saved === 'zh-TW')) return saved;
+      const nav = String((navigator.language || navigator.userLanguage || '')).toLowerCase();
+      if (nav.startsWith('zh')) return 'zh-TW';
+      return 'en';
+    }
+
+    function t(key, fallback) {
+      const lang = ui.language && I18N[ui.language] ? ui.language : 'en';
+      const table = I18N[lang] || {};
+      if (Object.prototype.hasOwnProperty.call(table, key)) return table[key];
+      if (Object.prototype.hasOwnProperty.call(I18N.en, key)) return I18N.en[key];
+      return fallback != null ? fallback : key;
+    }
+
+    function tf(key, vars, fallback) {
+      let text = String(t(key, fallback));
+      const payload = vars || {};
+      const names = Object.keys(payload);
+      for (let i = 0; i < names.length; i += 1) {
+        const name = names[i];
+        text = text.split('{' + name + '}').join(String(payload[name]));
+      }
+      return text;
+    }
+
+    function setTextById(id, key, fallback) {
+      const node = byId(id);
+      if (!node) return;
+      node.textContent = t(key, fallback);
+    }
+
+    function setLabelFor(inputId, key, fallback) {
+      const node = document.querySelector('label[for="' + inputId + '"]');
+      if (!node) return;
+      node.textContent = t(key, fallback);
+    }
+
+    function setChipText(inputId, key, fallback) {
+      const input = byId(inputId);
+      if (!input) return;
+      const parent = input.parentElement;
+      if (!parent) return;
+      let textSpan = parent.querySelector('.chip-text');
+      if (!textSpan) {
+        textSpan = document.createElement('span');
+        textSpan.className = 'chip-text';
+        parent.appendChild(textSpan);
+      }
+      textSpan.textContent = t(key, fallback);
+    }
+
+    function setSelectOptionValue(selectId, optionValue, key, fallback) {
+      const select = byId(selectId);
+      if (!select || !select.options) return;
+      for (let i = 0; i < select.options.length; i += 1) {
+        const option = select.options[i];
+        if (String(option.value) === String(optionValue)) {
+          option.text = t(key, fallback);
+          return;
+        }
+      }
+    }
+
+    function applyLanguage() {
+      document.documentElement.lang = ui.language;
+      document.title = t('title.dashboard', 'GenAI Chief Control Plane');
+
+      const staticMappings = [
+        ['hero_eyebrow', 'hero.eyebrow', 'GenAI Operations'],
+        ['hero_title', 'hero.title', 'Chief Control Plane'],
+        ['hero_sub', 'hero.sub', 'Operate runs, inspect alerts, manage queue priority, and audit production history from one dashboard.'],
+        ['label_auto_refresh_text', 'label.auto_refresh', 'Auto refresh'],
+        ['label_language', 'label.language', 'Language'],
+        ['kpi_label_system_state', 'kpi.system_state', 'System State'],
+        ['kpi_label_queue_depth', 'kpi.queue_depth', 'Queue Depth'],
+        ['kpi_label_success_rate', 'kpi.success_rate', 'Success Rate'],
+        ['kpi_label_avg_duration', 'kpi.avg_duration', 'Avg Duration'],
+        ['kpi_label_gpu_cost', 'kpi.gpu_cost', 'Est. GPU Cost'],
+        ['tab_btn_overview', 'tab.overview', 'Generate'],
+        ['tab_btn_ops', 'tab.ops', 'Operations'],
+        ['tab_btn_detail', 'tab.detail', 'Run Detail'],
+        ['tab_btn_modules', 'tab.modules', 'Modules'],
+        ['overview_composer_title', 'overview.composer.title', 'Run Composer'],
+        ['overview_composer_sub', 'overview.composer.sub', 'Product mode supports queueing with priority and versioned run profiles.'],
+        ['overview_telemetry_title', 'overview.telemetry.title', 'Live Telemetry'],
+        ['generate_mode_label', 'generate.mode.label', 'Interface Mode'],
+        ['btn_mode_basic', 'generate.mode.basic', 'Basic'],
+        ['btn_mode_advanced', 'generate.mode.advanced', 'Advanced'],
+        ['role_preset_label', 'role.preset.label', 'Role Preset'],
+        ['btn_role_parent', 'role.preset.parent', 'Parent'],
+        ['btn_role_teacher', 'role.preset.teacher', 'Teacher'],
+        ['btn_role_research', 'role.preset.research', 'Research'],
+        ['ops_queue_title', 'ops.queue.title', 'Queue and Priority'],
+        ['ops_alert_title', 'ops.alert.title', 'Alert Center'],
+        ['ops_capacity_title', 'ops.capacity.title', 'Capacity and Cost'],
+        ['ops_config_title', 'ops.config.title', 'Config Versions'],
+        ['ops_logs_title', 'ops.logs.title', 'Live Logs'],
+        ['ops_recent_title', 'ops.recent.title', 'Recent Runs'],
+        ['detail_selector_title', 'detail.selector.title', 'Run Detail Selector'],
+        ['detail_summary_title', 'detail.summary.title', 'Run Summary'],
+        ['detail_timeline_title', 'detail.timeline.title', 'Timeline and Alerts'],
+        ['detail_related_alerts_title', 'detail.related_alerts.title', 'Related Alerts'],
+        ['detail_logs_title', 'detail.logs.title', 'Run Logs'],
+        ['module_jobs_title', 'module.jobs.title', 'Module Jobs'],
+        ['module_job_detail_title', 'module.job_detail.title', 'Module Job Detail'],
+        ['module_job_events_title', 'module.job_events.title', 'Events'],
+        ['module_job_logs_title', 'module.job_logs.title', 'Logs'],
+        ['module_workbenches_title', 'module.workbenches.title', 'Module Workbenches'],
+        ['module_workbenches_sub', 'module.workbenches.sub', 'Run text, image, translation, and voice independently without executing the full pipeline.'],
+        ['module_tab_story', 'module.tab.story', 'Text Studio'],
+        ['module_tab_image', 'module.tab.image', 'Image Studio'],
+        ['module_tab_translation', 'module.tab.translation', 'Translation Studio'],
+        ['module_tab_voice', 'module.tab.voice', 'Voice Studio'],
+        ['image_live_preview_title', 'image.live_preview.title', 'Live Image Preview'],
+        ['image_hint_text', 'image.hint', 'Select one image to inspect original prompt and parameters, then regenerate with edits.'],
+        ['image_selected_label', 'image.selected', 'Selected Image'],
+        ['image_pos_label', 'image.positive', 'Positive Prompt'],
+        ['image_neg_label', 'image.negative', 'Negative Prompt'],
+        ['btn_refresh_now', 'btn.refresh_now', 'Refresh now'],
+        ['btn_start', 'btn.start', 'Start / Queue'],
+        ['btn_stop', 'btn.stop', 'Stop Active'],
+        ['btn_save_local', 'btn.save_local', 'Save Local'],
+        ['btn_load_local', 'btn.load_local', 'Load Local'],
+        ['btn_save_version', 'btn.save_version', 'Save Config Version'],
+        ['btn_record_start', 'btn.record_start', 'Start Recording'],
+        ['btn_record_stop', 'btn.record_stop', 'Stop Recording'],
+        ['btn_record_save', 'btn.record_save', 'Save As Speaker WAV'],
+        ['btn_clear_logs', 'btn.clear', 'Clear'],
+        ['btn_detail_refresh', 'btn.refresh_detail', 'Refresh Detail'],
+        ['btn_modules_refresh', 'btn.refresh_jobs', 'Refresh Jobs'],
+        ['btn_module_job_stop', 'btn.stop_selected', 'Stop Selected'],
+        ['btn_images_refresh', 'btn.refresh_images', 'Refresh Images'],
+        ['btn_images_regen', 'btn.regen_selected', 'Regenerate Selected'],
+        ['btn_images_module_run', 'btn.queue_image_module', 'Queue Image Module Job'],
+        ['btn_image_regen_detail', 'btn.regen_with_edits', 'Regenerate This (With Edits)'],
+        ['btn_module_story_run', 'btn.run_text_module', 'Run Text Module'],
+        ['btn_module_translation_run', 'btn.run_translation_module', 'Run Translation Module'],
+        ['btn_module_voice_run', 'btn.run_voice_module', 'Run Voice Module'],
+        ['btn_preset_balanced', 'preset.balanced', 'Balanced'],
+        ['btn_preset_speed', 'preset.speed', 'Speed'],
+        ['btn_preset_quality', 'preset.quality', 'Quality'],
+        ['lbl_metric_total', 'label.metric_total', 'Total'],
+        ['lbl_metric_completed', 'label.metric_completed', 'Completed'],
+        ['lbl_metric_success', 'label.metric_success', 'Success'],
+        ['lbl_metric_failed', 'label.metric_failed', 'Failed'],
+        ['lbl_metric_elapsed', 'label.metric_elapsed', 'Elapsed'],
+        ['lbl_metric_eta', 'label.metric_eta', 'ETA'],
+        ['lbl_meta_run_id', 'label.meta_run_id', 'Run ID'],
+        ['lbl_meta_pid', 'label.meta_pid', 'PID'],
+        ['lbl_meta_exit_code', 'label.meta_exit_code', 'Exit Code'],
+        ['lbl_meta_queue_depth', 'label.meta_queue_depth', 'Queue Depth'],
+        ['lbl_raw_status_json', 'label.raw_status_json', 'Raw status JSON'],
+        ['th_queue_job', 'th.job', 'Job'],
+        ['th_queue_state', 'th.state', 'State'],
+        ['th_queue_priority', 'th.priority', 'Priority'],
+        ['th_queue_books', 'th.books', 'Books'],
+        ['th_queue_category', 'th.category', 'Category'],
+        ['th_queue_age', 'th.age', 'Age'],
+        ['th_queue_action', 'th.action', 'Action'],
+        ['th_cfg_version', 'th.version', 'Version'],
+        ['th_cfg_created', 'th.created', 'Created'],
+        ['th_cfg_note', 'th.note', 'Note'],
+        ['th_cfg_usage', 'th.usage', 'Usage'],
+        ['th_cfg_action', 'th.action', 'Action'],
+        ['th_recent_run', 'th.run', 'Run'],
+        ['th_recent_started', 'th.started', 'Started'],
+        ['th_recent_duration', 'th.duration', 'Duration'],
+        ['th_recent_result', 'th.result', 'Result'],
+        ['th_recent_books', 'th.books', 'Books'],
+        ['th_recent_config', 'th.config', 'Config'],
+        ['th_module_job', 'th.job', 'Job'],
+        ['th_module_type', 'th.type', 'Type'],
+        ['th_module_status', 'th.status', 'Status'],
+        ['th_module_priority', 'th.priority', 'Priority'],
+        ['th_module_story_root', 'th.story_root', 'Story Root'],
+        ['th_module_action', 'th.action', 'Action'],
+      ];
+
+      for (let i = 0; i < staticMappings.length; i += 1) {
+        const row = staticMappings[i];
+        setTextById(row[0], row[1], row[2]);
+      }
+
+      const themeInput = byId('theme');
+      if (themeInput) themeInput.placeholder = t('placeholder.theme', themeInput.placeholder);
+      const subcategoryInput = byId('subcategory');
+      if (subcategoryInput) subcategoryInput.placeholder = t('placeholder.subcategory', subcategoryInput.placeholder);
+      const seedInput = byId('seed');
+      if (seedInput) seedInput.placeholder = t('placeholder.seed', seedInput.placeholder);
+      const storyPrompt = byId('story_prompt');
+      if (storyPrompt) storyPrompt.placeholder = t('placeholder.story_prompt', storyPrompt.placeholder);
+      const storyMaterials = byId('story_materials');
+      if (storyMaterials) storyMaterials.placeholder = t('placeholder.story_materials', storyMaterials.placeholder);
+
+      const storyInputMode = byId('story_input_mode');
+      if (storyInputMode && storyInputMode.options && storyInputMode.options.length >= 2) {
+        storyInputMode.options[0].text = t('option.story_input_mode.preset', storyInputMode.options[0].text);
+        storyInputMode.options[1].text = t('option.story_input_mode.custom', storyInputMode.options[1].text);
+      }
+
+      setLabelFor('count', 'label.count', 'Book Count');
+      setLabelFor('max_retries', 'label.max_retries', 'Retry Per Book');
+      setLabelFor('priority', 'label.priority', 'Queue Priority');
+      setLabelFor('age', 'label.age', 'Age');
+      setLabelFor('category', 'label.category', 'Category');
+      setLabelFor('theme', 'label.theme', 'Theme Hint (optional)');
+      setLabelFor('subcategory', 'label.subcategory', 'Subcategory Hint (optional)');
+      setLabelFor('story_input_mode', 'label.story_input_mode', 'Story Input Mode');
+      setLabelFor('speaker_wav', 'label.speaker_wav', 'Speaker WAV (optional)');
+      setLabelFor('pages', 'label.pages', 'Pages (0 = auto)');
+      setLabelFor('seed', 'label.seed', 'Seed (empty = auto)');
+      setLabelFor('story_prompt', 'label.story_prompt', 'Story Prompt (free text)');
+      setLabelFor('story_materials', 'label.story_materials', 'Materials / Elements');
+      setLabelFor('speaker_dir', 'label.speaker_dir', 'Speaker Samples Dir (optional)');
+      setLabelFor('voice_script', 'label.voice_script', 'Recording Script (recommended)');
+      setLabelFor('version_name', 'label.version_name', 'Config Version Name');
+      setLabelFor('version_note', 'label.version_note', 'Version Note');
+      setLabelFor('module_story_count', 'label.module_story_count', 'Book Count');
+      setLabelFor('module_story_pages', 'label.module_story_pages', 'Pages (0 = auto)');
+      setLabelFor('module_story_priority', 'label.module_story_priority', 'Priority');
+      setLabelFor('module_story_age', 'label.module_story_age', 'Age');
+      setLabelFor('module_story_category', 'label.module_story_category', 'Category');
+      setLabelFor('module_story_input_mode', 'label.module_story_input_mode', 'Input Mode');
+      setLabelFor('module_story_theme', 'label.module_story_theme', 'Theme Hint');
+      setLabelFor('module_story_subcategory', 'label.module_story_subcategory', 'Subcategory Hint');
+      setLabelFor('module_story_seed', 'label.module_story_seed', 'Seed (optional)');
+      setLabelFor('module_story_prompt', 'label.module_story_prompt', 'Story Prompt (custom mode)');
+      setLabelFor('module_story_materials', 'label.module_story_materials', 'Story Materials (custom mode)');
+      setLabelFor('module_trans_story_root', 'label.module_trans_story_root', 'Story Root (optional)');
+      setLabelFor('module_trans_priority', 'label.module_trans_priority', 'Priority');
+      setLabelFor('module_trans_source_folder', 'label.module_trans_source_folder', 'Source Folder');
+      setLabelFor('module_trans_source_lang', 'label.module_trans_source_lang', 'Source Language Code');
+      setLabelFor('module_trans_beam', 'label.module_trans_beam', 'Beam Size');
+      setLabelFor('module_trans_length_penalty', 'label.module_trans_length_penalty', 'Length Penalty');
+      setLabelFor('module_trans_device', 'label.module_trans_device', 'Device');
+      setLabelFor('module_trans_dtype', 'label.module_trans_dtype', 'DType');
+      setLabelFor('module_trans_target_langs', 'label.module_trans_target_langs', 'Target Languages (comma or newline separated)');
+      setLabelFor('module_voice_story_root', 'label.module_voice_story_root', 'Story Root (optional)');
+      setLabelFor('module_voice_language', 'label.module_voice_language', 'Language (blank = auto detect)');
+      setLabelFor('module_voice_speaker_wav', 'label.module_voice_speaker_wav', 'Speaker WAV (optional)');
+      setLabelFor('module_voice_speaker_dir', 'label.module_voice_speaker_dir', 'Speaker Dir (optional)');
+      setLabelFor('module_voice_page_start', 'label.module_voice_page_start', 'Page Start (optional)');
+      setLabelFor('module_voice_page_end', 'label.module_voice_page_end', 'Page End (optional)');
+      setLabelFor('module_voice_priority', 'label.module_voice_priority', 'Priority');
+      setLabelFor('module_voice_gain', 'label.module_voice_gain', 'Gain');
+      setLabelFor('module_voice_speed', 'label.module_voice_speed', 'Speed');
+      setLabelFor('module_voice_device', 'label.module_voice_device', 'Device');
+
+      setChipText('photo_enabled', 'toggle.photo_enabled', 'Photo');
+      setChipText('translation_enabled', 'toggle.translation_enabled', 'Translation');
+      setChipText('voice_enabled', 'toggle.voice_enabled', 'Voice');
+      setChipText('verify_enabled', 'toggle.verify_enabled', 'Verify');
+      setChipText('low_vram', 'toggle.low_vram', 'Low VRAM');
+      setChipText('strict_translation', 'toggle.strict_translation', 'Strict translation');
+      setChipText('strict_voice', 'toggle.strict_voice', 'Strict voice');
+      setChipText('module_story_low_vram', 'toggle.module_story_low_vram', 'Low VRAM');
+      setChipText('module_voice_concat', 'toggle.module_voice_concat', 'Concat full narration');
+      setChipText('module_voice_keep_raw', 'toggle.module_voice_keep_raw', 'Keep raw files');
+
+      setSelectOptionValue('age', '', 'option.auto', 'Auto');
+      setSelectOptionValue('category', '', 'option.auto', 'Auto');
+      setSelectOptionValue('priority', 'high', 'option.priority.high', 'high');
+      setSelectOptionValue('priority', 'normal', 'option.priority.normal', 'normal');
+      setSelectOptionValue('priority', 'low', 'option.priority.low', 'low');
+      setSelectOptionValue('module_story_age', '', 'option.auto', 'Auto');
+      setSelectOptionValue('module_story_category', '', 'option.auto', 'Auto');
+      setSelectOptionValue('module_story_priority', 'high', 'option.priority.high', 'high');
+      setSelectOptionValue('module_story_priority', 'normal', 'option.priority.normal', 'normal');
+      setSelectOptionValue('module_story_priority', 'low', 'option.priority.low', 'low');
+      setSelectOptionValue('module_trans_priority', 'high', 'option.priority.high', 'high');
+      setSelectOptionValue('module_trans_priority', 'normal', 'option.priority.normal', 'normal');
+      setSelectOptionValue('module_trans_priority', 'low', 'option.priority.low', 'low');
+      setSelectOptionValue('module_voice_priority', 'high', 'option.priority.high', 'high');
+      setSelectOptionValue('module_voice_priority', 'normal', 'option.priority.normal', 'normal');
+      setSelectOptionValue('module_voice_priority', 'low', 'option.priority.low', 'low');
+      setSelectOptionValue('module_image_priority', 'high', 'option.priority.high', 'high');
+      setSelectOptionValue('module_image_priority', 'normal', 'option.priority.normal', 'normal');
+      setSelectOptionValue('module_image_priority', 'low', 'option.priority.low', 'low');
+
+      const moduleStoryInputMode = byId('module_story_input_mode');
+      if (moduleStoryInputMode && moduleStoryInputMode.options && moduleStoryInputMode.options.length >= 2) {
+        moduleStoryInputMode.options[0].text = t('option.module_story_input_mode.preset', moduleStoryInputMode.options[0].text);
+        moduleStoryInputMode.options[1].text = t('option.module_story_input_mode.custom', moduleStoryInputMode.options[1].text);
+      }
+
+      const langSelect = byId('lang_select');
+      if (langSelect) langSelect.value = ui.language;
+      updateGenerateModeHint();
+      updateRolePresetHint();
+    }
+
+    function byId(id) {
+      return document.getElementById(id);
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function parseIntSafe(value, fallback) {
+      const n = parseInt(String(value), 10);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    function parseFloatSafe(value, fallback) {
+      const n = parseFloat(String(value));
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    function formatDuration(seconds) {
+      if (seconds == null || !Number.isFinite(Number(seconds))) return '-';
+      const total = Math.max(0, Math.round(Number(seconds)));
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total % 60;
+      if (h > 0) {
+        return String(h) + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s).padStart(2, '0') + 's';
+      }
+      if (m > 0) {
+        return String(m) + 'm ' + String(s).padStart(2, '0') + 's';
+      }
+      return String(s) + 's';
+    }
+
+    function toPercent(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '0%';
+      return n.toFixed(1) + '%';
+    }
+
+    function isoToLocal(isoText) {
+      if (!isoText) return '-';
+      const d = new Date(isoText);
+      if (Number.isNaN(d.getTime())) return '-';
+      return d.toLocaleString();
+    }
+
+    function localizeState(stateValue) {
+      const value = String(stateValue || '').toLowerCase();
+      if (!value) return '-';
+      return t('state.' + value, value);
+    }
+
+    async function apiGet(path) {
+      const res = await fetch(path);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || t('msg.request_failed', 'Request failed'));
+      }
+      return data;
+    }
+
+    async function apiPost(path, payload) {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload || {}),
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || t('msg.request_failed', 'Request failed'));
+      }
+      return data;
+    }
+
+    function setMessage(text, mode) {
+      const el = byId('message');
+      el.textContent = text || '';
+      el.className = 'message';
+      if (mode) el.classList.add(mode);
+    }
+
+    function setImageMessage(text, mode) {
+      const el = byId('image_message');
+      if (!el) return;
+      el.textContent = text || '';
+      el.className = 'message';
+      if (mode) el.classList.add(mode);
+    }
+
+    function setModuleMessage(messageId, text, mode) {
+      const el = byId(messageId);
+      if (!el) return;
+      el.textContent = text || '';
+      el.className = 'message';
+      if (mode) el.classList.add(mode);
+    }
+
+    function parseNullableIntText(text) {
+      const raw = String(text || '').trim();
+      if (!raw) return null;
+      const value = parseInt(raw, 10);
+      return Number.isFinite(value) ? value : null;
+    }
+
+    function parseLangList(text) {
+      const parts = String(text || '')
+        .replace(/\\r/g, '\\n')
+        .replace(/,/g, '\\n')
+        .split('\\n');
+      const seen = {};
+      const rows = [];
+      for (let i = 0; i < parts.length; i += 1) {
+        const item = parts[i].trim();
+        if (!item) continue;
+        const key = item.toLowerCase();
+        if (seen[key]) continue;
+        seen[key] = true;
+        rows.push(item);
+      }
+      return rows;
+    }
+
+    function updateGenerateModeHint() {
+      const hint = byId('generate_mode_hint');
+      if (!hint) return;
+      if (ui.generateMode === 'advanced') {
+        hint.textContent = t('generate.mode.hint.advanced', 'Advanced mode unlocks fine-grained pipeline, retry, voice-clone, and prompt controls.');
+      } else {
+        hint.textContent = t('generate.mode.hint.basic', 'Basic mode focuses on normal story generation. Switch to Advanced for fine-grained controls.');
+      }
+    }
+
+    function setGenerateMode(mode) {
+      const targetMode = mode === 'advanced' ? 'advanced' : 'basic';
+      ui.generateMode = targetMode;
+      localStorage.setItem(GENERATE_MODE_STORE_KEY, targetMode);
+
+      const basicBtn = byId('btn_mode_basic');
+      const advancedBtn = byId('btn_mode_advanced');
+      if (basicBtn) basicBtn.classList.toggle('active', targetMode === 'basic');
+      if (advancedBtn) advancedBtn.classList.toggle('active', targetMode === 'advanced');
+
+      const advancedFields = document.querySelectorAll('.advanced-field');
+      for (let i = 0; i < advancedFields.length; i += 1) {
+        const node = advancedFields[i];
+        if (targetMode === 'advanced') node.classList.remove('hidden');
+        else node.classList.add('hidden');
+      }
+
+      updateGenerateModeHint();
+    }
+
+    function updateRolePresetHint() {
+      const hint = byId('role_preset_hint');
+      if (!hint) return;
+      if (ui.rolePreset === 'teacher') {
+        hint.textContent = t('role.preset.hint.teacher', 'Teacher preset favors classroom use, reading control, and bilingual output.');
+      } else if (ui.rolePreset === 'research') {
+        hint.textContent = t('role.preset.hint.research', 'Research preset enables advanced controls for experiments and diagnostics.');
+      } else {
+        hint.textContent = t('role.preset.hint.parent', 'Parent preset prioritizes simple operation and stable bedtime-story output.');
+      }
+    }
+
+    function setRolePreset(role, applyDefaults) {
+      const target = (role === 'teacher' || role === 'research') ? role : 'parent';
+      ui.rolePreset = target;
+      localStorage.setItem(ROLE_PRESET_STORE_KEY, target);
+
+      const parentBtn = byId('btn_role_parent');
+      const teacherBtn = byId('btn_role_teacher');
+      const researchBtn = byId('btn_role_research');
+      if (parentBtn) parentBtn.classList.toggle('active', target === 'parent');
+      if (teacherBtn) teacherBtn.classList.toggle('active', target === 'teacher');
+      if (researchBtn) researchBtn.classList.toggle('active', target === 'research');
+
+      updateRolePresetHint();
+
+      if (applyDefaults === false) return;
+
+      const payload = payloadFromForm();
+      if (target === 'parent') {
+        payload.count = 1;
+        payload.max_retries = 1;
+        payload.priority = 'normal';
+        payload.story_input_mode = 'preset';
+        payload.translation_enabled = true;
+        payload.voice_enabled = true;
+        payload.verify_enabled = true;
+        payload.low_vram = true;
+        payload.strict_translation = true;
+        payload.strict_voice = true;
+        setGenerateMode('basic');
+      } else if (target === 'teacher') {
+        payload.count = Math.max(1, parseIntSafe(payload.count, 1));
+        payload.max_retries = 1;
+        payload.priority = 'normal';
+        payload.story_input_mode = 'custom';
+        payload.translation_enabled = true;
+        payload.voice_enabled = false;
+        payload.verify_enabled = true;
+        payload.low_vram = true;
+        payload.strict_translation = true;
+        payload.strict_voice = false;
+        setGenerateMode('basic');
+      } else {
+        payload.count = Math.max(1, parseIntSafe(payload.count, 1));
+        payload.max_retries = Math.max(2, parseIntSafe(payload.max_retries, 2));
+        payload.priority = 'high';
+        payload.story_input_mode = 'custom';
+        payload.translation_enabled = true;
+        payload.voice_enabled = true;
+        payload.verify_enabled = true;
+        payload.low_vram = false;
+        payload.strict_translation = true;
+        payload.strict_voice = true;
+        setGenerateMode('advanced');
+      }
+
+      setFormFromPayload(payload);
+      setMessage(tf('msg.role_preset_applied', {role: t('role.preset.' + target, target)}, 'Role preset applied: {role}'), 'ok');
+    }
+
+    function switchModuleStudio(studioName) {
+      const name = String(studioName || 'story');
+      ui.moduleStudio = name;
+
+      const buttons = document.querySelectorAll('.module-tab-btn');
+      for (let i = 0; i < buttons.length; i += 1) {
+        const btn = buttons[i];
+        if (btn.getAttribute('data-module-tab') === name) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+
+      const studios = ['story', 'image', 'translation', 'voice'];
+      for (let i = 0; i < studios.length; i += 1) {
+        const panel = byId('studio_' + studios[i]);
+        if (!panel) continue;
+        if (studios[i] === name) panel.classList.add('active');
+        else panel.classList.remove('active');
+      }
+    }
+
+    function syncModuleStoryInputMode() {
+      const mode = byId('module_story_input_mode').value || 'preset';
+      const disableCustom = mode !== 'custom';
+      byId('module_story_prompt').disabled = disableCustom;
+      byId('module_story_materials').disabled = disableCustom;
+    }
+
+    function collectStoryModulePayload() {
+      const mode = byId('module_story_input_mode').value || 'preset';
+      return {
+        count: parseIntSafe(byId('module_story_count').value, 1),
+        pages: parseIntSafe(byId('module_story_pages').value, 0),
+        priority: byId('module_story_priority').value || 'normal',
+        age: byId('module_story_age').value || null,
+        category: byId('module_story_category').value || null,
+        story_input_mode: mode,
+        theme: (byId('module_story_theme').value || '').trim() || null,
+        subcategory: (byId('module_story_subcategory').value || '').trim() || null,
+        seed: parseNullableIntText(byId('module_story_seed').value),
+        story_prompt: mode === 'custom' ? (byId('module_story_prompt').value || '').trim() : '',
+        story_materials: mode === 'custom' ? (byId('module_story_materials').value || '').trim() : '',
+        low_vram: byId('module_story_low_vram').checked,
+      };
+    }
+
+    function collectTranslationModulePayload() {
+      return {
+        story_root: (byId('module_trans_story_root').value || '').trim() || null,
+        source_folder: (byId('module_trans_source_folder').value || '').trim() || 'en',
+        source_lang: (byId('module_trans_source_lang').value || '').trim() || 'eng_Latn',
+        target_langs: parseLangList(byId('module_trans_target_langs').value || ''),
+        beam_size: parseIntSafe(byId('module_trans_beam').value, 1),
+        length_penalty: parseFloatSafe(byId('module_trans_length_penalty').value, 1.0),
+        device: byId('module_trans_device').value || 'auto',
+        dtype: byId('module_trans_dtype').value || 'float16',
+        priority: byId('module_trans_priority').value || 'normal',
+      };
+    }
+
+    function collectVoiceModulePayload() {
+      return {
+        story_root: (byId('module_voice_story_root').value || '').trim() || null,
+        language: (byId('module_voice_language').value || '').trim() || null,
+        speaker_wav: (byId('module_voice_speaker_wav').value || '').trim() || null,
+        speaker_dir: (byId('module_voice_speaker_dir').value || '').trim() || null,
+        page_start: parseNullableIntText(byId('module_voice_page_start').value),
+        page_end: parseNullableIntText(byId('module_voice_page_end').value),
+        gain: parseFloatSafe(byId('module_voice_gain').value, 1.0),
+        speed: parseFloatSafe(byId('module_voice_speed').value, 1.0),
+        device: byId('module_voice_device').value || 'auto',
+        concat: byId('module_voice_concat').checked,
+        keep_raw: byId('module_voice_keep_raw').checked,
+        priority: byId('module_voice_priority').value || 'normal',
+      };
+    }
+
+    function collectImageModulePayload() {
+      const taskIds = [];
+      for (let i = 0; i < ui.imageItems.length; i += 1) {
+        const item = ui.imageItems[i] || {};
+        const taskId = String(item.task_id || '');
+        if (taskId && ui.imageSelectedTaskIds[taskId]) taskIds.push(taskId);
+      }
+
+      return {
+        story_root: (byId('image_story_root').value || '').trim() || null,
+        task_ids: taskIds,
+        overrides: collectImageOverrides(),
+        priority: byId('module_image_priority').value || 'normal',
+      };
+    }
+
+    function renderModuleJobs(data) {
+      const body = byId('module_jobs_body');
+      const active = data && data.active_job ? data.active_job : null;
+      const pending = Array.isArray(data && data.pending_jobs) ? data.pending_jobs : [];
+      const history = Array.isArray(data && data.history) ? data.history : [];
+      ui.moduleJobs = [];
+
+      const rows = [];
+
+      function pushRow(item, visualState) {
+        if (!item) return;
+        const state = String(visualState || item.status || 'queued').toLowerCase();
+        const jobId = String(item.job_id || '');
+        if (!jobId) return;
+        ui.moduleJobs.push(item);
+        rows.push(
+          '<tr>' +
+            '<td>' + escapeHtml(jobId) + '</td>' +
+            '<td>' + escapeHtml(String(item.job_type || '-')) + '</td>' +
+            '<td><span class="result-pill ' + escapeHtml(state) + '">' + escapeHtml(localizeState(state)) + '</span></td>' +
+            '<td>' + escapeHtml(String(item.priority || 'normal')) + '</td>' +
+            '<td>' + escapeHtml(String(item.story_root || '-')) + '</td>' +
+            '<td>' +
+              '<button class="btn ghost mini" data-action="module-detail" data-job-id="' + escapeHtml(jobId) + '">Detail</button> ' +
+              '<button class="btn danger mini" data-action="module-stop" data-job-id="' + escapeHtml(jobId) + '">Stop</button>' +
+            '</td>' +
+          '</tr>'
+        );
+      }
+
+      if (active) pushRow(active, 'running');
+      for (let i = 0; i < pending.length; i += 1) pushRow(pending[i], 'queued');
+      for (let i = 0; i < history.length; i += 1) pushRow(history[i], history[i] && history[i].status);
+
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="6">' + escapeHtml(t('msg.no_module_jobs', 'No module jobs.')) + '</td></tr>';
+      } else {
+        body.innerHTML = rows.join('');
+      }
+    }
+
+    function renderModuleJobDetail(data) {
+      const meta = byId('module_job_meta');
+      const eventsBox = byId('module_job_events');
+      const logsBox = byId('module_job_logs');
+
+      const job = data && data.job ? data.job : null;
+      if (!job) {
+        meta.textContent = t('msg.no_module_job_selected', 'No module job selected.');
+        eventsBox.innerHTML = '<div class="event-item">' + escapeHtml(t('msg.no_events', 'No events.')) + '</div>';
+        logsBox.textContent = t('msg.no_module_logs', 'No module logs.');
+        return;
+      }
+
+      ui.moduleSelectedJobId = String(job.job_id || '');
+      meta.textContent =
+        'Job=' + String(job.job_id || '-') +
+        ' | Type=' + String(job.job_type || '-') +
+        ' | Status=' + String(job.status || '-') +
+        ' | Priority=' + String(job.priority || '-');
+
+      const events = Array.isArray(data.events) ? data.events : [];
+      if (!events.length) {
+        eventsBox.innerHTML = '<div class="event-item">' + escapeHtml(t('msg.no_events', 'No events.')) + '</div>';
+      } else {
+        const html = [];
+        for (let i = 0; i < events.length; i += 1) {
+          const ev = events[i] || {};
+          html.push(
+            '<div class="event-item">' +
+              '<b>' + escapeHtml(String(ev.event || '-')) + '</b>' +
+              '<div class="meta">' + escapeHtml(isoToLocal(ev.ts)) + '</div>' +
+              '<div class="meta">' + escapeHtml(JSON.stringify(ev.details || {})) + '</div>' +
+            '</div>'
+          );
+        }
+        eventsBox.innerHTML = html.join('');
+      }
+
+      const logs = Array.isArray(data.logs) ? data.logs : [];
+      let blob = '';
+      for (let i = 0; i < logs.length; i += 1) {
+        const line = logs[i] || {};
+        const ts = line.ts ? String(line.ts).slice(11, 19) : '--:--:--';
+        blob += '[' + ts + '] ' + String(line.text || '') + '\\n';
+      }
+      logsBox.textContent = blob || t('msg.no_module_logs', 'No module logs.');
+    }
+
+    async function fetchModuleJobs() {
+      const data = await apiGet('/api/modules/jobs?limit=60');
+      renderModuleJobs(data);
+      return data;
+    }
+
+    async function fetchModuleJobDetail(jobId) {
+      const id = String(jobId || '').trim();
+      if (!id) return null;
+      const data = await apiGet('/api/modules/job-detail?job_id=' + encodeURIComponent(id) + '&log_limit=400&event_limit=260');
+      renderModuleJobDetail(data);
+      return data;
+    }
+
+    async function runModuleJob(jobType, payload, messageId, successPrefix) {
+      setModuleMessage(messageId, t('msg.submitting_module_job', 'Submitting module job...'), 'ok');
+      try {
+        const data = await apiPost('/api/modules/run', {
+          job_type: jobType,
+          payload: payload,
+        });
+        const job = data.job || {};
+        const jobId = String(job.job_id || '');
+        ui.moduleSelectedJobId = jobId;
+        setModuleMessage(messageId, jobId ? tf('msg.module_job_queued', {id: jobId}, 'Module job queued: {id}') : String(successPrefix || 'Module job queued'), 'ok');
+        await fetchModuleJobs();
+        if (jobId) await fetchModuleJobDetail(jobId);
+      } catch (err) {
+        setModuleMessage(messageId, String((err && err.message) || err || t('msg.failed_run_module_job', 'Failed to run module job.')), 'bad');
+      }
+    }
+
+    async function runStoryModuleJob() {
+      await runModuleJob('story', collectStoryModulePayload(), 'module_story_message', 'Text module queued');
+    }
+
+    async function runTranslationModuleJob() {
+      await runModuleJob('translation', collectTranslationModulePayload(), 'module_translation_message', 'Translation module queued');
+    }
+
+    async function runVoiceModuleJob() {
+      await runModuleJob('voice', collectVoiceModulePayload(), 'module_voice_message', 'Voice module queued');
+    }
+
+    async function runImageModuleJob() {
+      const payload = collectImageModulePayload();
+      await runModuleJob('image', payload, 'image_message', 'Image module queued');
+    }
+
+    async function stopModuleJob(jobId) {
+      const id = String(jobId || ui.moduleSelectedJobId || '').trim();
+      if (!id) {
+        setMessage(t('msg.select_module_job_first', 'Select a module job first.'), 'warn');
+        return;
+      }
+      try {
+        await apiPost('/api/modules/stop', {job_id: id});
+        if (ui.moduleSelectedJobId === id) {
+          setMessage(tf('msg.stop_requested_for_module_job', {id: id}, 'Stop requested for module job {id}'), 'warn');
+        }
+        await fetchModuleJobs();
+        await fetchModuleJobDetail(id);
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_stop_module_job', 'Failed to stop module job.')), 'bad');
+      }
+    }
+
+    function buildImageFileUrl(path) {
+      return '/api/images/file?path=' + encodeURIComponent(String(path || ''));
+    }
+
+    function findImageByTaskId(taskId) {
+      if (!taskId) return null;
+      for (let i = 0; i < ui.imageItems.length; i += 1) {
+        const item = ui.imageItems[i] || {};
+        if (String(item.task_id || '') === String(taskId)) return item;
+      }
+      return null;
+    }
+
+    function populateImageDetail(item) {
+      if (!item) {
+        byId('image_detail_meta').textContent = t('msg.none_selected', 'None selected.');
+        byId('image_positive_prompt').value = '';
+        byId('image_negative_prompt').value = '';
+        byId('image_width').value = '';
+        byId('image_height').value = '';
+        byId('image_steps').value = '';
+        byId('image_guidance').value = '';
+        byId('image_seed').value = '';
+        byId('image_refiner_steps').value = '';
+        byId('image_skip_refiner').checked = false;
+        return;
+      }
+      byId('image_detail_meta').textContent =
+        'Task=' + String(item.task_id || '-') +
+        ' | Type=' + String(item.task_type || '-') +
+        ' | Story=' + String(item.story_root || '-');
+      byId('image_positive_prompt').value = String(item.positive_prompt || '');
+      byId('image_negative_prompt').value = String(item.negative_prompt || '');
+      byId('image_width').value = String(item.width || '');
+      byId('image_height').value = String(item.height || '');
+      byId('image_steps').value = String(item.steps || '');
+      byId('image_guidance').value = String(item.guidance || '');
+      byId('image_seed').value = item.seed == null ? '' : String(item.seed);
+      byId('image_refiner_steps').value = item.refiner_steps == null ? '' : String(item.refiner_steps);
+      byId('image_skip_refiner').checked = item.skip_refiner === true;
+    }
+
+    function collectImageOverrides() {
+      function parseNullableInt(text) {
+        const raw = String(text || '').trim();
+        if (!raw) return null;
+        const v = parseInt(raw, 10);
+        return Number.isFinite(v) ? v : null;
+      }
+
+      function parseNullableFloat(text) {
+        const raw = String(text || '').trim();
+        if (!raw) return null;
+        const v = parseFloat(raw);
+        return Number.isFinite(v) ? v : null;
+      }
+
+      return {
+        positive_prompt: (byId('image_positive_prompt').value || '').trim() || null,
+        negative_prompt: (byId('image_negative_prompt').value || '').trim() || null,
+        width: parseNullableInt(byId('image_width').value),
+        height: parseNullableInt(byId('image_height').value),
+        steps: parseNullableInt(byId('image_steps').value),
+        guidance: parseNullableFloat(byId('image_guidance').value),
+        seed: parseNullableInt(byId('image_seed').value),
+        refiner_steps: parseNullableInt(byId('image_refiner_steps').value),
+        skip_refiner: byId('image_skip_refiner').checked,
+      };
+    }
+
+    function renderImageGallery(data) {
+      const gallery = byId('image_gallery');
+      const items = Array.isArray(data && data.items) ? data.items : [];
+      ui.imageItems = items;
+
+      if (data && data.story_root) {
+        ui.imageStoryRoot = String(data.story_root);
+        if (!(byId('image_story_root').value || '').trim()) {
+          byId('image_story_root').value = ui.imageStoryRoot;
+        }
+      }
+
+      if (!items.length) {
+        gallery.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_generated_images', 'No generated images yet.')) + '</div>';
+        populateImageDetail(null);
+        return;
+      }
+
+      const tiles = [];
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i] || {};
+        const taskId = String(item.task_id || '');
+        const checked = ui.imageSelectedTaskIds[taskId] ? ' checked' : '';
+        const updated = item.updated_at ? isoToLocal(item.updated_at) : '-';
+        tiles.push(
+          '<div class="image-tile">' +
+            '<img loading="lazy" src="' + escapeHtml(buildImageFileUrl(item.image_path || '')) + '" alt="' + escapeHtml(taskId) + '" />' +
+            '<div class="image-meta">' +
+              '<div><b>' + escapeHtml(String(item.task_type || '-')) + '</b> ' + escapeHtml(String(item.task_name || '')) + '</div>' +
+              '<div>' + escapeHtml(updated) + '</div>' +
+            '</div>' +
+            '<label class="image-select"><input type="checkbox" data-action="image-select" data-task-id="' + escapeHtml(taskId) + '"' + checked + ' /> Select</label>' +
+            '<button class="btn ghost mini" type="button" data-action="image-edit" data-task-id="' + escapeHtml(taskId) + '">Inspect</button>' +
+          '</div>'
+        );
+      }
+      gallery.innerHTML = tiles.join('');
+
+      if (ui.imageDetailTaskId) {
+        populateImageDetail(findImageByTaskId(ui.imageDetailTaskId));
+      }
+    }
+
+    async function fetchImages() {
+      const storyRoot = (byId('image_story_root').value || '').trim();
+      const query = storyRoot
+        ? '?story_root=' + encodeURIComponent(storyRoot) + '&limit=240'
+        : '?limit=240';
+      const data = await apiGet('/api/images/items' + query);
+      renderImageGallery(data);
+      return data;
+    }
+
+    async function regenerateSelectedImages() {
+      const selected = [];
+      for (let i = 0; i < ui.imageItems.length; i += 1) {
+        const item = ui.imageItems[i] || {};
+        const taskId = String(item.task_id || '');
+        if (ui.imageSelectedTaskIds[taskId]) selected.push(item);
+      }
+      if (!selected.length) {
+        setImageMessage(t('msg.select_at_least_one_image', 'Please select at least one image item.'), 'warn');
+        return;
+      }
+      setImageMessage(t('msg.regenerating_selected_images', 'Regenerating selected images...'), 'ok');
+      try {
+        const data = await apiPost('/api/images/regenerate', {items: selected});
+        const okCount = (data.results || []).filter(function (x) { return x && x.ok; }).length;
+        setImageMessage(tf('msg.regenerated_images', {ok: String(okCount), total: String(selected.length)}, 'Regenerated {ok}/{total} images.'), okCount === selected.length ? 'ok' : 'warn');
+        await fetchImages();
+      } catch (err) {
+        setImageMessage(String((err && err.message) || err || t('msg.failed_regenerate_selected_images', 'Failed to regenerate selected images.')), 'bad');
+      }
+    }
+
+    async function regenerateDetailImage() {
+      const taskId = ui.imageDetailTaskId;
+      const item = findImageByTaskId(taskId);
+      if (!item) {
+        setImageMessage(t('msg.select_image_for_regen', 'Select one image to regenerate with edits.'), 'warn');
+        return;
+      }
+      const overrides = collectImageOverrides();
+      setImageMessage(t('msg.regenerating_image_with_edits', 'Regenerating selected image with edited parameters...'), 'ok');
+      try {
+        const data = await apiPost('/api/images/regenerate', {
+          items: [item],
+          overrides: overrides,
+        });
+        const result = (data.results || [])[0] || {};
+        if (result.ok) {
+          setImageMessage(t('msg.image_regenerated_successfully', 'Image regenerated successfully.'), 'ok');
+        } else {
+          setImageMessage(String(result.error || t('msg.image_regeneration_failed', 'Image regeneration failed.')), 'bad');
+        }
+        await fetchImages();
+      } catch (err) {
+        setImageMessage(String((err && err.message) || err || t('msg.failed_regenerate_image', 'Failed to regenerate image.')), 'bad');
+      }
+    }
+
+    function payloadFromForm() {
+      const seedRaw = byId('seed').value.trim();
+      const inputMode = byId('story_input_mode').value || 'preset';
+      return {
+        count: parseIntSafe(byId('count').value, 1),
+        max_retries: parseIntSafe(byId('max_retries').value, 1),
+        priority: byId('priority').value || 'normal',
+        age: byId('age').value || null,
+        category: byId('category').value || null,
+        story_input_mode: inputMode,
+        theme: (byId('theme').value || '').trim() || null,
+        subcategory: (byId('subcategory').value || '').trim() || null,
+        pages: parseIntSafe(byId('pages').value, 0),
+        seed: seedRaw ? parseIntSafe(seedRaw, 0) : null,
+        story_prompt: inputMode === 'custom' ? (byId('story_prompt').value || '').trim() : '',
+        story_materials: inputMode === 'custom' ? (byId('story_materials').value || '').trim() : '',
+        speaker_wav: (byId('speaker_wav').value || '').trim() || null,
+        speaker_dir: (byId('speaker_dir').value || '').trim() || null,
+        photo_enabled: byId('photo_enabled').checked,
+        translation_enabled: byId('translation_enabled').checked,
+        voice_enabled: byId('voice_enabled').checked,
+        verify_enabled: byId('verify_enabled').checked,
+        low_vram: byId('low_vram').checked,
+        strict_translation: byId('strict_translation').checked,
+        strict_voice: byId('strict_voice').checked,
+      };
+    }
+
+    function setFormFromPayload(payload) {
+      const p = payload || {};
+      byId('count').value = String(parseIntSafe(p.count, 1));
+      byId('max_retries').value = String(parseIntSafe(p.max_retries, 1));
+      byId('priority').value = p.priority || 'normal';
+      byId('age').value = p.age || '';
+      byId('category').value = p.category || '';
+      byId('story_input_mode').value = p.story_input_mode || 'preset';
+      byId('theme').value = p.theme || '';
+      byId('subcategory').value = p.subcategory || '';
+      byId('pages').value = String(parseIntSafe(p.pages, 0));
+      byId('seed').value = p.seed == null ? '' : String(parseIntSafe(p.seed, 0));
+      byId('story_prompt').value = p.story_prompt || '';
+      byId('story_materials').value = p.story_materials || '';
+      byId('speaker_wav').value = p.speaker_wav || '';
+      byId('speaker_dir').value = p.speaker_dir || '';
+      byId('photo_enabled').checked = p.photo_enabled !== false;
+      byId('translation_enabled').checked = p.translation_enabled !== false;
+      byId('voice_enabled').checked = p.voice_enabled !== false;
+      byId('verify_enabled').checked = p.verify_enabled !== false;
+      byId('low_vram').checked = p.low_vram !== false;
+      byId('strict_translation').checked = p.strict_translation !== false;
+      byId('strict_voice').checked = p.strict_voice !== false;
+      syncStoryInputMode();
+    }
+
+    function syncStoryInputMode() {
+      const mode = byId('story_input_mode').value || 'preset';
+      const disabled = mode !== 'custom';
+      byId('story_prompt').disabled = disabled;
+      byId('story_materials').disabled = disabled;
+      if (disabled) {
+        byId('story_prompt').placeholder = t('placeholder.story_prompt_preset', 'Preset mode: direct generation (no conversion layer).');
+        byId('story_materials').placeholder = t('placeholder.story_materials_preset', 'Preset mode: direct generation (no conversion layer).');
+      } else {
+        byId('story_prompt').placeholder = t('placeholder.story_prompt_custom', 'Use concise requirements: mood, values, characters, conflict, ending style.');
+        byId('story_materials').placeholder = t('placeholder.story_materials_custom', 'Paste notes, outlines, facts, classroom material, or family context.');
+      }
+    }
+
+    function mergeFloat32(chunks) {
+      let total = 0;
+      for (let i = 0; i < chunks.length; i += 1) total += chunks[i].length;
+      const out = new Float32Array(total);
+      let offset = 0;
+      for (let i = 0; i < chunks.length; i += 1) {
+        out.set(chunks[i], offset);
+        offset += chunks[i].length;
+      }
+      return out;
+    }
+
+    function encodeWav(floatData, sampleRate) {
+      const buffer = new ArrayBuffer(44 + floatData.length * 2);
+      const view = new DataView(buffer);
+
+      function writeString(offset, text) {
+        for (let i = 0; i < text.length; i += 1) {
+          view.setUint8(offset + i, text.charCodeAt(i));
+        }
+      }
+
+      writeString(0, 'RIFF');
+      view.setUint32(4, 36 + floatData.length * 2, true);
+      writeString(8, 'WAVE');
+      writeString(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeString(36, 'data');
+      view.setUint32(40, floatData.length * 2, true);
+
+      let offset = 44;
+      for (let i = 0; i < floatData.length; i += 1) {
+        const s = Math.max(-1, Math.min(1, floatData[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        offset += 2;
+      }
+      return new Blob([buffer], {type: 'audio/wav'});
+    }
+
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+        const AudioContextRef = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioContextRef();
+        const source = ctx.createMediaStreamSource(stream);
+        const processor = ctx.createScriptProcessor(4096, 1, 1);
+
+        ui.recordChunks = [];
+        ui.recordSampleRate = ctx.sampleRate || 16000;
+        ui.recordBlob = null;
+
+        processor.onaudioprocess = function (evt) {
+          const channel = evt.inputBuffer.getChannelData(0);
+          ui.recordChunks.push(new Float32Array(channel));
+        };
+
+        source.connect(processor);
+        processor.connect(ctx.destination);
+
+        ui.recordStream = stream;
+        ui.recordContext = ctx;
+        ui.recordSource = source;
+        ui.recordProcessor = processor;
+
+        byId('btn_record_start').disabled = true;
+        byId('btn_record_stop').disabled = false;
+        byId('btn_record_save').disabled = true;
+        setMessage(t('msg.recording_read_script', 'Recording... please read the script naturally.'), 'ok');
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.microphone_access_failed', 'Microphone access failed.')), 'bad');
+      }
+    }
+
+    function stopRecording() {
+      if (!ui.recordContext || !ui.recordProcessor || !ui.recordStream) return;
+      try {
+        ui.recordProcessor.disconnect();
+        ui.recordSource.disconnect();
+        const tracks = ui.recordStream.getTracks();
+        for (let i = 0; i < tracks.length; i += 1) tracks[i].stop();
+        ui.recordContext.close();
+      } catch (_err) {
+      }
+
+      ui.recordProcessor = null;
+      ui.recordSource = null;
+      ui.recordStream = null;
+      ui.recordContext = null;
+
+      const merged = mergeFloat32(ui.recordChunks || []);
+      ui.recordBlob = encodeWav(merged, ui.recordSampleRate || 16000);
+      const preview = byId('record_preview');
+      preview.src = URL.createObjectURL(ui.recordBlob);
+
+      byId('btn_record_start').disabled = false;
+      byId('btn_record_stop').disabled = true;
+      byId('btn_record_save').disabled = !ui.recordBlob;
+      setMessage(t('msg.recording_captured', 'Recording captured. You can preview and save it as speaker WAV.'), 'ok');
+    }
+
+    async function saveRecordingAsSpeaker() {
+      if (!ui.recordBlob) {
+        setMessage(t('msg.no_recording_available', 'No recording available.'), 'warn');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = async function () {
+        try {
+          const dataUrl = String(reader.result || '');
+          const base64 = dataUrl.split(',')[1] || '';
+          const scriptText = (byId('voice_script').value || '').trim();
+          const result = await apiPost('/api/voice/recordings/save', {
+            wav_base64: base64,
+            sample_rate: ui.recordSampleRate || 16000,
+            script_text: scriptText,
+          });
+          if (result && result.path) {
+            byId('speaker_wav').value = String(result.path);
+            setMessage(tf('msg.speaker_sample_saved', {path: String(result.path)}, 'Speaker sample saved: {path}'), 'ok');
+          }
+        } catch (err) {
+          setMessage(String((err && err.message) || err || t('msg.failed_save_recording', 'Failed to save recording.')), 'bad');
+        }
+      };
+      reader.readAsDataURL(ui.recordBlob);
+    }
+
+    function saveLocalForm() {
+      localStorage.setItem(STORE_KEY, JSON.stringify(payloadFromForm()));
+      setMessage(t('msg.saved_local_profile', 'Saved local form profile.'), 'ok');
+    }
+
+    function loadLocalForm() {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return;
+      try {
+        setFormFromPayload(JSON.parse(raw));
+      } catch (_err) {
+        localStorage.removeItem(STORE_KEY);
+      }
+    }
+
+    function applyPreset(name) {
+      const payload = payloadFromForm();
+      if (name === 'speed') {
+        payload.max_retries = 0;
+        payload.priority = 'normal';
+        payload.translation_enabled = false;
+        payload.voice_enabled = false;
+        payload.verify_enabled = true;
+        payload.low_vram = true;
+        payload.strict_translation = false;
+        payload.strict_voice = false;
+      } else if (name === 'quality') {
+        payload.max_retries = 2;
+        payload.priority = 'high';
+        payload.translation_enabled = true;
+        payload.voice_enabled = true;
+        payload.verify_enabled = true;
+        payload.low_vram = false;
+        payload.strict_translation = true;
+        payload.strict_voice = true;
+      } else {
+        payload.max_retries = 1;
+        payload.priority = 'normal';
+        payload.translation_enabled = true;
+        payload.voice_enabled = true;
+        payload.verify_enabled = true;
+        payload.low_vram = true;
+        payload.strict_translation = true;
+        payload.strict_voice = true;
+      }
+      setFormFromPayload(payload);
+      setMessage(tf('msg.preset_applied', {name: t('preset.' + name, name)}, 'Preset applied: {name}'), 'ok');
+    }
+
+    function setStatePill(text, state) {
+      const el = byId('pill_state');
+      el.textContent = localizeState(text);
+      el.className = 'pill';
+      if (state) el.classList.add(state);
+    }
+
+    function updateHeaderKpis(statusData, capacityData) {
+      const runner = statusData && statusData.runner ? statusData.runner : {};
+      const state = String(runner.state || (statusData && statusData.running ? 'running' : 'idle'));
+      byId('kpi_system_state').textContent = localizeState(state);
+      byId('kpi_queue_depth').textContent = String(statusData && Number.isFinite(Number(statusData.queue_depth)) ? statusData.queue_depth : 0);
+      byId('kpi_success_rate').textContent = toPercent(capacityData ? capacityData.success_rate_pct : 0);
+      byId('kpi_avg_duration').textContent = formatDuration(capacityData ? capacityData.avg_duration_sec : null);
+      const usd = capacityData ? parseFloatSafe(capacityData.gpu_cost_usd, 0) : 0;
+      byId('kpi_gpu_cost').textContent = '$' + usd.toFixed(2);
+    }
+
+    function renderStatus(data) {
+      ui.latestStatus = data;
+      const runner = data.runner || {};
+      const state = String(runner.state || (data.running ? 'running' : 'idle')).toLowerCase();
+      setStatePill(state, state);
+
+      byId('pill_book').textContent = t('meta.book', 'book') + ': ' + String(runner.current_book == null ? '-' : runner.current_book);
+      byId('pill_stage').textContent = t('meta.stage', 'stage') + ': ' + String(runner.current_stage || '-');
+
+      const total = parseIntSafe(runner.total_books, 0);
+      const completed = parseIntSafe(runner.completed_books, 0);
+      const success = parseIntSafe(runner.success_books, 0);
+      const failed = parseIntSafe(runner.failed_books, 0);
+
+      const progress = parseFloatSafe(data.progress_pct, 0);
+      byId('progress_fill').style.width = String(Math.max(0, Math.min(100, progress))) + '%';
+      byId('progress_label').textContent = progress.toFixed(1) + '%';
+      byId('progress_detail').textContent = String(completed) + '/' + String(total) + ' completed';
+
+      const updatedAgo = data.updated_ago_sec;
+      byId('updated_label').textContent = updatedAgo == null
+        ? (t('meta.updated', 'updated') + ': -')
+        : (t('meta.updated', 'updated') + ': ' + String(Math.round(updatedAgo)) + 's ago');
+
+      byId('metric_total').textContent = String(total);
+      byId('metric_completed').textContent = String(completed);
+      byId('metric_success').textContent = String(success);
+      byId('metric_failed').textContent = String(failed);
+      byId('metric_elapsed').textContent = formatDuration(data.elapsed_sec);
+      byId('metric_eta').textContent = formatDuration(data.eta_sec);
+
+      byId('meta_run_id').textContent = String(data.run_id || '-');
+      byId('meta_pid').textContent = data.pid == null ? '-' : String(data.pid);
+      byId('meta_exit_code').textContent = data.exit_code == null ? '-' : String(data.exit_code);
+      byId('meta_queue_depth').textContent = String(data.queue_depth || 0);
+
+      byId('raw_status').textContent = JSON.stringify(data, null, 2);
+
+      const startDisabled = Boolean(data.running) && (data.queue_depth || 0) >= 1;
+      byId('btn_start').disabled = false;
+      byId('btn_stop').disabled = !Boolean(data.running);
+
+      const currentRunId = data.run_id || null;
+      if (currentRunId !== ui.activeLogRunId) {
+        ui.activeLogRunId = currentRunId;
+        byId('log_output').textContent = '';
+        ui.logCursor = Number(data.log_next_seq || 0);
+      }
+
+      if (data.last_error) {
+        setMessage(String(data.last_error), 'warn');
+      }
+    }
+
+    function appendLogs(lines) {
+      if (!Array.isArray(lines) || !lines.length) return;
+      const box = byId('log_output');
+      let chunk = '';
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i] || {};
+        const ts = line.ts ? String(line.ts).slice(11, 19) : '--:--:--';
+        const txt = line.text ? String(line.text) : '';
+        chunk += '[' + ts + '] ' + txt + '\\n';
+      }
+      box.textContent += chunk;
+      if (box.textContent.length > 400000) {
+        box.textContent = box.textContent.slice(-260000);
+      }
+      if (byId('log_autoscroll').checked) {
+        box.scrollTop = box.scrollHeight;
+      }
+    }
+
+    function renderHistory(items) {
+      ui.historyRows = Array.isArray(items) ? items : [];
+      const body = byId('history_body');
+      if (!ui.historyRows.length) {
+        body.innerHTML = '<tr><td colspan="6">' + escapeHtml(t('msg.no_run_history', 'No run history yet.')) + '</td></tr>';
+      } else {
+        const rows = [];
+        for (let i = 0; i < ui.historyRows.length; i += 1) {
+          const item = ui.historyRows[i] || {};
+          const state = String(item.state || 'unknown').toLowerCase();
+          const cfg = item.config || {};
+          const cfgText = [
+            'count=' + String(cfg.count ?? '-'),
+            'retry=' + String(cfg.max_retries ?? '-'),
+            'cat=' + String(cfg.category || 'auto'),
+            'age=' + String(cfg.age || 'auto'),
+          ].join(' | ');
+          rows.push(
+            '<tr>' +
+              '<td>' + escapeHtml(String(item.run_id || '-')) + '</td>' +
+              '<td>' + escapeHtml(isoToLocal(item.started_at)) + '</td>' +
+              '<td>' + escapeHtml(formatDuration(item.duration_sec)) + '</td>' +
+              '<td><span class="result-pill ' + escapeHtml(state) + '">' + escapeHtml(localizeState(state)) + '</span></td>' +
+              '<td>' + escapeHtml(String(item.success_books || 0) + '/' + String(item.total_books || 0)) + '</td>' +
+              '<td>' + escapeHtml(cfgText) + '</td>' +
+            '</tr>'
+          );
+        }
+        body.innerHTML = rows.join('');
+      }
+
+      const selector = byId('detail_run_select');
+      const oldValue = selector.value;
+      const options = [];
+      for (let i = 0; i < ui.historyRows.length; i += 1) {
+        const item = ui.historyRows[i] || {};
+        const runId = String(item.run_id || '');
+        if (!runId) continue;
+        const state = String(item.state || 'unknown');
+        options.push('<option value="' + escapeHtml(runId) + '">' + escapeHtml(runId + ' (' + state + ')') + '</option>');
+      }
+      if (!options.length) {
+        selector.innerHTML = '<option value="">' + escapeHtml(t('msg.no_runs_available', 'No runs available')) + '</option>';
+      } else {
+        selector.innerHTML = options.join('');
+        if (oldValue && options.join('').indexOf('value="' + oldValue + '"') >= 0) {
+          selector.value = oldValue;
+        } else if (ui.selectedRunId && options.join('').indexOf('value="' + ui.selectedRunId + '"') >= 0) {
+          selector.value = ui.selectedRunId;
+        } else {
+          selector.selectedIndex = 0;
+          ui.selectedRunId = selector.value;
+        }
+      }
+    }
+
+    function renderQueue(data) {
+      const body = byId('queue_body');
+      const active = data.active_job;
+      const pending = Array.isArray(data.pending_jobs) ? data.pending_jobs : [];
+      const rows = [];
+
+      if (active) {
+        rows.push(
+          '<tr>' +
+            '<td>' + escapeHtml(String(active.job_id || '-')) + '</td>' +
+            '<td><span class="result-pill running">' + escapeHtml(localizeState('active')) + '</span></td>' +
+            '<td>' + escapeHtml(String(active.priority || 'normal')) + '</td>' +
+            '<td>' + escapeHtml(String(active.count || 0)) + '</td>' +
+            '<td>' + escapeHtml(String(active.category || 'auto')) + '</td>' +
+            '<td>' + escapeHtml(String(active.age || 'auto')) + '</td>' +
+            '<td>-</td>' +
+          '</tr>'
+        );
+      }
+
+      for (let i = 0; i < pending.length; i += 1) {
+        const item = pending[i] || {};
+        const jobId = String(item.job_id || '');
+        rows.push(
+          '<tr>' +
+            '<td>' + escapeHtml(jobId) + '</td>' +
+            '<td><span class="result-pill">' + escapeHtml(localizeState('queued')) + '</span></td>' +
+            '<td>' +
+              '<select data-job-priority="' + escapeHtml(jobId) + '">' +
+                '<option value="high"' + (item.priority === 'high' ? ' selected' : '') + '>high</option>' +
+                '<option value="normal"' + (item.priority === 'normal' ? ' selected' : '') + '>normal</option>' +
+                '<option value="low"' + (item.priority === 'low' ? ' selected' : '') + '>low</option>' +
+              '</select>' +
+            '</td>' +
+            '<td>' + escapeHtml(String(item.count || 0)) + '</td>' +
+            '<td>' + escapeHtml(String(item.category || 'auto')) + '</td>' +
+            '<td>' + escapeHtml(String(item.age || 'auto')) + '</td>' +
+            '<td>' +
+              '<button class="btn ghost mini" data-action="reprioritize" data-job-id="' + escapeHtml(jobId) + '">Apply</button> ' +
+              '<button class="btn danger mini" data-action="cancel" data-job-id="' + escapeHtml(jobId) + '">Cancel</button>' +
+            '</td>' +
+          '</tr>'
+        );
+      }
+
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="7">' + escapeHtml(t('msg.queue_empty', 'Queue is empty.')) + '</td></tr>';
+      } else {
+        body.innerHTML = rows.join('');
+      }
+    }
+
+    function renderAlerts(items) {
+      const list = byId('alert_list');
+      if (!Array.isArray(items) || !items.length) {
+        list.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_alerts', 'No alerts.')) + '</div>';
+        return;
+      }
+      const rows = [];
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i] || {};
+        const level = String(item.level || 'info').toLowerCase();
+        rows.push(
+          '<div class="list-item level-' + escapeHtml(level) + '">' +
+            '<b>' + escapeHtml(String(item.title || 'Alert')) + '</b>' +
+            '<div>' + escapeHtml(String(item.message || '')) + '</div>' +
+            '<div class="meta">' + escapeHtml(isoToLocal(item.ts)) + (item.run_id ? ' | run=' + escapeHtml(String(item.run_id)) : '') + '</div>' +
+            (item.acknowledged ? '' : '<div style="margin-top:6px"><button class="btn ghost mini" data-action="ack-alert" data-alert-id="' + escapeHtml(String(item.alert_id || '')) + '">Acknowledge</button></div>') +
+          '</div>'
+        );
+      }
+      list.innerHTML = rows.join('');
+    }
+
+    function renderCapacity(data) {
+      byId('cap_runs').textContent = String(data.window_runs || 0);
+      byId('cap_success_rate').textContent = toPercent(data.success_rate_pct || 0);
+      byId('cap_throughput').textContent = String(parseFloatSafe(data.books_per_hour, 0).toFixed(2));
+      byId('cap_queue_delay').textContent = formatDuration(data.avg_queue_delay_sec || 0);
+      byId('cap_gpu_hours').textContent = String(parseFloatSafe(data.gpu_hours, 0).toFixed(2));
+      byId('cap_gpu_cost').textContent = '$' + parseFloatSafe(data.gpu_cost_usd, 0).toFixed(2);
+
+      const trend = byId('capacity_trend');
+      const rows = Array.isArray(data.trend) ? data.trend : [];
+      if (!rows.length) {
+        trend.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_trend_data', 'No trend data yet.')) + '</div>';
+      } else {
+        const html = [];
+        for (let i = 0; i < rows.length; i += 1) {
+          const row = rows[i] || {};
+          html.push(
+            '<div class="list-item">' +
+              '<b>' + escapeHtml(String(row.run_id || '-')) + '</b>' +
+              '<div class="meta">' +
+                escapeHtml(String(row.state || '-')) +
+                ' | duration=' + escapeHtml(formatDuration(row.duration_sec || 0)) +
+                ' | success=' + escapeHtml(String(row.success_books || 0) + '/' + String(row.total_books || 0)) +
+              '</div>' +
+            '</div>'
+          );
+        }
+        trend.innerHTML = html.join('');
+      }
+    }
+
+    function renderConfigVersions(items) {
+      const body = byId('config_versions_body');
+      if (!Array.isArray(items) || !items.length) {
+        body.innerHTML = '<tr><td colspan="5">' + escapeHtml(t('msg.no_saved_versions', 'No saved versions.')) + '</td></tr>';
+        return;
+      }
+
+      const rows = [];
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i] || {};
+        const id = String(item.version_id || '');
+        rows.push(
+          '<tr>' +
+            '<td>' + escapeHtml(String(item.name || id)) + '</td>' +
+            '<td>' + escapeHtml(isoToLocal(item.created_at)) + '</td>' +
+            '<td>' + escapeHtml(String(item.note || '')) + '</td>' +
+            '<td>' + escapeHtml(String(item.usage_count || 0)) + '</td>' +
+            '<td><button class="btn ghost mini" data-action="apply-config" data-version-id="' + escapeHtml(id) + '">Apply</button></td>' +
+          '</tr>'
+        );
+      }
+      body.innerHTML = rows.join('');
+    }
+
+    function renderRunDetail(data) {
+      const run = data.run || {};
+      byId('detail_state').textContent = localizeState(run.state || '-');
+      byId('detail_duration').textContent = formatDuration(run.duration_sec);
+      byId('detail_exit').textContent = run.exit_code == null ? '-' : String(run.exit_code);
+      byId('detail_books_total').textContent = String(run.total_books || 0);
+      byId('detail_books_success').textContent = String(run.success_books || 0);
+      byId('detail_books_fail').textContent = String(run.failed_books || 0);
+      byId('detail_priority').textContent = String(run.priority || '-');
+      byId('detail_queue_delay').textContent = formatDuration(run.queued_delay_sec || 0);
+      byId('detail_started').textContent = isoToLocal(run.started_at);
+      byId('detail_finished').textContent = isoToLocal(run.finished_at);
+      byId('detail_json').textContent = JSON.stringify(data, null, 2);
+
+      const eventBox = byId('detail_events');
+      const events = Array.isArray(data.events) ? data.events : [];
+      if (!events.length) {
+        eventBox.innerHTML = '<div class="event-item">' + escapeHtml(t('msg.no_events', 'No events.')) + '</div>';
+      } else {
+        const html = [];
+        for (let i = 0; i < events.length; i += 1) {
+          const ev = events[i] || {};
+          const details = ev.details || {};
+          html.push(
+            '<div class="event-item">' +
+              '<b>' + escapeHtml(String(ev.event || '-')) + '</b>' +
+              '<div class="meta">' + escapeHtml(isoToLocal(ev.ts)) + '</div>' +
+              '<div class="meta">' + escapeHtml(JSON.stringify(details)) + '</div>' +
+            '</div>'
+          );
+        }
+        eventBox.innerHTML = html.join('');
+      }
+
+      const detailAlerts = byId('detail_alerts');
+      const alerts = Array.isArray(data.alerts) ? data.alerts : [];
+      if (!alerts.length) {
+        detailAlerts.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_related_alerts', 'No related alerts.')) + '</div>';
+      } else {
+        const html = [];
+        for (let i = 0; i < alerts.length; i += 1) {
+          const item = alerts[i] || {};
+          html.push(
+            '<div class="list-item">' +
+              '<b>' + escapeHtml(String(item.title || 'Alert')) + '</b>' +
+              '<div>' + escapeHtml(String(item.message || '')) + '</div>' +
+              '<div class="meta">' + escapeHtml(isoToLocal(item.ts)) + '</div>' +
+              (item.acknowledged ? '' : '<div style="margin-top:6px"><button class="btn ghost mini" data-action="ack-alert" data-alert-id="' + escapeHtml(String(item.alert_id || '')) + '">Acknowledge</button></div>') +
+            '</div>'
+          );
+        }
+        detailAlerts.innerHTML = html.join('');
+      }
+
+      const logs = Array.isArray(data.logs) ? data.logs : [];
+      let blob = '';
+      for (let i = 0; i < logs.length; i += 1) {
+        const line = logs[i] || {};
+        const ts = line.ts ? String(line.ts).slice(11, 19) : '--:--:--';
+        blob += '[' + ts + '] ' + String(line.text || '') + '\\n';
+      }
+      byId('detail_logs').textContent = blob || t('msg.no_run_logs', 'No run logs.');
+    }
+
+    async function fetchStatus() {
+      const data = await apiGet('/api/status');
+      renderStatus(data);
+      return data;
+    }
+
+    async function fetchLogs() {
+      if (!ui.activeLogRunId) return null;
+      const path = '/api/logs?since=' + String(ui.logCursor) + '&limit=220&run_id=' + encodeURIComponent(ui.activeLogRunId);
+      const data = await apiGet(path);
+      appendLogs(data.lines || []);
+      if (Number.isFinite(Number(data.next_seq))) {
+        ui.logCursor = Number(data.next_seq);
+      }
+      return data;
+    }
+
+    async function fetchHistory() {
+      const data = await apiGet('/api/history?limit=20');
+      renderHistory(data.items || []);
+      return data;
+    }
+
+    async function fetchQueue() {
+      const data = await apiGet('/api/queue');
+      renderQueue(data);
+      return data;
+    }
+
+    async function fetchAlerts() {
+      const data = await apiGet('/api/alerts?limit=30');
+      renderAlerts(data.items || []);
+      return data;
+    }
+
+    async function fetchCapacity() {
+      const data = await apiGet('/api/capacity?window=' + String("" + 40));
+      renderCapacity(data);
+      return data;
+    }
+
+    async function fetchConfigVersions() {
+      const data = await apiGet('/api/configs?limit=20');
+      renderConfigVersions(data.items || []);
+      return data;
+    }
+
+    async function fetchRunDetail() {
+      const runId = byId('detail_run_select').value;
+      ui.selectedRunId = runId;
+      if (!runId) return null;
+      const data = await apiGet('/api/run-detail?run_id=' + encodeURIComponent(runId) + '&log_limit=320&event_limit=260');
+      renderRunDetail(data);
+      return data;
+    }
+
+    async function startRun() {
+      const payload = payloadFromForm();
+      if (payload.count < 1) {
+        setMessage(t('msg.book_count_min', 'Book count must be >= 1.'), 'bad');
+        return;
+      }
+      setMessage(t('msg.submitting_run_request', 'Submitting run request...'), 'ok');
+
+      try {
+        const data = await apiPost('/api/start', payload);
+        saveLocalForm();
+
+        if (data.started) {
+          setMessage(tf('msg.run_started', {id: String(data.run_id || '')}, 'Run started: {id}'), 'ok');
+          byId('log_output').textContent = '';
+          ui.activeLogRunId = data.run_id || null;
+          ui.logCursor = Number(data.log_next_seq || 0);
+        } else {
+          setMessage(tf('msg.run_queued', {pos: String(data.queue_position || '?')}, 'Run queued at position {pos}.'), 'warn');
+        }
+        await refreshOverview(true);
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_start_run', 'Failed to start run.')), 'bad');
+      }
+    }
+
+    async function stopRun() {
+      setMessage(t('msg.stopping_active_run', 'Stopping active run...'), 'warn');
+      try {
+        const data = await apiPost('/api/stop', {});
+        const msg = data.started_next
+          ? t('msg.stopped_and_started_next', 'Stopped current run and started next queued run.')
+          : String(data.message || t('msg.stopped', 'Stopped.'));
+        setMessage(msg, 'warn');
+        await refreshOverview(true);
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_stop_run', 'Failed to stop run.')), 'bad');
+      }
+    }
+
+    async function saveConfigVersion() {
+      const payload = payloadFromForm();
+      const name = byId('version_name').value.trim();
+      const note = byId('version_note').value.trim();
+      try {
+        const data = await apiPost('/api/configs/save', {
+          name: name || null,
+          note: note || null,
+          payload: payload,
+        });
+        setMessage(tf('msg.saved_config_version', {id: String((data.version || {}).version_id || '')}, 'Saved config version: {id}'), 'ok');
+        byId('version_name').value = '';
+        byId('version_note').value = '';
+        await fetchConfigVersions();
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_save_config_version', 'Failed to save config version.')), 'bad');
+      }
+    }
+
+    async function applyConfigVersion(versionId) {
+      try {
+        const data = await apiPost('/api/configs/apply', {version_id: versionId});
+        setFormFromPayload(data.config || {});
+        setMessage(tf('msg.applied_config_version', {id: String(versionId)}, 'Applied config version: {id}'), 'ok');
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_apply_config_version', 'Failed to apply config version.')), 'bad');
+      }
+    }
+
+    async function reprioritizeJob(jobId) {
+      const selector = document.querySelector('[data-job-priority="' + jobId + '"]');
+      if (!selector) return;
+      const priority = selector.value || 'normal';
+      try {
+        await apiPost('/api/queue/reprioritize', {job_id: jobId, priority: priority});
+        setMessage(tf('msg.updated_priority', {id: String(jobId)}, 'Updated priority for job {id}.'), 'ok');
+        await fetchQueue();
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_reprioritize_job', 'Failed to reprioritize job.')), 'bad');
+      }
+    }
+
+    async function cancelJob(jobId) {
+      try {
+        await apiPost('/api/queue/cancel', {job_id: jobId});
+        setMessage(tf('msg.canceled_job', {id: String(jobId)}, 'Canceled queued job {id}.'), 'warn');
+        await fetchQueue();
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_cancel_job', 'Failed to cancel job.')), 'bad');
+      }
+    }
+
+    async function acknowledgeAlert(alertId) {
+      try {
+        await apiPost('/api/alerts/ack', {alert_id: alertId});
+        await fetchAlerts();
+        if (ui.activeTab === 'detail') {
+          await fetchRunDetail();
+        }
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_ack_alert', 'Failed to acknowledge alert.')), 'bad');
+      }
+    }
+
+    async function refreshOverview(forceAll) {
+      try {
+        ui.refreshTick += 1;
+        const status = await fetchStatus();
+        const logsPromise = fetchLogs();
+        const queuePromise = fetchQueue();
+        const alertsPromise = fetchAlerts();
+        const capacityPromise = fetchCapacity();
+        const historyPromise = fetchHistory();
+        const imagesPromise = (forceAll || ui.refreshTick % 3 === 0 || ui.activeTab === 'modules') ? fetchImages() : Promise.resolve(null);
+        const configsPromise = (forceAll || ui.refreshTick % 3 === 0) ? fetchConfigVersions() : Promise.resolve(null);
+        const modulesPromise = (forceAll || ui.refreshTick % 2 === 0 || ui.activeTab === 'modules') ? fetchModuleJobs() : Promise.resolve(null);
+
+        const results = await Promise.all([
+          logsPromise,
+          queuePromise,
+          alertsPromise,
+          capacityPromise,
+          historyPromise,
+          imagesPromise,
+          configsPromise,
+          modulesPromise,
+        ]);
+
+        const capacityData = results[3] || {};
+        updateHeaderKpis(status, capacityData);
+
+        if (ui.activeTab === 'detail') {
+          await fetchRunDetail();
+        }
+        if (ui.activeTab === 'modules' && ui.moduleSelectedJobId) {
+          await fetchModuleJobDetail(ui.moduleSelectedJobId);
+        }
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.refresh_failed', 'Refresh failed.')), 'bad');
+      }
+    }
+
+    function switchTab(tabName) {
+      ui.activeTab = tabName;
+      const tabs = document.querySelectorAll('.tab-btn[data-tab]');
+      for (let i = 0; i < tabs.length; i += 1) {
+        const btn = tabs[i];
+        if (btn.getAttribute('data-tab') === tabName) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+      const panels = [
+        {name: 'overview', id: 'tab_overview'},
+        {name: 'ops', id: 'tab_ops'},
+        {name: 'detail', id: 'tab_detail'},
+        {name: 'modules', id: 'tab_modules'},
+      ];
+      for (let i = 0; i < panels.length; i += 1) {
+        const panel = byId(panels[i].id);
+        if (!panel) continue;
+        if (panels[i].name === tabName) panel.classList.add('active');
+        else panel.classList.remove('active');
+      }
+      if (tabName === 'detail') {
+        fetchRunDetail();
+      }
+      if (tabName === 'modules') {
+        fetchModuleJobs();
+        if (ui.moduleSelectedJobId) {
+          fetchModuleJobDetail(ui.moduleSelectedJobId);
+        }
+      }
+    }
+
+    function restartTimer() {
+      if (ui.timer) {
+        clearInterval(ui.timer);
+        ui.timer = null;
+      }
+      if (!byId('auto_refresh').checked) return;
+      const ms = Math.max(1000, parseIntSafe(byId('refresh_ms').value, 2000));
+      ui.timer = setInterval(function () {
+        refreshOverview(false);
+      }, ms);
+    }
+
+    function bindEvents() {
+      byId('btn_start').addEventListener('click', startRun);
+      byId('btn_stop').addEventListener('click', stopRun);
+      byId('btn_save_local').addEventListener('click', saveLocalForm);
+      byId('btn_load_local').addEventListener('click', function () {
+        loadLocalForm();
+        setMessage(t('msg.loaded_local_profile', 'Loaded local profile.'), 'ok');
+      });
+      byId('btn_save_version').addEventListener('click', saveConfigVersion);
+      byId('btn_refresh_now').addEventListener('click', function () {
+        refreshOverview(true);
+      });
+      byId('btn_clear_logs').addEventListener('click', function () {
+        byId('log_output').textContent = '';
+      });
+      byId('btn_detail_refresh').addEventListener('click', function () {
+        fetchRunDetail();
+      });
+      byId('btn_images_refresh').addEventListener('click', function () {
+        fetchImages();
+      });
+      byId('btn_images_regen').addEventListener('click', regenerateSelectedImages);
+      byId('btn_images_module_run').addEventListener('click', runImageModuleJob);
+      byId('btn_image_regen_detail').addEventListener('click', regenerateDetailImage);
+
+      byId('btn_modules_refresh').addEventListener('click', function () {
+        fetchModuleJobs();
+        if (ui.moduleSelectedJobId) fetchModuleJobDetail(ui.moduleSelectedJobId);
+      });
+      byId('btn_module_job_stop').addEventListener('click', function () {
+        stopModuleJob(ui.moduleSelectedJobId);
+      });
+
+      byId('btn_module_story_run').addEventListener('click', runStoryModuleJob);
+      byId('btn_module_translation_run').addEventListener('click', runTranslationModuleJob);
+      byId('btn_module_voice_run').addEventListener('click', runVoiceModuleJob);
+      byId('btn_mode_basic').addEventListener('click', function () {
+        setGenerateMode('basic');
+      });
+      byId('btn_mode_advanced').addEventListener('click', function () {
+        setGenerateMode('advanced');
+      });
+      byId('btn_role_parent').addEventListener('click', function () {
+        setRolePreset('parent', true);
+      });
+      byId('btn_role_teacher').addEventListener('click', function () {
+        setRolePreset('teacher', true);
+      });
+      byId('btn_role_research').addEventListener('click', function () {
+        setRolePreset('research', true);
+      });
+      byId('module_story_input_mode').addEventListener('change', syncModuleStoryInputMode);
+      byId('story_input_mode').addEventListener('change', syncStoryInputMode);
+      byId('btn_record_start').addEventListener('click', startRecording);
+      byId('btn_record_stop').addEventListener('click', stopRecording);
+      byId('btn_record_save').addEventListener('click', saveRecordingAsSpeaker);
+
+      byId('auto_refresh').addEventListener('change', restartTimer);
+      byId('refresh_ms').addEventListener('change', restartTimer);
+      byId('lang_select').addEventListener('change', function () {
+        const value = String(byId('lang_select').value || 'en');
+        ui.language = value === 'zh-TW' ? 'zh-TW' : 'en';
+        localStorage.setItem(LANG_STORE_KEY, ui.language);
+        applyLanguage();
+        syncStoryInputMode();
+        syncModuleStoryInputMode();
+        refreshOverview(true);
+      });
+      byId('detail_run_select').addEventListener('change', function () {
+        ui.selectedRunId = byId('detail_run_select').value;
+        fetchRunDetail();
+      });
+
+      const presetButtons = [
+        {selector: '[data-preset="balanced"]', name: 'balanced'},
+        {selector: '[data-preset="speed"]', name: 'speed'},
+        {selector: '[data-preset="quality"]', name: 'quality'},
+      ];
+      for (let i = 0; i < presetButtons.length; i += 1) {
+        const node = document.querySelector(presetButtons[i].selector);
+        if (!node) continue;
+        node.addEventListener('click', function () {
+          applyPreset(presetButtons[i].name);
+        });
+      }
+
+      const tabButtons = document.querySelectorAll('.tab-btn[data-tab]');
+      tabButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          switchTab(String(btn.getAttribute('data-tab') || 'overview'));
+        });
+      });
+
+      const moduleTabButtons = document.querySelectorAll('.module-tab-btn');
+      moduleTabButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          switchModuleStudio(String(btn.getAttribute('data-module-tab') || 'story'));
+        });
+      });
+
+      byId('queue_body').addEventListener('click', function (event) {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const action = target.getAttribute('data-action');
+        const jobId = target.getAttribute('data-job-id');
+        if (!action || !jobId) return;
+        if (action === 'reprioritize') reprioritizeJob(jobId);
+        if (action === 'cancel') cancelJob(jobId);
+      });
+
+      byId('config_versions_body').addEventListener('click', function (event) {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const action = target.getAttribute('data-action');
+        if (action !== 'apply-config') return;
+        const versionId = target.getAttribute('data-version-id');
+        if (!versionId) return;
+        applyConfigVersion(versionId);
+      });
+
+      function handleAlertAck(event) {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.getAttribute('data-action') !== 'ack-alert') return;
+        const alertId = target.getAttribute('data-alert-id');
+        if (!alertId) return;
+        acknowledgeAlert(alertId);
+      }
+
+      byId('alert_list').addEventListener('click', handleAlertAck);
+      byId('detail_alerts').addEventListener('click', handleAlertAck);
+
+      byId('image_gallery').addEventListener('click', function (event) {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const action = target.getAttribute('data-action');
+        if (action !== 'image-edit') return;
+        const taskId = String(target.getAttribute('data-task-id') || '');
+        if (!taskId) return;
+        ui.imageDetailTaskId = taskId;
+        const item = findImageByTaskId(taskId);
+        populateImageDetail(item);
+      });
+
+      byId('image_gallery').addEventListener('change', function (event) {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        const action = target.getAttribute('data-action');
+        if (action !== 'image-select') return;
+        const taskId = String(target.getAttribute('data-task-id') || '');
+        if (!taskId) return;
+        ui.imageSelectedTaskIds[taskId] = target.checked;
+      });
+
+      byId('module_jobs_body').addEventListener('click', function (event) {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const action = target.getAttribute('data-action');
+        const jobId = String(target.getAttribute('data-job-id') || '');
+        if (!action || !jobId) return;
+        if (action === 'module-detail') {
+          fetchModuleJobDetail(jobId);
+        }
+        if (action === 'module-stop') {
+          stopModuleJob(jobId);
+        }
+      });
+    }
+
+    function init() {
+      ui.language = getPreferredLanguage();
+      const savedMode = localStorage.getItem(GENERATE_MODE_STORE_KEY);
+      ui.generateMode = savedMode === 'advanced' ? 'advanced' : 'basic';
+      const savedRole = localStorage.getItem(ROLE_PRESET_STORE_KEY);
+      ui.rolePreset = (savedRole === 'teacher' || savedRole === 'research') ? savedRole : 'parent';
+      applyLanguage();
+      loadLocalForm();
+      syncStoryInputMode();
+      syncModuleStoryInputMode();
+      setGenerateMode(ui.generateMode);
+      setRolePreset(ui.rolePreset, false);
+      switchModuleStudio('story');
+      bindEvents();
+      restartTimer();
+      refreshOverview(true);
+    }
+
+    init();
+  

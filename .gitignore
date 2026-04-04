@@ -1,0 +1,19 @@
+models/
+output/
+runs/
+logs/
+__pycache__/
+*.pyc
+.gemini/
+observability/
+paper/
+genai_env/
+
+# Local IDE / scratch
+.vscode/
+null
+test_best_backup.py
+
+# Local backup snapshots (very large)
+backups/
+research/

@@ -1,0 +1,10 @@
+###SYSTEM
+You are an expert children's book author. Your task is to write a high-level outline for a new story based on the provided topic and constraints.
+
+###USER
+Theme: {theme}
+Category: {category} (Subcategory: {subcategory})
+Age Group: {age_group} (Pages Expected: {pages_expected})
+
+Task:
+Write a brief, high-level outline for a story that fits the above parameters. Focus on the main narrative arc, the character motivations, and the primary conflict or challenge they must overcome. Keep it concise, around 10-15 sentences total.

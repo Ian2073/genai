@@ -1,0 +1,97 @@
+###SYSTEM
+You are a master storyteller and children's book editor.
+Your goal is to create a compelling narrative arc with a clear beginning, middle, and end.
+Ensure there is a sense of wonder, a small challenge or mystery, and a heartwarming resolution.
+
+###USER
+Task: Create a {min_page}-chapter outline for the story.
+
+[GUIDELINES]
+{kg_guidelines}
+
+Here are examples of the required output format. You MUST follow this format exactly.
+
+Input:
+Age: 6
+Theme: Friendship
+Task: Write 3-chapter outline.
+Output:
+<think>
+1. Chapter Count: Need 3 chapters.
+2. Names: Default to Tom.
+3. Arc: Found puppy -> fed -> friends.
+</think>
+<outline>
+1. [Park] Tom finds a lost puppy hiding behind a bench.
+2. [Tom's kitchen] He feeds the puppy warm milk and names it "Spot".
+3. [Park — next day] They return to the park together, now best friends.
+</outline>
+
+Input:
+Age: 8
+Theme: Adventure
+Task: Write 4-chapter outline.
+Output:
+<think>
+1. Chapter Count: Need 4 chapters.
+2. Arc: Treasure map -> woods -> gate -> chest. [TURNING_POINT] is chapter 3.
+</think>
+<outline>
+1. [Attic] A dusty treasure map falls out of an old book.
+2. [Forest trail] The kids follow the map through thick woods and cross a rushing river.
+3. [Cave entrance] A locked gate blocks their path — they must solve a riddle. [TURNING_POINT]
+4. [Inside the cave] They open the gate and discover a glittering treasure chest.
+</outline>
+
+Now, generate the outline for the following story:
+
+Story Information:
+Age: {age_group}
+Theme: {theme} ({category})
+Characters: {characters_csv}
+Context: {kg_scenes}
+
+Task: Write the {min_page}-chapter outline.
+
+STRUCTURAL RULES:
+1. Ensure the story has a clear arc: Introduction → Rising Action → Climax → Resolution.
+2. You must generate EXACTLY {min_page} chapters. Number them 1 to {min_page}.
+3. Each chapter MUST begin with a [Location/Setting] tag in brackets to anchor the scene.
+4. Each chapter must represent a DISTINCT event with a DIFFERENT setting or meaningful time shift.
+5. Do NOT write two adjacent chapters about the same moment or the same micro-action.
+6. One chapter MUST be the TURNING POINT — mark it with [TURNING_POINT] at the end.
+
+FORMAT RULES:
+- Output a <think> block first. Confirm exact {min_page} chapter count, name usage from {characters_csv}, and the [TURNING_POINT].
+- Output a numbered list inside <outline> tags. One line per chapter.
+- Do NOT output a single paragraph. Each chapter = one distinct numbered line.
+- Do NOT use "..." or skip numbers. Write out every single chapter from 1 to {min_page}.
+- Output ONLY the `<think>` block and then `<outline>` block.
+- Write ONLY in English.
+
+CHARACTER RULES:
+- Use EXACT character names: {characters_csv}. Do NOT merge or concatenate names (ensure spaces between multi-word names).
+- Do NOT invent new characters. No Lily, Lila, Sammy, Grandma, or any unlisted name.
+
+QUALITY RULES:
+- Make each chapter event vivid and specific (not vague like "They had fun").
+- Include at least one sensory detail or concrete action per chapter.
+- The outline should suggest a memorable central image or motif that could inspire a great title.
+- **Emotional Escalation**: Each chapter's emotional intensity should build progressively toward the TURNING_POINT. Start gentle (curiosity, wonder), build tension (surprise, challenge), peak at the turning point (fear, excitement), then resolve (relief, joy, warmth).
+- **Concrete Conflict**: The TURNING_POINT chapter MUST contain a specific, describable challenge — NOT vague tension. GOOD: "A locked gate blocks their path — they must solve a riddle." BAD: "Something goes wrong and they need to figure it out."
+- **Visual Anchor**: Each chapter should contain one striking visual image that an illustrator could immediately draw (e.g., "a glowing seed", "a silver door humming with light", "a chest of golden feathers").
+
+(IMPORTANT: List EVERY single chapter. Do NOT use "..." or skip numbers. I need the full outline.)
+
+Example with turning point and locations:
+<think>
+1. Check: 5 chapters generated.
+2. Check: Turning point is at chapter 3.
+</think>
+<outline>
+1. [Garden] Emma discovers a strange glowing seed buried under the old oak tree.
+2. [Garden — next morning] She plants the seed and waters it; by sunset a silver sprout appears.
+3. [Garden gate] The sprout grows into a shimmering doorway humming with light. [TURNING_POINT]
+4. [Beyond the door] Emma steps through and finds a hidden meadow full of talking flowers.
+5. [Garden — evening] She returns home carrying a golden petal, proof of the secret world.
+</outline>
