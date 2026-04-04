@@ -4,20 +4,14 @@ runs/
 logs/
 __pycache__/
 *.pyc
-.gemini/
 observability/
-paper/
 genai_env/
 
-# Local IDE / scratch
+# Local workspace tooling
 .vscode/
-null
-test_best_backup.py
+.gemini/
 
-# Local backup snapshots (very large)
+# Archive / research datasets
 backups/
 research/
-
-# Dashboard one-off migration tooling
-pipeline/dashboard_tools/
-pipeline/templates/dashboard_restore.html
+paper/

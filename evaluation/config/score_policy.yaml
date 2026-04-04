@@ -1,0 +1,25 @@
+consensus:
+  enabled: true
+  alpha: 0.25
+  max_pull: 6.0
+  trimmed_mean_ratio: 0.2
+
+constraints:
+  enabled: true
+  hard_caps:
+    - name: low_structure_cap
+      if:
+        coherence_lt: 55.0
+        completeness_lt: 52.0
+      cap: 74.0
+
+    - name: very_low_entity_cap
+      if:
+        entity_consistency_lt: 45.0
+      cap: 76.0
+
+    - name: emotion_dominance_cap
+      if:
+        emotional_impact_gt: 90.0
+        coherence_lt: 58.0
+      cap: 80.0

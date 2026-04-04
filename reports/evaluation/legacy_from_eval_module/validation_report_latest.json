@@ -1,0 +1,259 @@
+{
+  "timestamp": "2026-04-04T22:07:39.039964",
+  "checks": [
+    {
+      "test": "基準對照",
+      "description": "AI 總分 vs Goodreads 用戶評分的排序一致性",
+      "status": "⚠️ 弱相關",
+      "details": {
+        "sample_size": 106,
+        "pearson_r": 0.2109,
+        "spearman_r": 0.2359,
+        "avg_absolute_diff": 9.15,
+        "max_absolute_diff": 27.8,
+        "ai_score_range": "50.5 – 80.5",
+        "user_score_range": "44.6 – 85.6",
+        "largest_disagreements": [
+          {
+            "story": "The Elves and the Shoemaker",
+            "ai": 53.2,
+            "user": 81.0,
+            "diff": 27.8
+          },
+          {
+            "story": "The Farm-Yard Cock and the Weather-Cock",
+            "ai": 71.0,
+            "user": 44.6,
+            "diff": 26.4
+          },
+          {
+            "story": "The Good Bargain",
+            "ai": 72.5,
+            "user": 47.6,
+            "diff": 24.9
+          },
+          {
+            "story": "Frederick and Catherine",
+            "ai": 72.4,
+            "user": 48.4,
+            "diff": 24.0
+          },
+          {
+            "story": "The Bishop of Borglum and His Warriors",
+            "ai": 73.6,
+            "user": 50.6,
+            "diff": 23.0
+          }
+        ]
+      }
+    },
+    {
+      "test": "維度異常偵測",
+      "description": "檢查各維度是否存在鎖死、極端值、區分度不足",
+      "status": "❌ 多維異常",
+      "details": {
+        "readability": {
+          "mean": 74.14,
+          "stdev": 9.62,
+          "median": 75.75,
+          "min": 39.6,
+          "max": 94.8,
+          "range": 55.2,
+          "⚠_outliers": "1 筆超出預期範圍"
+        },
+        "emotional_impact": {
+          "mean": 76.02,
+          "stdev": 13.14,
+          "median": 81.23,
+          "min": 37.86,
+          "max": 90.42,
+          "range": 52.56
+        },
+        "coherence": {
+          "mean": 73.38,
+          "stdev": 7.25,
+          "median": 73.0,
+          "min": 57.8,
+          "max": 92.5,
+          "range": 34.7
+        },
+        "entity_consistency": {
+          "mean": 78.24,
+          "stdev": 4.66,
+          "median": 75.0,
+          "min": 73.2,
+          "max": 90.4,
+          "range": 17.2,
+          "⚠_locked": "48/106 (45%) 鎖定在 75.0"
+        },
+        "completeness": {
+          "mean": 66.34,
+          "stdev": 10.02,
+          "median": 68.35,
+          "min": 40.0,
+          "max": 89.2,
+          "range": 49.2
+        },
+        "factuality": {
+          "mean": 64.77,
+          "stdev": 2.14,
+          "median": 65.9,
+          "min": 59.6,
+          "max": 70.0,
+          "range": 10.4,
+          "⚠_locked": "51/106 (48%) 鎖定在 65.9",
+          "⚠_low_variance": "σ=2.14，區分度不足"
+        }
+      },
+      "warnings": [
+        "實體一致性：45% 的故事得分 = 75.0",
+        "事實正確性：48% 的故事得分 = 65.9",
+        "事實正確性：標準差僅 2.14，難以區分品質差異"
+      ]
+    },
+    {
+      "test": "品質標籤一致性",
+      "description": "Goodreads quality_label 應與 AI 總分排序一致",
+      "status": "✅ 通過",
+      "details": {
+        "high": {
+          "count": 43,
+          "mean": 71.54,
+          "stdev": 4.99,
+          "range": "53.2 – 78.2"
+        },
+        "low": {
+          "count": 16,
+          "mean": 68.71,
+          "stdev": 6.77,
+          "range": "50.5 – 75.5"
+        },
+        "medium": {
+          "count": 47,
+          "mean": 70.7,
+          "stdev": 4.96,
+          "range": "55.2 – 80.5"
+        }
+      }
+    },
+    {
+      "test": "分數分佈合理性",
+      "description": "總分分佈是否有合理的區間和變異",
+      "status": "✅ 分佈合理",
+      "details": {
+        "total_stories": 106,
+        "mean": 70.74,
+        "stdev": 5.31,
+        "median": 71.8,
+        "min": 50.5,
+        "max": 80.5,
+        "distribution": {
+          "≥85 (優秀)": 0,
+          "75-84 (良好)": 21,
+          "65-74 (普通)": 72,
+          "55-64 (待改進)": 11,
+          "<55 (不合格)": 2
+        }
+      },
+      "warnings": []
+    },
+    {
+      "test": "維度獨立性",
+      "description": "各維度是否測量不同面向（非冗餘）",
+      "status": "✅ 各維度獨立",
+      "details": {
+        "correlation_matrix": {
+          "readability × emotional_impact": 0.249,
+          "readability × coherence": -0.277,
+          "readability × entity_consistency": -0.12,
+          "readability × completeness": 0.288,
+          "readability × factuality": -0.205,
+          "emotional_impact × coherence": -0.234,
+          "emotional_impact × entity_consistency": -0.281,
+          "emotional_impact × completeness": 0.608,
+          "emotional_impact × factuality": -0.068,
+          "coherence × entity_consistency": 0.083,
+          "coherence × completeness": -0.216,
+          "coherence × factuality": 0.093,
+          "entity_consistency × completeness": -0.185,
+          "entity_consistency × factuality": 0.019,
+          "completeness × factuality": 0.038
+        },
+        "high_correlation_pairs": 0
+      },
+      "warnings": []
+    },
+    {
+      "test": "長度偏差檢測",
+      "description": "系統是否系統性偏好長故事或短故事",
+      "status": "⚠️ 輕微偏差",
+      "details": {
+        "pearson_r_log_wordcount_vs_score": 0.4149,
+        "word_count_range": "238 – 9181",
+        "interpretation": "輕微偏好長文"
+      }
+    },
+    {
+      "test": "治理層健康度",
+      "description": "檢查 confidence/risk/review recommendation 的覆蓋率與分佈",
+      "status": "⚠️ 需留意",
+      "details": {
+        "total_stories": 106,
+        "coverage": 0.0,
+        "missing_governance": 106,
+        "risk_distribution": {},
+        "review_distribution": {},
+        "confidence_mean": null,
+        "confidence_median": null,
+        "high_or_critical_ratio": 0.0
+      },
+      "warnings": [
+        "governance 覆蓋率不足：0%"
+      ]
+    },
+    {
+      "test": "策略回歸測試",
+      "description": "驗證跨維度硬約束與共識融合是否按預期運作",
+      "status": "✅ 通過",
+      "details": {
+        "constraint_low_structure": {
+          "base": 88.0,
+          "after": 74.0,
+          "applied_rules": [
+            {
+              "name": "low_structure_cap",
+              "type": "cap",
+              "cap": 74.0,
+              "effective_cap": 74.0,
+              "trigger_confidence": 0.6,
+              "trigger_degraded": false,
+              "before": 88.0,
+              "after": 74.0
+            }
+          ],
+          "passed": true
+        },
+        "constraint_normal_case": {
+          "base": 79.0,
+          "after": 79.0,
+          "applied_rules": [],
+          "passed": true
+        },
+        "consensus_pull_limit": {
+          "base": 92.0,
+          "after": 86.0,
+          "pull": -6.0,
+          "max_pull": 6.0,
+          "passed": true
+        }
+      },
+      "warnings": []
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "passed": 4,
+    "warnings": 3,
+    "failed": 1
+  }
+}

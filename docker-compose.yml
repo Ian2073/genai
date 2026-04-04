@@ -59,3 +59,64 @@ services:
 
     # 重啟策略
     restart: "no"
+
+  story-checker:
+    build:
+      context: .
+      dockerfile: evaluation/Dockerfile
+    image: story-checker:latest
+    command: bash -lc "sleep infinity"
+    volumes:
+      - ./evaluation:/app
+      - ${MODEL_ROOT_HOST_PATH:-./models}:/app/models:ro
+      - ./output:/app/output
+      - ./reports:/app/reports
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    environment:
+      - COREF_SERVICE_URL=${COREF_SERVICE_URL:-http://coref-service:8001}
+      - TOKENIZERS_PARALLELISM=false
+      - DEFAULT_MODEL_PATH=${DEFAULT_MODEL_PATH:-/app/models/Qwen2.5-14B}
+      - USE_4BIT_QUANTIZATION=${USE_4BIT_QUANTIZATION:-true}
+      - USE_CPU_HYBRID=${USE_CPU_HYBRID:-true}
+      - USE_CPU_FOR_SEMANTIC=${USE_CPU_FOR_SEMANTIC:-true}
+      - DISABLE_CALIBRATION=${DISABLE_CALIBRATION:-true}
+      - COREF_BACKEND_MODE=${COREF_BACKEND_MODE:-auto}
+      - COREF_TIMEOUT_SEC=${COREF_TIMEOUT_SEC:-120}
+    depends_on:
+      coref-service:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  coref-service:
+    build:
+      context: .
+      dockerfile: evaluation/Dockerfile.coref
+    image: coref-service:latest
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - COREF_DEVICE=${COREF_DEVICE:-auto}
+      - COREF_MAX_TOKENS=${COREF_MAX_TOKENS:-2048}
+    volumes:
+      - ${MODEL_ROOT_HOST_PATH:-./models}:/app/models:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "8001:8001"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

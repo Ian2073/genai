@@ -17,6 +17,18 @@ from typing import Dict, List, Sequence, Set
 
 ARCHIVE_MODULE_ROOTS: Set[str] = {"backups", "research"}
 
+SKIP_SCAN_DIR_NAMES: Set[str] = {
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "genai_env",
+    "models",
+    "pending",
+    "evaluated",
+    "reports",
+}
+
 RUNTIME_TARGETS: Sequence[str] = (
     "chief.py",
     "story.py",
@@ -31,6 +43,7 @@ RUNTIME_TARGETS: Sequence[str] = (
     "runtime",
     "observability",
     "story_core",
+    "evaluation",
     "scripts",
 )
 
@@ -78,7 +91,11 @@ def _collect_python_files(workspace_root: Path) -> List[Path]:
             files.append(target)
             continue
         if target.is_dir():
-            files.extend(sorted(target.rglob("*.py")))
+            for path in sorted(target.rglob("*.py")):
+                rel_parts = path.relative_to(target).parts
+                if any(part in SKIP_SCAN_DIR_NAMES for part in rel_parts):
+                    continue
+                files.append(path)
     return files
 
 
@@ -125,7 +142,7 @@ def scan_archive_boundaries(workspace_root: Path) -> CheckSummary:
 
     for file_path in python_files:
         try:
-            content = file_path.read_text(encoding="utf-8")
+            content = file_path.read_text(encoding="utf-8-sig")
         except Exception as exc:  # noqa: BLE001
             syntax_errors.append(f"{file_path.relative_to(workspace_root)}: read error ({exc})")
             continue

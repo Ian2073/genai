@@ -1,0 +1,106 @@
+# 六大維度 × 五種文檔的適用矩陣與權重配置
+# ✓主要來源、△輔助來源、—不適用(0.0)
+
+# 1. 完整性 (Completeness) - 全局結構＋頁面三拍
+completeness:
+  title.txt: 0.0         # —不適用
+  outline.txt: 0.25      # ✓主要，結構規劃
+  full_story.txt: 0.60   # ✓主要，完整內容
+  narration.txt: 0.10    # △輔助，敘事完整度
+  dialogue.txt: 0.05     # △輔助，對話推進度
+
+# 2. 連貫性 (Coherence) - 區域與全局銜接
+coherence:
+  title.txt: 0.0         # —不適用
+  outline.txt: 0.0       # △僅事件順序粗檢，不計分
+  full_story.txt: 0.50   # ✓主要，全文銜接
+  narration.txt: 0.25    # △輔助，敘事銜接
+  dialogue.txt: 0.25     # △輔助，對話銜接
+
+# 3. 可讀性 (Readability) - 年齡適配與文字負荷
+readability:
+  title.txt: 0.0         # △可選，僅檢標題長度(設為0，可臨時調整)
+  outline.txt: 0.0       # —不適用，避免子彈點誤判
+  full_story.txt: 0.60   # ✓主要，整體可讀性
+  narration.txt: 0.15    # △輔助，敘事文字
+  dialogue.txt: 0.25     # ✓主要，對話自然度
+
+# 4. 實體一致性 (Entity Consistency) - 角色/物件/屬性
+entity_consistency:
+  title.txt: 0.0         # —不適用
+  outline.txt: 0.05      # △輔助，名稱規劃比對
+  full_story.txt: 0.50   # ✓主要，完整實體追蹤
+  narration.txt: 0.20    # △輔助，敘事中的實體
+  dialogue.txt: 0.25     # ✓主要，對話中的實體
+
+# 5. 事實正確性 (Factuality) - 有事實內容時才開
+factuality:
+  title.txt: 0.0         # 條件性，若含可驗證主張則檢
+  outline.txt: 0.10      # △輔助，先期主張草案
+  full_story.txt: 0.70   # ✓主要，主要事實來源
+  narration.txt: 0.20    # △輔助，敘事中的事實
+  dialogue.txt: 0.0      # 條件性，角色觀點通常不作事實
+
+# 6. 情感影響力 (Emotional Impact) - 情感多樣性＋共鳴度
+emotional_impact:
+  title.txt: 0.05        # △情感基調、題材暗示
+  outline.txt: 0.10      # △主要情節轉折
+  full_story.txt: 0.70   # ✓主要來源，情感鋪陳
+  narration.txt: 0.10    # △敘事細節補充
+  dialogue.txt: 0.05     # △角色情感表達
+
+# 降級處理配置
+degradation_handling:
+  # 當缺少檔案時的處理策略
+  missing_file_strategy: "renormalize"  # 重新正規化權重
+  
+  # 記錄降級狀態
+  log_degradation: true
+  
+  # 最小權重閾值（低於此值視為不重要）
+  min_weight_threshold: 0.05
+
+# 各維度的特殊配置
+dimension_configs:
+  completeness:
+    check_story_structure: true      # 檢查起因/衝突/轉折/解決/收束
+    check_page_three_beats: true     # 檢查頁面「場景意圖/行動/情緒」三拍
+    outline_coverage_matrix: true    # Outline→Full 覆蓋矩陣
+    
+  coherence:
+    check_paragraph_flow: true       # 段落主題流
+    check_pronoun_reference: true    # 代詞/指稱銜接
+    check_timeline_causality: true   # 時間線與因果邊
+    check_dialogue_adjacency: true   # 對話回合 (adjacency pairs)
+    
+  readability:
+    target_age_group: "children"     # 目標年齡群
+    check_sentence_length: true      # 平均句長
+    check_word_difficulty: true      # 難詞比例
+    check_punctuation_format: true   # 標點/格式
+    check_dialogue_naturalness: true # 對話口語自然度
+    
+  entity_consistency:
+    check_alias_coreference: true    # 別名/共指叢集
+    check_character_continuity: true # 口吻與屬性連續性
+    check_object_lifecycle: true     # 物件生命週期
+    
+  factuality:
+    extract_verifiable_claims: true  # 可驗證主張抽取
+    source_verification: true        # 來源檢索
+    risk_assessment: true           # 高風險清單
+    
+  emotional_impact:
+    analyze_emotional_diversity: true    # 情感多樣化分析
+    analyze_emotional_intensity: true    # 強度/情感張力
+    analyze_emotional_resonance: true    # 共鳴力指標
+    analyze_emotional_authenticity: true # 真實性偵測
+    ai_analysis_weight: 0.30             # AI 深度分析佔比
+
+# 權重調整策略
+weight_adjustment:
+  # 當title.txt含有可驗證主張時，事實正確性權重調整
+  factuality_title_boost: 0.15
+  
+  # 當title.txt需要檢查時，可讀性權重調整  
+  readability_title_boost: 0.05

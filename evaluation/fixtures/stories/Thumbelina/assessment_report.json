@@ -1,0 +1,117 @@
+{
+  "overall_score": 80.8,
+  "original_overall_score": 80.8,
+  "overall_score_raw": 80.8,
+  "overall_score_calibrated": 80.8,
+  "dimension_scores": {
+    "readability": 86.0
+  },
+  "dimension_summaries": {
+    "readability": {
+      "dimension": "readability",
+      "score": 86.0,
+      "status": "success",
+      "error": null,
+      "confidence": 0.6,
+      "issues_count": 2,
+      "suggestions": [
+        "📚 詞彙難度過高：建議使用更簡單的詞彙"
+      ]
+    }
+  },
+  "recommendations": [
+    "✅ 1 個維度表現優秀",
+    "👍 故事質量良好，建議進行小幅調整"
+  ],
+  "processing_summary": {
+    "total_processing_time": 1.6,
+    "dimensions_processed": 1,
+    "successful_dimensions": 1,
+    "degraded_dimensions": 0,
+    "failed_dimensions": 0,
+    "average_dimension_time": 1.6,
+    "total_issues_found": 2,
+    "total_suggestions_generated": 1
+  },
+  "degradation_report": {},
+  "governance": {
+    "confidence": 0.7292,
+    "confidence_score": 72.9,
+    "risk_level": "medium",
+    "review_recommendation": "spot_check_recommended",
+    "risk_flags": [
+      {
+        "severity": "high",
+        "code": "low_coverage",
+        "message": "維度覆蓋率偏低：17%"
+      }
+    ],
+    "audit": {
+      "coverage_ratio": 0.1667,
+      "expected_dimensions": 6,
+      "present_dimensions": 1,
+      "success_count": 1,
+      "degraded_count": 0,
+      "failed_count": 0,
+      "calibration_shift": 0.0,
+      "total_processing_time": 1.6,
+      "alignment_mode": "model_only"
+    }
+  },
+  "branch_id": "canonical",
+  "source_document": "evaluation\\fixtures\\stories\\Thumbelina\\full_story.txt",
+  "story_metadata": {
+    "title": "Thumbelina",
+    "platform": "Goodreads",
+    "source_url": "https://www.goodreads.com/book/show/563757.Thumbelina",
+    "user_rating": 4.11,
+    "ratings_count": 369,
+    "text_source": "Hans Christian Andersen (public domain); Brad Sneed adaptation and illustrations",
+    "quality_label": "high",
+    "age_raw": "All ages; Goodreads commonly lists 4–8 Years for picture-book editions",
+    "age": "children_4_8",
+    "word_count": 347,
+    "char_count": 1907
+  },
+  "evaluation_scope": "canonical",
+  "alignment": {
+    "mode": "model_only",
+    "base_weighted_score": 80.8,
+    "final_score": 80.8,
+    "adjustments": null,
+    "aggregation": {
+      "confidence_adjusted_scores": {
+        "readability": 80.8
+      },
+      "raw_scores": {
+        "readability": 86.0
+      },
+      "confidence_map": {
+        "readability": 0.6
+      }
+    },
+    "policy": {
+      "constraints": {
+        "enabled": true,
+        "applied_rules": []
+      },
+      "consensus": {
+        "enabled": true,
+        "median": 80.8,
+        "trimmed_mean": 80.8,
+        "weighted_mean": 80.8,
+        "consensus_center": 80.8,
+        "alpha": 0.2625,
+        "max_pull": 6.0,
+        "base_alpha": 0.25,
+        "base_max_pull": 6.0,
+        "avg_confidence": 0.6,
+        "degraded_ratio": 0.0,
+        "pull": 0.0,
+        "before": 80.8,
+        "after": 80.8
+      }
+    }
+  },
+  "timestamp": "2026-04-05T01:39:40.898259"
+}

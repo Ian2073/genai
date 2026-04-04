@@ -5,7 +5,7 @@
 ## 1. 頂層分層
 
 1. 執行入口層（root）
-2. 核心實作套件層（`pipeline`、`backends`、`runtime`、`observability`、`story_core`）
+2. 核心實作套件層（`pipeline`、`backends`、`runtime`、`observability`、`story_core`、`evaluation`）
 3. 工具與文件層（`scripts`、`docs`、`prompts`）
 4. 產物與資料層（`models`、`output`、`logs`、`runs`、`reports`）
 5. 研究與封存層（`research`、`backups`）
@@ -46,27 +46,31 @@ python scripts/check_root_layout.py --workspace-root . --strict
    - 從 root 拆出的故事內部 helper。
    - 分支/狀態/輸出/頁面流程/文本正規化/型別模組。
 
-6. `scripts/`
+6. `evaluation/`
+   - 評測主線模組（六維評估、分支掃描、治理與報告）。
+   - 與生成系統共用 output/models，但維持獨立評測邏輯邊界。
+
+7. `scripts/`
    - 維運與診斷工具（`setup_env`、`doctor`、`smoke_gate`、實驗腳本）。
 
-7. `docs/`
+8. `docs/`
    - 環境設定、架構、遷移契約與疑難排解文件。
 
-8. `prompts/`
+9. `prompts/`
    - Prompt 範本與 Prompt 工具 helper。
 
-9. `research/`
+10. `research/`
    - 非執行主線的研究資產與評估實驗。
    - 含 `research/paper` 與外部評估專案快照。
 
-10. `backups/`
+11. `backups/`
    - 僅供比對/回復的歷史快照。
    - 不屬於主線執行路徑。
 
 ## 4. 放置規則
 
 1. 新的執行主線程式碼：
-   - 實作放在 `pipeline`、`backends`、`runtime` 或 `observability`。
+   - 實作放在 `pipeline`、`backends`、`runtime`、`observability` 或 `evaluation`。
    - 除非是公開入口模組，否則不要把新執行模組直接放在 root。
 
 2. 新工具：

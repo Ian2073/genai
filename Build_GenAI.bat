@@ -70,6 +70,20 @@ if errorlevel 1 (
     exit /b 1
 )
 
+set "GENAI_PY=%PROJECT_DIR%%AUTO_ENV_DIR%\Scripts\python.exe"
+if not exist "%GENAI_PY%" set "GENAI_PY=%BASE_PY_EXE%"
+
+if exist "%PROJECT_DIR%evaluation\requirements.txt" (
+    echo.
+    echo [INFO] Installing evaluation extras into unified environment...
+    "%GENAI_PY%" -m pip install -r "%PROJECT_DIR%evaluation\requirements.txt" --constraint "%PROJECT_DIR%requirements.txt"
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Failed to install evaluation extras.
+        exit /b 1
+    )
+)
+
 echo.
 echo [INFO] Running environment diagnostics...
 set "DOCTOR_PY=%PROJECT_DIR%%AUTO_ENV_DIR%\Scripts\python.exe"

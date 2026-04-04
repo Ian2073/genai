@@ -270,13 +270,15 @@ class DashboardRuntime:
 
     def __init__(self, root_dir: Path) -> None:
         self.root_dir = root_dir
-        self.status_file = self.root_dir / "runs" / "dashboard_status.json"
-        self.history_file = self.root_dir / "runs" / "dashboard_history.json"
-        self.configs_file = self.root_dir / "runs" / "dashboard_config_versions.json"
-        self.alert_file = self.root_dir / "runs" / "dashboard_alerts.json"
-        self.module_jobs_file = self.root_dir / "runs" / "dashboard_jobs.json"
-        self.module_events_file = self.root_dir / "runs" / "dashboard_job_events.json"
-        self.module_history_file = self.root_dir / "runs" / "dashboard_module_history.json"
+        self.runs_dir = self.root_dir / "runs"
+        self.records_dir = self.runs_dir / "dashboard_records"
+        self.status_file = self.records_dir / "dashboard_status.json"
+        self.history_file = self.records_dir / "dashboard_history.json"
+        self.configs_file = self.records_dir / "dashboard_config_versions.json"
+        self.alert_file = self.records_dir / "dashboard_alerts.json"
+        self.module_jobs_file = self.records_dir / "dashboard_jobs.json"
+        self.module_events_file = self.records_dir / "dashboard_job_events.json"
+        self.module_history_file = self.records_dir / "dashboard_module_history.json"
 
         self.process: Optional[subprocess.Popen[str]] = None
         self.reader_thread: Optional[threading.Thread] = None
@@ -336,7 +338,8 @@ class DashboardRuntime:
         self.model_reaper_stop = threading.Event()
         self.model_reaper: Optional[threading.Thread] = None
 
-        self.status_file.parent.mkdir(parents=True, exist_ok=True)
+        self.records_dir.mkdir(parents=True, exist_ok=True)
+        self._migrate_legacy_record_files()
         self._load_history()
         self._load_config_versions()
         self._load_alerts()
@@ -381,6 +384,34 @@ class DashboardRuntime:
             temp.replace(path)
         except Exception:
             pass
+
+    def _migrate_legacy_record_files(self) -> None:
+        legacy_map = {
+            self.runs_dir / "dashboard_status.json": self.status_file,
+            self.runs_dir / "dashboard_history.json": self.history_file,
+            self.runs_dir / "dashboard_config_versions.json": self.configs_file,
+            self.runs_dir / "dashboard_alerts.json": self.alert_file,
+            self.runs_dir / "dashboard_jobs.json": self.module_jobs_file,
+            self.runs_dir / "dashboard_job_events.json": self.module_events_file,
+            self.runs_dir / "dashboard_module_history.json": self.module_history_file,
+        }
+
+        for legacy_path, target_path in legacy_map.items():
+            if legacy_path == target_path:
+                continue
+            if not legacy_path.exists() or target_path.exists():
+                continue
+
+            try:
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                legacy_path.replace(target_path)
+            except Exception:
+                try:
+                    payload = legacy_path.read_bytes()
+                    target_path.write_bytes(payload)
+                    legacy_path.unlink()
+                except Exception:
+                    pass
 
     def _load_history(self) -> None:
         self.history = self._read_json_list(self.history_file)[-_HISTORY_LIMIT:]
@@ -3037,6 +3068,81 @@ class DashboardRuntime:
             "items": items,
         }
 
+    def clear_overview_view(self) -> Dict[str, Any]:
+        self._sync_process_exit()
+        with self.lock:
+            if self._is_running() or self.active_job is not None:
+                return {"ok": False, "error": "Cannot clear overview while a run is active."}
+            if self.pending_jobs:
+                return {"ok": False, "error": "Cannot clear overview while queue has pending jobs."}
+
+            removed_live_lines = len(self.log_lines)
+
+            self.log_lines.clear()
+            self.log_seq = 0
+            self.current_run_id = None
+            self.current_run_started_at = None
+            self.current_run_started_iso = None
+            self.current_exit_code = None
+            self.current_status_signature = None
+            self.last_error = None
+            self.last_config = {}
+            self._clean_stale_status_locked()
+
+        return {
+            "ok": True,
+            "removed_live_lines": removed_live_lines,
+        }
+
+    def clear_run_history(self) -> Dict[str, Any]:
+        self._sync_process_exit()
+        with self.lock:
+            if self._is_running() or self.active_job is not None:
+                return {"ok": False, "error": "Cannot clear history while a run is active."}
+            if self.pending_jobs:
+                return {"ok": False, "error": "Cannot clear history while queue has pending jobs."}
+
+            removed_runs = len(self.history)
+            removed_log_groups = len(self.run_logs)
+            removed_event_groups = len(self.run_events)
+            removed_live_lines = len(self.log_lines)
+
+            removed_alerts = 0
+            kept_alerts: List[Dict[str, Any]] = []
+            for item in self.alerts:
+                run_ref = str(item.get("run_id") or "").strip() if isinstance(item, dict) else ""
+                if run_ref:
+                    removed_alerts += 1
+                    continue
+                kept_alerts.append(item)
+
+            if removed_alerts:
+                self.alerts = kept_alerts
+                self._save_alerts()
+
+            self.history = []
+            self._save_history()
+            self.run_logs = {}
+            self.run_events = {}
+            self.log_lines.clear()
+            self.log_seq = 0
+            self.current_run_id = None
+            self.current_run_started_at = None
+            self.current_run_started_iso = None
+            self.current_exit_code = None
+            self.current_status_signature = None
+            self.last_error = None
+            self._clean_stale_status_locked()
+
+        return {
+            "ok": True,
+            "removed_runs": removed_runs,
+            "removed_log_groups": removed_log_groups,
+            "removed_event_groups": removed_event_groups,
+            "removed_live_lines": removed_live_lines,
+            "removed_alerts": removed_alerts,
+        }
+
     def get_queue(self) -> Dict[str, Any]:
         self._sync_process_exit()
         with self.lock:
@@ -3638,6 +3744,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
             payload = self._read_json_body()
             result = self.runtime.start_run(payload)
             self._send_json(result, status=200 if result.get("ok") else 400)
+            return
+
+        if parsed.path == "/api/overview/clear":
+            result = self.runtime.clear_overview_view()
+            self._send_json(result, status=200 if result.get("ok") else 409)
+            return
+
+        if parsed.path == "/api/history/clear":
+            result = self.runtime.clear_run_history()
+            self._send_json(result, status=200 if result.get("ok") else 409)
             return
 
         if parsed.path == "/api/stop":

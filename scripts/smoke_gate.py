@@ -121,6 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dashboard-port", type=int, default=8785, help="Temporary dashboard port for health check")
     parser.add_argument("--dashboard-timeout", type=int, default=30, help="Seconds to wait for dashboard readiness")
     parser.add_argument("--skip-dashboard", action="store_true", help="Skip dashboard health check")
+    parser.add_argument("--skip-eval", action="store_true", help="Skip integrated evaluation checks")
     parser.add_argument("--skip-root-policy", action="store_true", help="Skip root layout policy check")
     parser.add_argument("--skip-archive-policy", action="store_true", help="Skip archive boundary policy check")
     parser.add_argument(
@@ -141,6 +142,27 @@ def main() -> int:
     steps.append(run_command("chief_help", [py, "chief.py", "--help"], cwd))
     steps.append(run_command("pipeline_help", [py, "-m", "pipeline", "--help"], cwd))
     steps.append(run_command("doctor_help", [py, "scripts/doctor.py", "--help"], cwd))
+    if not args.skip_eval:
+        steps.append(run_command("eval_help", [py, "evaluation/main.py", "--help"], cwd))
+        steps.append(
+            run_command(
+                "eval_smoke",
+                [
+                    py,
+                    "evaluation/main.py",
+                    "--input",
+                    "evaluation/fixtures/stories/Thumbelina",
+                    "--aspects",
+                    "readability",
+                    "--branch",
+                    "canonical",
+                    "--post-process",
+                    "none",
+                ],
+                cwd,
+                timeout=900,
+            )
+        )
     if not args.skip_root_policy:
         steps.append(
             run_command(

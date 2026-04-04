@@ -1,0 +1,1010 @@
+categories:
+  animal_behavior:
+    - 貓
+    - 狗
+    - 老鼠
+    - 鳥
+    - 魚
+    - 熊
+    - 狼
+    - 兔子
+    - 青蛙
+    - 蛇
+    - 害怕
+    - 逃跑
+    - 捕食
+    - 築巢
+    - 游泳
+    - 飛行
+    - 爬樹
+    - 冬眠
+    - cat
+    - dog
+    - mouse
+    - bird
+    - fish
+    - bear
+    - wolf
+    - rabbit
+    - frog
+    - snake
+    - afraid
+    - scared
+    - run
+    - hunt
+    - nest
+    - swim
+    - fly
+    - climb
+    - hibernate
+  natural_phenomena:
+    - 水
+    - 火
+    - 風
+    - 雨
+    - 雪
+    - 太陽
+    - 月亮
+    - 星星
+    - 樹
+    - 花
+    - 草
+    - 流動
+    - 燃燒
+    - 吹
+    - 落下
+    - 發光
+    - 生長
+    - 開花
+    - 結果
+    - water
+    - fire
+    - wind
+    - rain
+    - snow
+    - sun
+    - moon
+    - star
+    - tree
+    - flower
+    - grass
+    - flow
+    - burn
+    - blow
+    - fall
+    - shine
+    - grow
+    - bloom
+    - fruit
+  social_norms:
+    - 國王
+    - 皇后
+    - 王子
+    - 公主
+    - 農民
+    - 商人
+    - 老師
+    - 學生
+    - 父母
+    - 孩子
+    - 城堡
+    - 宮殿
+    - 學校
+    - 市場
+    - 農場
+    - 村莊
+    - 城市
+    - king
+    - queen
+    - prince
+    - princess
+    - farmer
+    - merchant
+    - teacher
+    - student
+    - parent
+    - child
+    - castle
+    - palace
+    - school
+    - market
+    - farm
+    - village
+    - city
+  common_sense:
+    - 大
+    - 小
+    - 高
+    - 低
+    - 快
+    - 慢
+    - 熱
+    - 冷
+    - 亮
+    - 暗
+    - 重
+    - 輕
+    - 好吃
+    - 難吃
+    - 美麗
+    - 醜陋
+    - 善良
+    - 邪惡
+    - 勇敢
+    - 膽小
+    - 聰明
+    - 愚蠢
+    - big
+    - small
+    - tall
+    - short
+    - fast
+    - slow
+    - hot
+    - cold
+    - bright
+    - dark
+    - heavy
+    - light
+    - delicious
+    - tasty
+    - beautiful
+    - ugly
+    - kind
+    - evil
+    - brave
+    - coward
+    - smart
+    - stupid
+  entity_consistency:
+    role_terms:
+      - king
+      - queen
+      - prince
+      - princess
+      - knight
+      - hunter
+      - farmer
+      - woodcutter
+      - witch
+      - wizard
+      - giant
+      - ogre
+      - dragon
+      - fairy
+      - mermaid
+      - hero
+      - heroine
+      - villain
+      - maid
+      - servant
+      - shepherd
+      - fisherman
+      - sailor
+      - boy
+      - girl
+      - brother
+      - sister
+      - mother
+      - father
+      - stepmother
+      - stepfather
+      - stepbrother
+      - stepsister
+      - grandmother
+      - grandfather
+      - grandma
+      - grandpa
+      - emperor
+      - empress
+      - wolf
+      - fox
+      - pig
+      - bear
+      - cat
+      - dog
+      - mouse
+      - duckling
+      - swan
+      - frog
+    role_adjectives:
+      - little
+      - big
+      - old
+      - young
+      - brave
+      - kind
+      - clever
+      - wicked
+      - gentle
+      - poor
+      - rich
+  genre:
+    fable:
+      strong:
+        - moral
+        - lesson
+        - moral of the story
+        - teaches us
+        - learned that
+      medium:
+        - wise
+        - foolish
+        - greed
+        - honesty
+        - virtue
+        - vice
+      animals:
+        - fox
+        - crow
+        - lion
+        - mouse
+        - ant
+        - grasshopper
+        - tortoise
+        - hare
+    fairy_tale:
+      openings:
+        - once upon a time
+        - long ago
+        - in a faraway land
+      endings:
+        - happily ever after
+        - lived happily
+        - never seen again
+      magic:
+        - magic
+        - spell
+        - enchant
+        - fairy
+        - witch
+        - wizard
+        - curse
+        - transform
+      royalty:
+        - king
+        - queen
+        - prince
+        - princess
+        - castle
+        - kingdom
+  emotion:
+    joy:
+      words:
+        - happy
+        - joy
+        - delighted
+        - cheerful
+        - glad
+        - pleased
+        - content
+        - excited
+        - thrilled
+        - elated
+        - jubilant
+        - ecstatic
+        - overjoyed
+        - smile
+        - laugh
+        - grin
+        - beam
+        - chuckle
+        - giggle
+    sadness:
+      words:
+        - sad
+        - unhappy
+        - sorrowful
+        - grief
+        - melancholy
+        - depressed
+        - miserable
+        - gloomy
+        - dejected
+        - downcast
+        - heartbroken
+        - tearful
+        - cry
+        - weep
+        - sob
+        - mourn
+        - lament
+        - wail
+    fear:
+      words:
+        - afraid
+        - scared
+        - frightened
+        - terrified
+        - fearful
+        - anxious
+        - worried
+        - nervous
+        - panic
+        - dread
+        - horror
+        - alarmed
+        - uneasy
+        - tremble
+        - shiver
+        - shake
+        - cower
+        - flee
+        - hide
+    anger:
+      words:
+        - angry
+        - mad
+        - furious
+        - enraged
+        - irate
+        - wrathful
+        - indignant
+        - annoyed
+        - irritated
+        - frustrated
+        - outraged
+        - livid
+        - rage
+        - shout
+        - yell
+        - scream
+        - roar
+        - storm
+        - fume
+    surprise:
+      words:
+        - surprised
+        - amazed
+        - astonished
+        - shocked
+        - startled
+        - stunned
+        - astounded
+        - bewildered
+        - dumbfounded
+        - flabbergasted
+        - wonder
+        - gasp
+        - stare
+        - gape
+        - marvel
+    love:
+      words:
+        - love
+        - adore
+        - cherish
+        - treasure
+        - care
+        - affection
+        - devotion
+        - tenderness
+        - warmth
+        - fondness
+        - attachment
+        - embrace
+        - hug
+        - kiss
+        - caress
+        - cuddle
+    disgust:
+      words:
+        - disgust
+        - repulsed
+        - revolted
+        - nauseated
+        - sick
+        - loathe
+        - detest
+        - abhor
+        - hate
+        - despise
+        - scorn
+        - repel
+    trust:
+      words:
+        - trust
+        - believe
+        - faith
+        - confidence
+        - rely
+        - depend
+        - hope
+        - optimistic
+        - assured
+        - certain
+        - secure
+        - safe
+    transitions:
+      default:
+        - but
+        - however
+        - yet
+        - although
+        - nevertheless
+        - still
+        - despite
+        - suddenly
+        - then
+        - when
+        - until
+        - after
+        - before
+        - while
+    intensifiers:
+      core:
+        - very
+        - extremely
+        - incredibly
+        - absolutely
+        - completely
+        - totally
+        - utterly
+        - deeply
+        - profoundly
+        - intensely
+        - overwhelmingly
+        - so
+        - such
+    action_verbs:
+      expressive:
+        - scream
+        - shout
+        - cry
+        - weep
+        - tremble
+        - shake
+        - rush
+        - flee
+        - chase
+        - fight
+        - struggle
+        - embrace
+        - kiss
+    universal_themes:
+      family:
+        - family
+        - mother
+        - father
+        - parent
+        - child
+        - son
+        - daughter
+        - home
+      friendship:
+        - friend
+        - companion
+        - together
+        - share
+        - help
+        - support
+      love:
+        - love
+        - heart
+        - care
+        - cherish
+        - beloved
+        - dear
+      loss:
+        - lose
+        - lost
+        - gone
+        - death
+        - leave
+        - farewell
+        - goodbye
+        - miss
+      growth:
+        - learn
+        - grow
+        - change
+        - discover
+        - realize
+        - understand
+        - wise
+  completeness:
+    weights:
+      base:
+        - "structural:0.35"
+        - "semantic:0.25"
+        - "logical:0.2"
+        - "functional:0.2"
+      adaptive:
+        - "structural:0.28"
+        - "semantic:0.30"
+        - "logical:0.27"
+        - "functional:0.15"
+    semantic:
+      setup:
+        direct:
+          - once upon
+          - in the beginning
+          - there was
+          - one day
+          - at first
+          - lived
+          - was
+          - were
+          - had
+        semantic:
+          - character introduction
+          - setting description
+          - background information
+          - initial situation
+      inciting:
+        direct:
+          - until
+          - then one day
+          - suddenly
+          - but then
+          - however
+          - when
+          - while
+          - as
+          - during
+        semantic:
+          - change occurs
+          - disruption
+          - catalyst event
+          - something happens
+      conflict:
+        direct:
+          - but
+          - however
+          - problem
+          - trouble
+          - couldn't
+          - could not
+          - difficult
+          - challenge
+          - struggle
+          - wolf
+          - hunt
+          - chase
+          - fight
+          - battle
+          - danger
+          - lost
+          - stuck
+          - trapped
+          - scared
+          - worried
+        semantic:
+          - obstacle
+          - opposition
+          - difficulty
+          - tension
+          - confrontation
+          - antagonist
+          - villain
+          - threat
+      turning:
+        direct:
+          - so
+          - therefore
+          - decided
+          - because of that
+          - realized
+          - then
+          - after
+          - next
+          - climax
+          - peak
+          - moment
+          - turning point
+          - suddenly
+          - just then
+        semantic:
+          - decision made
+          - realization
+          - change of direction
+          - pivot point
+          - climactic moment
+      resolution:
+        direct:
+          - finally
+          - in the end
+          - at last
+          - eventually
+          - solved
+          - fixed
+          - resolved
+          - saved
+          - helped
+          - escaped
+          - defeated
+          - overcame
+          - won
+          - success
+        semantic:
+          - problem solved
+          - conflict resolved
+          - conclusion reached
+          - victory
+          - triumph
+      ending:
+        direct:
+          - happily ever after
+          - the end
+          - from then on
+          - after that
+          - ever since
+          - always
+        semantic:
+          - final state
+          - new normal
+          - lesson learned
+          - closure
+    story_elements:
+      introduction:
+        strong_indicators:
+          - once upon
+          - there was
+          - lived
+          - princess
+          - prince
+          - king
+          - queen
+          - little girl
+          - little boy
+        weak_indicators:
+          - in the beginning
+          - one day
+          - at first
+          - was
+          - were
+          - had
+          - long ago
+          - far away
+        story_context:
+          - castle
+          - village
+          - forest
+          - house
+          - cottage
+          - kingdom
+          - palace
+      problem:
+        strong_indicators:
+          - problem
+          - trouble
+          - difficult
+          - challenge
+          - lost
+          - stuck
+          - scared
+          - wicked
+          - evil
+          - danger
+        weak_indicators:
+          - but
+          - however
+          - couldn't
+          - could not
+          - worried
+          - sad
+          - angry
+          - afraid
+          - terrified
+        story_context:
+          - alone
+          - confused
+          - struggle
+          - worry
+          - concern
+          - cursed
+          - spell
+          - trap
+      adventure:
+        strong_indicators:
+          - discovered
+          - found
+          - met
+          - encountered
+          - journey
+          - quest
+          - adventure
+          - wandered
+          - traveled
+        weak_indicators:
+          - then
+          - next
+          - suddenly
+          - but then
+          - when
+          - while
+          - as
+          - during
+          - meanwhile
+        story_context:
+          - explore
+          - magic
+          - treasure
+          - forest
+          - mountain
+          - river
+          - fairy
+          - witch
+          - dragon
+      solution:
+        strong_indicators:
+          - helped
+          - saved
+          - healed
+          - cured
+          - fixed
+          - worked
+          - succeeded
+          - defeated
+          - overcame
+          - rescued
+        weak_indicators:
+          - finally
+          - in the end
+          - at last
+          - eventually
+          - solved
+          - resolved
+          - triumph
+          - victory
+        story_context:
+          - made better
+          - together
+          - grateful
+          - everyone
+          - friendship
+          - love
+          - kiss
+          - awakened
+      lesson:
+        strong_indicators:
+          - learned
+          - understood
+          - realized
+          - happily ever after
+          - from then on
+          - ever since
+          - always
+        weak_indicators:
+          - taught
+          - showed
+          - discovered
+          - wisdom
+          - never
+          - moral
+          - lesson
+          - goodness
+        story_context:
+          - kindness
+          - bravery
+          - honesty
+          - friendship
+          - understanding
+          - love
+          - peace
+    characters:
+      expected:
+        - princess
+        - prince
+        - king
+        - queen
+        - witch
+        - fairy
+        - wolf
+        - pig
+        - duck
+      aliases:
+        princess:
+          - beautiful princess
+          - young princess
+          - sweet princess
+        prince:
+          - handsome prince
+          - brave prince
+          - charming prince
+        king:
+          - wise king
+          - old king
+          - powerful king
+        queen:
+          - beautiful queen
+          - wicked queen
+          - good queen
+        witch:
+          - wicked witch
+          - old witch
+          - evil witch
+        fairy:
+          - good fairy
+          - fairy godmother
+          - magical fairy
+        wolf:
+          - big bad wolf
+          - hungry wolf
+          - clever wolf
+        pig:
+          - little pig
+          - smart pig
+          - lazy pig
+        duck:
+          - ugly duckling
+          - little duck
+          - beautiful swan
+    story_concepts:
+      core:
+        - character
+        - setting
+        - problem
+        - solution
+        - moral
+    causal_patterns:
+      en:
+        - 'because\s+of'
+        - 'due\s+to'
+        - 'as\s+a\s+result'
+        - therefore
+        - consequently
+        - 'so\s+that'
+        - 'in\s+order\s+to'
+        - 'which\s+led\s+to'
+        - causing
+        - 'resulted\s+in'
+      zh:
+        - 因為
+        - 由於
+        - 因此
+        - 所以
+        - 以致
+        - 從而
+        - 從而導致
+        - 導致
+        - 造成
+        - 使得
+        - 因而
+        - 從而使得
+    cultural_elements:
+      nigerian_names:
+        - Aya
+        - Kemi
+        - Tunde
+        - Bola
+      games:
+        - Ayo
+  consistency:
+    characters:
+      core_keywords:
+        - prince
+        - princess
+        - king
+        - queen
+        - emperor
+        - empress
+        - girl
+        - boy
+        - man
+        - woman
+        - child
+        - baby
+        - mother
+        - father
+        - stepmother
+        - stepsister
+        - stepfather
+        - grandmother
+        - grandfather
+        - godmother
+        - godfather
+        - fairy
+        - witch
+        - wizard
+        - magician
+        - dwarf
+        - giant
+        - duckling
+        - pig
+        - wolf
+        - toad
+        - mouse
+        - mole
+        - swallow
+        - match
+        - riding
+        - hood
+        - cinderella
+        - snow
+        - white
+        - beauty
+        - thumbelina
+        - ugly
+        - little
+        - red
+  coherence:
+    temporal_markers:
+      - then
+      - next
+      - after
+      - before
+      - when
+      - while
+      - during
+      - meanwhile
+      - finally
+      - later
+      - earlier
+      - soon
+      - immediately
+      - suddenly
+      - first
+      - second
+      - third
+      - last
+      - initially
+      - subsequently
+      - eventually
+      - simultaneously
+      - yesterday
+      - today
+      - tomorrow
+      - now
+      - once
+      - always
+      - never
+      - often
+      - sometimes
+    stop_words:
+      basic:
+        - the
+        - a
+        - an
+        - and
+        - or
+        - but
+        - so
+        - to
+        - of
+        - in
+        - on
+        - at
+        - for
+        - with
+        - by
+        - is
+        - was
+        - are
+        - were
+        - be
+        - been
+        - being
+        - that
+        - this
+        - it
+        - as
+        - from
+        - then
+        - not
+        - no
+        - do
+        - does
+        - did
+        - have
+        - has
+        - had
+    contradiction_markers:
+      - "is also"
+      - "was also"
+      - "at the same time"
+      - "both"
+      - "but also"
+      - "the opposite"
+      - "doesn't make sense"
+      - inconsistent
+    self_negation_markers:
+      - "doesn't make sense"
+      - "does not make sense"
+      - contradict
+      - contradictory
+      - inconsistent
+      - "broken story"
+      - incomplete
+      - "no ending"
+      - confusing

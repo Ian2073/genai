@@ -1159,6 +1159,9 @@ rainy night"></textarea>
 </section>
 <section class="card section">
 <h2 class="section-title" id="overview_telemetry_title">Live Telemetry</h2>
+<div class="actions" style="justify-content:flex-end;margin-bottom:8px">
+<button class="btn ghost mini" id="btn_overview_clear_view" type="button">Clear View</button>
+</div>
 <div class="status-strip">
 <span class="pill" id="pill_state">idle</span>
 <span class="pill" id="pill_book">book: -</span>
@@ -1272,6 +1275,9 @@ rainy night"></textarea>
 </div>
 <section class="card section">
 <h2 class="section-title" id="ops_recent_title">Recent Runs</h2>
+<div class="actions" style="justify-content:flex-end;margin-bottom:8px">
+<button class="btn ghost mini" id="btn_clear_history" type="button">Clear Ops History</button>
+</div>
 <div class="table-wrap">
 <table>
 <thead>
@@ -1352,6 +1358,8 @@ rainy night"></textarea>
 <h2 class="section-title" id="module_jobs_title">Module Jobs</h2>
 <div class="actions" style="margin-bottom:8px">
 <button class="btn ghost mini" id="btn_modules_refresh" type="button">Refresh Jobs</button>
+<button class="btn ghost mini" id="btn_module_clear_view" type="button">Clear View</button>
+<button class="btn ghost mini" id="btn_module_show_all" type="button">Show All</button>
 <button class="btn danger mini" id="btn_module_job_stop" type="button">Stop Selected</button>
 </div>
 <div class="message" id="module_jobs_message"></div>
@@ -1908,6 +1916,7 @@ rainy night"></textarea>
 <script>
     const STORE_KEY = 'genai.dashboard.form.v4';
     const LANG_STORE_KEY = 'genai.dashboard.lang.v1';
+  const MODULE_HIDDEN_JOBS_KEY = 'genai.dashboard.modules.hidden_jobs.v1';
 
     const I18N = {
       'en': {
@@ -2181,6 +2190,10 @@ rainy night"></textarea>
         'btn.detail': 'Detail',
         'btn.stop_short': 'Stop',
         'btn.clear': 'Clear',
+        'btn.clear_view': 'Clear View',
+        'btn.clear_module_view': 'Clear View',
+        'btn.show_all': 'Show All',
+        'btn.clear_history': 'Clear Ops History',
         'btn.refresh_detail': 'Refresh Detail',
         'btn.refresh_jobs': 'Refresh Jobs',
         'btn.stop_selected': 'Stop Selected',
@@ -2256,6 +2269,18 @@ rainy night"></textarea>
         'msg.saved_local_profile': 'Saved local form profile.',
         'msg.preset_applied': 'Preset applied: {name}',
         'msg.no_run_history': 'No run history yet.',
+        'confirm.clear_overview_view': 'Clear live overview panel data only? Operations history will be kept.',
+        'msg.clearing_overview_view': 'Clearing overview panel...',
+        'msg.cleared_overview_view': 'Overview panel cleared ({count} live lines).',
+        'msg.failed_clear_overview_view': 'Failed to clear overview panel.',
+        'confirm.clear_run_history': 'Clear all run history records and related logs?',
+        'msg.clearing_run_history': 'Clearing run history...',
+        'msg.cleared_run_history': 'Run history cleared ({count} items).',
+        'msg.clear_history_blocked_running': 'Stop active and queued runs before clearing history.',
+        'msg.failed_clear_run_history': 'Failed to clear run history.',
+        'msg.cleared_module_view': 'Module panel cleared ({count} records hidden).',
+        'msg.module_view_restored': 'Module panel restored to show all records.',
+        'msg.module_view_already_clean': 'Module panel is already clear.',
         'msg.no_runs_available': 'No runs available',
         'msg.queue_empty': 'Queue is empty.',
         'msg.no_alerts': 'No alerts.',
@@ -2616,6 +2641,10 @@ rainy night"></textarea>
         'btn.detail': '明細',
         'btn.stop_short': '停止',
         'btn.clear': '清除',
+        'btn.clear_view': '清除主畫面',
+        'btn.clear_module_view': '清除模組區',
+        'btn.show_all': '顯示全部',
+        'btn.clear_history': '清除營運紀錄',
         'btn.refresh_detail': '刷新明細',
         'btn.refresh_jobs': '刷新任務',
         'btn.stop_selected': '停止選取任務',
@@ -2691,6 +2720,18 @@ rainy night"></textarea>
         'msg.saved_local_profile': '已儲存本機設定。',
         'msg.preset_applied': '已套用預設：{name}',
         'msg.no_run_history': '目前沒有執行紀錄。',
+        'confirm.clear_overview_view': '只清除主畫面即時資料嗎？營運中心紀錄會保留。',
+        'msg.clearing_overview_view': '正在清除主畫面資料...',
+        'msg.cleared_overview_view': '主畫面已清除（{count} 行即時日誌）。',
+        'msg.failed_clear_overview_view': '清除主畫面資料失敗。',
+        'confirm.clear_run_history': '要清除全部執行紀錄與相關日誌嗎？',
+        'msg.clearing_run_history': '正在清除執行紀錄...',
+        'msg.cleared_run_history': '已清除執行紀錄（{count} 筆）。',
+        'msg.clear_history_blocked_running': '請先停止目前執行與排隊任務，再清除紀錄。',
+        'msg.failed_clear_run_history': '清除執行紀錄失敗。',
+        'msg.cleared_module_view': '已清除模組區顯示（隱藏 {count} 筆）。',
+        'msg.module_view_restored': '已還原模組區，顯示全部紀錄。',
+        'msg.module_view_already_clean': '模組區目前已是乾淨狀態。',
         'msg.no_runs_available': '目前沒有可選的執行紀錄',
         'msg.queue_empty': '佇列目前為空。',
         'msg.no_alerts': '目前沒有警示。',
@@ -2804,6 +2845,7 @@ rainy night"></textarea>
       imageSelectedTaskIds: {},
       imageDetailTaskId: '',
       moduleJobs: [],
+      hiddenModuleJobs: {},
       moduleSelectedJobId: '',
       moduleStudio: 'story',
       translatableStories: [],
@@ -2962,8 +3004,12 @@ rainy night"></textarea>
         ['btn_record_stop', 'btn.record_stop', 'Stop Recording'],
         ['btn_record_save', 'btn.record_save', 'Save As Speaker WAV'],
         ['btn_clear_logs', 'btn.clear', 'Clear'],
+        ['btn_overview_clear_view', 'btn.clear_view', 'Clear View'],
+        ['btn_clear_history', 'btn.clear_history', 'Clear Ops History'],
         ['btn_detail_refresh', 'btn.refresh_detail', 'Refresh Detail'],
         ['btn_modules_refresh', 'btn.refresh_jobs', 'Refresh Jobs'],
+        ['btn_module_clear_view', 'btn.clear_module_view', 'Clear View'],
+        ['btn_module_show_all', 'btn.show_all', 'Show All'],
         ['btn_module_job_stop', 'btn.stop_selected', 'Stop Selected'],
         ['btn_images_refresh', 'btn.refresh_images', 'Refresh Images'],
         ['btn_module_trans_story_refresh', 'btn.refresh_story_list', 'Refresh Story List'],
@@ -3510,6 +3556,44 @@ rainy night"></textarea>
       return data;
     }
 
+    function loadHiddenModuleJobs() {
+      try {
+        const raw = localStorage.getItem(MODULE_HIDDEN_JOBS_KEY);
+        if (!raw) {
+          ui.hiddenModuleJobs = {};
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') {
+          ui.hiddenModuleJobs = {};
+          return;
+        }
+        const next = {};
+        const keys = Object.keys(parsed);
+        for (let i = 0; i < keys.length; i += 1) {
+          const k = String(keys[i] || '').trim();
+          if (!k) continue;
+          if (parsed[k]) next[k] = 1;
+        }
+        ui.hiddenModuleJobs = next;
+      } catch (_err) {
+        ui.hiddenModuleJobs = {};
+      }
+    }
+
+    function saveHiddenModuleJobs() {
+      try {
+        localStorage.setItem(MODULE_HIDDEN_JOBS_KEY, JSON.stringify(ui.hiddenModuleJobs || {}));
+      } catch (_err) {
+      }
+    }
+
+    function isModuleJobHidden(jobId) {
+      const id = String(jobId || '').trim();
+      if (!id) return false;
+      return !!(ui.hiddenModuleJobs && ui.hiddenModuleJobs[id]);
+    }
+
     function setMessage(text, mode) {
       const el = byId('message');
       el.textContent = text || '';
@@ -3874,6 +3958,7 @@ rainy night"></textarea>
         const state = String(visualState || item.status || 'queued').toLowerCase();
         const jobId = String(item.job_id || '');
         if (!jobId) return;
+        if (isModuleJobHidden(jobId)) return;
         ui.moduleJobs.push(item);
         rows.push(
           '<tr>' +
@@ -3896,8 +3981,16 @@ rainy night"></textarea>
 
       if (!rows.length) {
         body.innerHTML = '<tr><td colspan="6">' + escapeHtml(t('msg.no_module_jobs', 'No module jobs.')) + '</td></tr>';
+        if (ui.moduleSelectedJobId) {
+          ui.moduleSelectedJobId = '';
+          renderModuleJobDetail({job: null});
+        }
       } else {
         body.innerHTML = rows.join('');
+        if (ui.moduleSelectedJobId && isModuleJobHidden(ui.moduleSelectedJobId)) {
+          ui.moduleSelectedJobId = '';
+          renderModuleJobDetail({job: null});
+        }
       }
     }
 
@@ -3953,6 +4046,43 @@ rainy night"></textarea>
       const data = await apiGet('/api/modules/jobs?limit=60');
       renderModuleJobs(data);
       return data;
+    }
+
+    async function clearModuleView() {
+      let hiddenCount = 0;
+      for (let i = 0; i < ui.moduleJobs.length; i += 1) {
+        const item = ui.moduleJobs[i] || {};
+        const jobId = String(item.job_id || '').trim();
+        if (!jobId) continue;
+        if (!isModuleJobHidden(jobId)) {
+          ui.hiddenModuleJobs[jobId] = 1;
+          hiddenCount += 1;
+        }
+      }
+
+      if (hiddenCount <= 0) {
+        setModuleMessage('module_jobs_message', t('msg.module_view_already_clean', 'Module panel is already clear.'), 'warn');
+        return;
+      }
+
+      saveHiddenModuleJobs();
+      if (ui.moduleSelectedJobId && isModuleJobHidden(ui.moduleSelectedJobId)) {
+        ui.moduleSelectedJobId = '';
+        renderModuleJobDetail({job: null});
+      }
+
+      setModuleMessage('module_jobs_message', tf('msg.cleared_module_view', {count: String(hiddenCount)}, 'Module panel cleared ({count} records hidden).'), 'ok');
+      await fetchModuleJobs();
+    }
+
+    async function showAllModuleView() {
+      ui.hiddenModuleJobs = {};
+      saveHiddenModuleJobs();
+      setModuleMessage('module_jobs_message', t('msg.module_view_restored', 'Module panel restored to show all records.'), 'ok');
+      await fetchModuleJobs();
+      if (ui.moduleSelectedJobId) {
+        await fetchModuleJobDetail(ui.moduleSelectedJobId, {log_limit: 400, event_limit: 260});
+      }
     }
 
     async function fetchModuleJobDetail(jobId, options) {
@@ -4946,6 +5076,7 @@ rainy night"></textarea>
       }
       if (!options.length) {
         selector.innerHTML = '<option value="">' + escapeHtml(t('msg.no_runs_available', 'No runs available')) + '</option>';
+        ui.selectedRunId = '';
       } else {
         selector.innerHTML = options.join('');
         if (oldValue && options.join('').indexOf('value="' + oldValue + '"') >= 0) {
@@ -5152,6 +5283,23 @@ rainy night"></textarea>
       byId('detail_logs').textContent = blob || t('msg.no_run_logs', 'No run logs.');
     }
 
+    function clearRunDetailPanel() {
+      byId('detail_state').textContent = '-';
+      byId('detail_duration').textContent = '-';
+      byId('detail_exit').textContent = '-';
+      byId('detail_books_total').textContent = '-';
+      byId('detail_books_success').textContent = '-';
+      byId('detail_books_fail').textContent = '-';
+      byId('detail_priority').textContent = '-';
+      byId('detail_queue_delay').textContent = '-';
+      byId('detail_started').textContent = '-';
+      byId('detail_finished').textContent = '-';
+      byId('detail_json').textContent = '{}';
+      byId('detail_events').innerHTML = '<div class="event-item">' + escapeHtml(t('msg.no_events', 'No events.')) + '</div>';
+      byId('detail_alerts').innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_related_alerts', 'No related alerts.')) + '</div>';
+      byId('detail_logs').textContent = t('msg.no_run_logs', 'No run logs.');
+    }
+
     async function fetchStatus() {
       const data = await apiGet('/api/status');
       renderStatus(data);
@@ -5202,7 +5350,10 @@ rainy night"></textarea>
     async function fetchRunDetail() {
       const runId = byId('detail_run_select').value;
       ui.selectedRunId = runId;
-      if (!runId) return null;
+      if (!runId) {
+        clearRunDetailPanel();
+        return null;
+      }
       const data = await apiGet('/api/run-detail?run_id=' + encodeURIComponent(runId) + '&log_limit=320&event_limit=260');
       renderRunDetail(data);
       return data;
@@ -5248,6 +5399,75 @@ rainy night"></textarea>
         await refreshOverview(true);
       } catch (err) {
         setMessage(String((err && err.message) || err || t('msg.failed_stop_run', 'Failed to stop run.')), 'bad');
+      }
+    }
+
+    async function clearOverviewView() {
+      const status = ui.latestStatus || {};
+      const running = Boolean(status.running);
+      const queueDepth = parseIntSafe(status.queue_depth, 0);
+      if (running || queueDepth > 0) {
+        setMessage(t('msg.clear_history_blocked_running', 'Stop active and queued runs before clearing history.'), 'warn');
+        return;
+      }
+
+      const confirmed = window.confirm(t('confirm.clear_overview_view', 'Clear live overview panel data only? Operations history will be kept.'));
+      if (!confirmed) return;
+
+      setMessage(t('msg.clearing_overview_view', 'Clearing overview panel...'), 'warn');
+      try {
+        const data = await apiPost('/api/overview/clear', {});
+        const removed = parseIntSafe(data.removed_live_lines, 0);
+        setMessage(tf('msg.cleared_overview_view', {count: String(removed)}, 'Overview panel cleared ({count} live lines).'), 'ok');
+
+        ui.activeLogRunId = null;
+        ui.logCursor = 0;
+        const overviewLogOutput = byId('overview_log_output');
+        if (overviewLogOutput) {
+          overviewLogOutput.textContent = t('msg.no_live_logs', 'No active run logs yet.');
+        }
+
+        await refreshOverview(true);
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_clear_overview_view', 'Failed to clear overview panel.')), 'bad');
+      }
+    }
+
+    async function clearRunHistory() {
+      const status = ui.latestStatus || {};
+      const running = Boolean(status.running);
+      const queueDepth = parseIntSafe(status.queue_depth, 0);
+      if (running || queueDepth > 0) {
+        setMessage(t('msg.clear_history_blocked_running', 'Stop active and queued runs before clearing history.'), 'warn');
+        return;
+      }
+
+      const confirmed = window.confirm(t('confirm.clear_run_history', 'Clear all run history records and related logs?'));
+      if (!confirmed) return;
+
+      setMessage(t('msg.clearing_run_history', 'Clearing run history...'), 'warn');
+      try {
+        const data = await apiPost('/api/history/clear', {});
+        const removed = parseIntSafe(data.removed_runs, 0);
+        setMessage(tf('msg.cleared_run_history', {count: String(removed)}, 'Run history cleared ({count} items).'), 'ok');
+
+        ui.historyRows = [];
+        ui.selectedRunId = '';
+        ui.activeLogRunId = null;
+        ui.logCursor = 0;
+
+        const opsLogs = byId('log_output');
+        if (opsLogs) opsLogs.textContent = '';
+        const overviewLogOutput = byId('overview_log_output');
+        if (overviewLogOutput) {
+          overviewLogOutput.textContent = t('msg.no_live_logs', 'No active run logs yet.');
+        }
+
+        renderHistory([]);
+        clearRunDetailPanel();
+        await refreshOverview(true);
+      } catch (err) {
+        setMessage(String((err && err.message) || err || t('msg.failed_clear_run_history', 'Failed to clear run history.')), 'bad');
       }
     }
 
@@ -5420,6 +5640,14 @@ rainy night"></textarea>
       byId('btn_refresh_now').addEventListener('click', function () {
         refreshOverview(true);
       });
+      const overviewClearBtn = byId('btn_overview_clear_view');
+      if (overviewClearBtn) {
+        overviewClearBtn.addEventListener('click', clearOverviewView);
+      }
+      const clearHistoryBtn = byId('btn_clear_history');
+      if (clearHistoryBtn) {
+        clearHistoryBtn.addEventListener('click', clearRunHistory);
+      }
       const clearLogsBtn = byId('btn_clear_logs');
       if (clearLogsBtn) {
         clearLogsBtn.addEventListener('click', function () {
@@ -5449,6 +5677,18 @@ rainy night"></textarea>
         fetchModuleJobs();
         if (ui.moduleSelectedJobId) fetchModuleJobDetail(ui.moduleSelectedJobId, {log_limit: 400, event_limit: 260});
       });
+      const moduleClearBtn = byId('btn_module_clear_view');
+      if (moduleClearBtn) {
+        moduleClearBtn.addEventListener('click', function () {
+          clearModuleView();
+        });
+      }
+      const moduleShowAllBtn = byId('btn_module_show_all');
+      if (moduleShowAllBtn) {
+        moduleShowAllBtn.addEventListener('click', function () {
+          showAllModuleView();
+        });
+      }
       byId('btn_module_job_stop').addEventListener('click', function () {
         stopModuleJob(ui.moduleSelectedJobId);
       });
@@ -5801,6 +6041,7 @@ rainy night"></textarea>
       fetchTemplates();
       pollSystemStatus(true);
       switchModuleStudio('story');
+      loadHiddenModuleJobs();
       bindEvents();
       syncTranslationSourceLangByFolder();
       fetchTranslatableStories();

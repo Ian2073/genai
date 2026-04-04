@@ -23,6 +23,7 @@
    - `runtime/`：相容 shim 與執行期 helper
    - `observability/`：指標/可靠性/報告
    - `story_core/`：故事內部 helper 模組
+   - `evaluation/`：評測系統主線（品質閘門、分支評估、治理報告）
 
 3. 非 Runtime 區域：
    - `research/`：實驗、論文資產、外部評估專案
@@ -31,7 +32,7 @@
 ## 3. 權責邊界
 
 1. 產品/Runtime 變更：
-   - 修改 `pipeline/`、`backends/`、`runtime/`、`story_core/`
+   - 修改 `pipeline/`、`backends/`、`runtime/`、`story_core/`、`evaluation/`
 
 2. 工具/維運變更：
    - 修改 `scripts/`

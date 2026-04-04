@@ -31,6 +31,7 @@ from story import (
 from backends.llm import LLMConfig, build_llm
 from trans import Config as TransConfig, translate_story
 from voice import Config as VoiceConfig, generate_narration_for_story
+from runtime.story_files import detect_story_languages
 from utils import (
 	ProjectPaths,
 	StoryProfile,
@@ -197,6 +198,9 @@ class ChiefRunner:
 		# run_dir 僅作為預設輸出根目錄，實際每本書會在 _run_single_isolated 中建立自己的 run 資料夾
 		self.run_dir = self.paths.runs_dir
 		self.logger = setup_logging("chief", self.paths.logs_dir / "chief.log", console=True)
+		self.options = self._normalize_language_options(self.options)
+		self.voice_languages = self._planned_voice_languages()
+		self._voice_languages_used: List[str] = []
 		self.total_books = max(1, self.options.count)
 		self._active_requests = 0
 		seed = options.seed or int(time.time())
@@ -244,7 +248,7 @@ class ChiefRunner:
 		self.voice_config = VoiceConfig(
 			model_dir=self.paths.models_dir / "XTTS-v2",
 			device=options.voice_device,
-			language=options.voice_language,
+			language=self.options.voice_language,
 			speaker_wav=options.speaker_wav,
 			speaker_dir=options.speaker_dir,
 			page_start=options.voice_page_start,
@@ -259,13 +263,77 @@ class ChiefRunner:
 			dtype=parse_dtype(options.translation_dtype),
 			source_lang=options.translation_source_lang,
 			source_folder=options.story_language,
-			target_langs=options.languages,
+			target_langs=self.options.languages,
 			sample_dir=self.paths.models_dir / "XTTS-v2" / "samples",
 			output_dir_name="",
 			beam_size=options.translation_beam_size,
 			length_penalty=options.translation_length_penalty,
 		)
 		self._write_status_snapshot(state="idle")
+
+	@staticmethod
+	def _normalize_language_code(raw: str) -> str:
+		token = str(raw or "").strip().lower()
+		if token in {"zh-tw", "zh_hant", "zh-hant", "zho_hant"}:
+			return "zh"
+		if token.startswith("en"):
+			return "en"
+		if token.startswith("zh"):
+			return "zh"
+		return token
+
+	def _normalize_language_options(self, options: ChiefOptions) -> ChiefOptions:
+		allowed = ("en", "zh")
+		source = self._normalize_language_code(options.story_language)
+
+		requested: List[str] = []
+		for lang in options.languages or []:
+			token = self._normalize_language_code(lang)
+			if token in allowed and token not in requested:
+				requested.append(token)
+
+		candidates = requested or list(allowed)
+		targets = [lang for lang in candidates if lang != source]
+		if not targets:
+			fallback = [lang for lang in allowed if lang != source]
+			targets = fallback if fallback else ["zh"]
+
+		primary_voice = self._normalize_language_code(options.voice_language)
+		if primary_voice not in allowed:
+			primary_voice = "en" if source != "zh" else "zh"
+
+		normalized = replace(options, languages=targets, voice_language=primary_voice)
+		if normalized.languages != options.languages:
+			self.logger.info("Auto-run translation languages constrained to: %s", ",".join(normalized.languages))
+		if normalized.voice_language != options.voice_language:
+			self.logger.info("Auto-run voice language normalized to: %s", normalized.voice_language)
+		return normalized
+
+	def _planned_voice_languages(self) -> List[str]:
+		allowed = ("en", "zh")
+		source = self._normalize_language_code(self.options.story_language)
+		planned: List[str] = []
+
+		if source in allowed:
+			planned.append(source)
+		elif self.options.voice_language in allowed:
+			planned.append(self.options.voice_language)
+		else:
+			planned.append("en")
+
+		if self.options.translation_enabled:
+			for lang in self.options.languages:
+				token = self._normalize_language_code(lang)
+				if token in allowed and token not in planned:
+					planned.append(token)
+		return planned
+
+	def _primary_voice_language(self) -> str:
+		if self._voice_languages_used:
+			return self._voice_languages_used[0]
+		if self.voice_languages:
+			return self.voice_languages[0]
+		return self.options.voice_language
 
 	def _write_status_snapshot(self, **updates: Any) -> None:
 		"""更新即時狀態並輸出 JSON，供儀表板輪詢。"""
@@ -719,7 +787,7 @@ class ChiefRunner:
 			self.observability.model.record_tts(
 				stage="xtts",
 				metrics={
-					"language": self.options.voice_language,
+					"language": ",".join(self._voice_languages_used or self.voice_languages),
 					"gain": self.options.voice_volume_gain,
 					"page_range": (self.options.voice_page_start, self.options.voice_page_end),
 					"success": voice_ok,
@@ -1033,6 +1101,7 @@ class ChiefRunner:
 			)
 		)
 		self.observability.memory.snapshot(label="book_start", metadata=book_context)
+		self._voice_languages_used = []
 		result = build_initial_result(index, profile, trace_id)
 		workload_summary: Dict[str, Any] = {"trace_id": trace_id, "request_index": index}
 		workload_complexity: Dict[str, Any] = {}
@@ -1120,7 +1189,7 @@ class ChiefRunner:
 		"""收集語音合成文本的統計資訊。"""
 		return collect_tts_text_stats(
 			story_root,
-			voice_language=self.options.voice_language,
+			voice_language=self._primary_voice_language(),
 			page_start=self.voice_config.page_start,
 			page_end=self.voice_config.page_end,
 			punctuation_pattern=PUNCTUATION_PATTERN,
@@ -1144,7 +1213,7 @@ class ChiefRunner:
 		"""檢測音訊檔案的裁切狀況。"""
 		return detect_tts_clipping(
 			story_root,
-			voice_language=self.options.voice_language,
+			voice_language=self._primary_voice_language(),
 			audio_dir_name=self.voice_config.audio_dir,
 			audio_format=self.voice_config.format,
 		)
@@ -1282,11 +1351,32 @@ class ChiefRunner:
 		Returns:
 			成功返回 True，失敗返回 False
 		"""
-		return self._run_with_exception_logging(
-			"Voice generation",
-			story_root,
-			lambda: generate_narration_for_story(story_root, self.voice_config, console=False),
-		)
+		available_languages = set(detect_story_languages(story_root))
+		target_languages = [lang for lang in self.voice_languages if lang in available_languages]
+		if not target_languages and self.options.voice_language in available_languages:
+			target_languages = [self.options.voice_language]
+
+		if not target_languages:
+			self._voice_languages_used = []
+			self.logger.error(
+				"Voice generation skipped: no narration language available. planned=%s available=%s story=%s",
+				self.voice_languages,
+				sorted(available_languages),
+				story_root,
+			)
+			return False
+
+		self._voice_languages_used = list(target_languages)
+		all_ok = True
+		for language in target_languages:
+			voice_config = replace(self.voice_config, language=language)
+			ok = self._run_with_exception_logging(
+				f"Voice generation [{language}]",
+				story_root,
+				lambda cfg=voice_config: generate_narration_for_story(story_root, cfg, console=False),
+			)
+			all_ok = all_ok and ok
+		return all_ok
 
 	def _run_with_exception_logging(
 		self,
@@ -1321,7 +1411,7 @@ class ChiefRunner:
 		return verify_story(
 			story_root,
 			story_language=self.options.story_language,
-			voice_language=self.options.voice_language,
+			voice_languages=self._voice_languages_used or self.voice_languages,
 			audio_dir_name=self.voice_config.audio_dir,
 			audio_format=self.voice_config.format,
 			target_languages=self.options.languages,

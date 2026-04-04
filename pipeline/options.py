@@ -118,7 +118,7 @@ def _default_chief_options() -> ChiefOptions:
         main_category=None,
         age_group=None,
         story_language="en",
-        languages=[],
+        languages=["zh"],
         story_input_mode="preset",
         story_theme=None,
         story_subcategory=None,

@@ -31,6 +31,10 @@ Root 應主要保留：
 3. 移除 root `__pycache__/`
 4. 更新 `research/paper/_tmp_pick7.py` 為相對路徑讀檔
 
+補充（2026-04-04）
+
+- 正式導入策略已切換：評測系統以 root `evaluation/` 作為主線位置，不再視為 research 資產。
+
 ## 5. 第三批實體搬移（已完成）
 
 1. `story_branching.py` -> `story_core/story_branching.py`

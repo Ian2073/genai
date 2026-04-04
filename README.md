@@ -133,6 +133,12 @@ python scripts/setup_env.py --env-path genai_env --install-scope full --gpu-seri
 Start_GenAI.bat
 ```
 
+評測改為同一入口執行：
+
+```bash
+Start_GenAI.bat --eval-only --input output --branch auto --post-process none
+```
+
 如果你要在 Windows 上做 MSVC/環境檢查與自動修復：
 
 ```bash
@@ -143,6 +149,7 @@ Build_GenAI_DevTools.bat
 
 - 建置：`Build_GenAI.bat`
 - 啟動終端：`Start_GenAI.bat`
+- 評測執行：`Start_GenAI.bat --eval-only --input output --branch auto --post-process none`
 - 啟動 dashboard：`Start_GenAI.bat --dashboard`
 
 ### B. 本機模式 (Conda) 手動流程
@@ -223,7 +230,7 @@ python -c "from scripts import run_experiment; print('scripts.run_experiment imp
 #### 2️⃣ 建構映像
 
 ```bash
-docker compose build genai
+docker compose build genai story-checker coref-service
 ```
 
 Windows 一鍵建置：
@@ -234,6 +241,9 @@ Build_GenAI_Docker.bat
 
 `Start_GenAI_Docker.bat` 預設會使用既有 `genai:latest` 映像，
 只有在映像不存在時才自動觸發一次建置；要強制重建請手動執行 `Build_GenAI_Docker.bat`。
+
+啟動時會預設同時拉起整合評測服務（`story-checker`、`coref-service`），
+若只想跑生成可加 `--genai-only`。
 
 > Docker 路線現在會沿用與 `scripts/setup_env.py` 相同的安裝策略，包含 spaCy 模型 wheel、版本鎖定回補與映像匯入基本驗證。
 
@@ -251,6 +261,7 @@ Windows 也可直接用一鍵入口：
 
 ```bash
 Start_GenAI_Docker.bat
+Start_GenAI_Docker.bat --genai-only
 ```
 
 #### 4️⃣ Docker Dashboard（Windows）
@@ -273,7 +284,7 @@ Start_GenAI_Docker.bat --dashboard --dashboard-port 8766 --dashboard-no-open
 - `./logs -> /app/logs`
 - `./runs -> /app/runs`
 
-> 目前服務名、映像名與容器名皆統一為 `genai`。
+> 目前 compose 會整合 `genai`、`story-checker`、`coref-service`。
 > `Start_GenAI_Docker.bat` 會先檢查 Docker CLI、Compose 與 daemon 狀態，再進入 build/run。
 
 ---
@@ -370,7 +381,24 @@ python scripts/check_root_layout.py --workspace-root . --strict
 研究分析資產可放在 `research/`，但目前預設由 `.gitignore` 排除（避免大型檔案進入版本庫）：
 
 - `research/paper/`
-- `research/Generative-AI-evaluation-system-main/`（選配，建議本機保存）
+
+### 評測系統（正式主線）
+
+評測模組已納入主線路徑 `evaluation/`，並由主線入口統一調度：
+
+- `Build_GenAI.bat` 會先安裝生成主線，再把 `evaluation/requirements.txt` 當 extras 併入同一 `genai_env`，且套用 root `requirements.txt` constraint（生成版本優先）。
+
+```bash
+Build_GenAI.bat
+Start_GenAI.bat --eval-only --input output --post-process none
+```
+
+Docker 路徑：
+
+```bash
+Build_GenAI_Docker.bat
+Start_GenAI_Docker.bat --eval-only --input output --post-process none
+```
 
 **輸出位置**: `output/<Category>/<Age>/<Title>/`
 

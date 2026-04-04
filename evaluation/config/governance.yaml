@@ -1,0 +1,36 @@
+# 評分治理門檻配置
+# 可透過環境變數 GOVERNANCE_CONFIG_PATH 指向其他檔案。
+
+thresholds:
+  coverage_ratio_warn: 0.84
+  coverage_ratio_confidence_floor: 0.85
+  calibration_shift_warn: 6.0
+  calibration_shift_high: 10.0
+  overall_structure_overall_threshold: 82.0
+  overall_structure_coherence_min: 58.0
+  overall_structure_completeness_min: 55.0
+  entity_consistency_low: 52.0
+  emotional_gap_high: 92.0
+  emotional_gap_coherence_min: 60.0
+  slow_processing_seconds: 240.0
+
+confidence:
+  start: 1.0
+  failed_dim_penalty: 0.18
+  degraded_dim_penalty: 0.08
+  coverage_penalty: 0.25
+  calibration_shift_penalty: 0.02
+  calibration_shift_free_range: 3.0
+  slow_processing_penalty: 0.04
+  severity_penalty:
+    critical: 0.18
+    high: 0.10
+    medium: 0.05
+    low: 0.02
+  clamp_min: 0.05
+  clamp_max: 0.98
+
+risk:
+  medium_confidence_threshold: 0.70
+  manual_review_confidence_threshold: 0.62
+  spot_check_confidence_threshold: 0.78

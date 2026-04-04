@@ -44,6 +44,7 @@ ALLOWED_ROOT_DIRS: Set[str] = {
     "backends",
     "backups",
     "docs",
+    "evaluation",
     "genai_env",
     "logs",
     "models",
@@ -61,7 +62,6 @@ ALLOWED_ROOT_DIRS: Set[str] = {
 
 DISALLOWED_LEGACY_ROOT_NAMES: Set[str] = {
     "paper",
-    "Generative-AI-evaluation-system-main",
 }
 
 

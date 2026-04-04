@@ -19,7 +19,7 @@ def verify_story(
     story_root: Path,
     *,
     story_language: str,
-    voice_language: str,
+    voice_languages: Sequence[str],
     audio_dir_name: str,
     audio_format: str,
     target_languages: Sequence[str],
@@ -139,15 +139,18 @@ def verify_story(
             logger.info("找到 %d 張圖片", len(image_files))
 
     if expect_voice:
-        audio_files = list_generated_audio_files(
-            story_root,
-            voice_language,
-            audio_dir_name,
-            audio_format,
-        )
-        _expect(bool(audio_files), "voice/audio 目錄不存在且找不到語音檔案")
-        if audio_files and logger:
-            logger.info("找到 %d 個語音檔案", len(audio_files))
+        languages_to_check = [str(lang).strip() for lang in voice_languages if str(lang).strip()]
+        _expect(bool(languages_to_check), "voice 語系設定為空，無法驗證語音輸出")
+        for voice_language in languages_to_check:
+            audio_files = list_generated_audio_files(
+                story_root,
+                voice_language,
+                audio_dir_name,
+                audio_format,
+            )
+            _expect(bool(audio_files), f"voice/audio 目錄不存在且找不到語音檔案 ({voice_language})")
+            if audio_files and logger:
+                logger.info("[%s] 找到 %d 個語音檔案", voice_language, len(audio_files))
 
     if missing:
         if logger:

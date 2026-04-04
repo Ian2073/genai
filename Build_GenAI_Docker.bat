@@ -36,12 +36,12 @@ if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
 if not exist "%RUNS_DIR%" mkdir "%RUNS_DIR%"
 
 echo ====================================================
-echo   Building Docker image (genai)
+echo   Building Docker images (genai + evaluation)
 echo ====================================================
 if "%~1"=="" (
-    docker compose build genai
+    docker compose build genai story-checker coref-service
 ) else (
-    docker compose build %* genai
+    docker compose build %*
 )
 if errorlevel 1 (
     echo [ERROR] Docker image build failed.

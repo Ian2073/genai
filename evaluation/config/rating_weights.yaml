@@ -1,0 +1,66 @@
+# 評分聚合權重設定（僅用全文可導出的六維度分數）
+# 結構：
+# rating_score:
+#   global:            # 全域預設權重
+#     readability: ...
+#     coherence: ...
+#     emotional_impact: ...
+#     entity_consistency: ...
+#     completeness: ...
+#     factuality: ...
+#   by_genre:          # 依文體覆蓋（以 GenreDetector 的 dominant 值為鍵）
+#     fairy_tale:
+#       ...
+#     fable:
+#       ...
+
+rating_score:
+  global:
+    readability: 0.28
+    coherence: 0.22
+    emotional_impact: 0.25
+    entity_consistency: 0.13
+    completeness: 0.10
+    factuality: 0.02
+
+  by_genre:
+    fairy_tale:
+      # 童話故事：情感和可讀性是核心，factuality 無意義（虛構內容）
+      readability: 0.28
+      completeness: 0.18
+      emotional_impact: 0.28
+      coherence: 0.15
+      entity_consistency: 0.10
+      factuality: 0.01
+
+    fable:
+      readability: 0.26
+      coherence: 0.20
+      emotional_impact: 0.26
+      entity_consistency: 0.12
+      completeness: 0.12
+      factuality: 0.04
+
+  # 權重融合策略（校準停用時此區塊不生效）
+  blend:
+    mode: fixed
+    fixed_alpha: 0.0           # 停用校準快照融合
+  min_alpha: 0.0
+  max_alpha: 0.0
+
+  # 守門：限制每個維度的最小/最大權重
+  guards:
+    min_per_dim:
+      readability: 0.12
+      coherence: 0.10
+      emotional_impact: 0.10
+      entity_consistency: 0.05
+      completeness: 0.05
+      factuality: 0.0
+    max_per_dim:
+      readability: 0.35
+      coherence: 0.30
+      emotional_impact: 0.35
+      entity_consistency: 0.20
+      completeness: 0.25
+      factuality: 0.10
