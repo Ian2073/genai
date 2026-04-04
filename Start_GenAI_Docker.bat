@@ -7,14 +7,30 @@ set "PROJECT_DIR=%~dp0"
 cd /d "%PROJECT_DIR%"
 
 set "MODE=terminal"
+set "AUTO_DASHBOARD=1"
+set "DASH_ARGS="
+
+:parse_args
+if "%~1"=="" goto :args_done
 if /I "%~1"=="--dashboard" (
     set "MODE=dashboard"
     shift
+    goto :parse_args
 )
+if /I "%~1"=="--no-dashboard" (
+    set "AUTO_DASHBOARD=0"
+    shift
+    goto :parse_args
+)
+set "DASH_ARGS=%DASH_ARGS% %~1"
+shift
+goto :parse_args
+
+:args_done
 
 set "HOST_PORT=8765"
 set "PREV="
-for %%A in (%*) do (
+for %%A in (%DASH_ARGS%) do (
     if defined PREV (
         if /I "!PREV!"=="--dashboard-port" set "HOST_PORT=%%~A"
         set "PREV="
@@ -69,7 +85,11 @@ echo Output  : /app/output
 echo Logs    : /app/logs
 echo Runs    : /app/runs
 echo.
+if "%AUTO_DASHBOARD%"=="1" (
+    call :launch_dashboard_window
+)
 echo Tip: enter ^'exit^' to leave the shell.
+echo Tip: use --no-dashboard to keep terminal only.
 echo.
 docker compose run --rm --entrypoint /bin/bash genai
 set "EXIT_CODE=%ERRORLEVEL%"
@@ -83,10 +103,15 @@ echo ====================================================
 echo URL: http://127.0.0.1:%HOST_PORT%
 echo Press Ctrl+C to stop.
 echo.
-docker compose run --rm -p %HOST_PORT%:%HOST_PORT% genai --dashboard --dashboard-host 0.0.0.0 %*
+docker compose run --rm -p %HOST_PORT%:%HOST_PORT% genai --dashboard --dashboard-host 0.0.0.0 %DASH_ARGS%
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" goto :fail_with_code
 exit /b 0
+
+:launch_dashboard_window
+echo [INFO] 另開視窗啟動 Dashboard...
+start "GenAI Docker Dashboard" cmd /c call "%~f0" --dashboard %DASH_ARGS%
+goto :eof
 
 :fail
 echo.
