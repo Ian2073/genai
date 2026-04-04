@@ -17,3 +17,7 @@ test_best_backup.py
 # Local backup snapshots (very large)
 backups/
 research/
+
+# Dashboard one-off migration tooling
+pipeline/dashboard_tools/
+pipeline/templates/dashboard_restore.html

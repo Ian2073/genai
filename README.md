@@ -371,10 +371,10 @@ python scripts/smoke_gate.py
 python scripts/check_root_layout.py --workspace-root . --strict
 ```
 
-研究分析資產已整理到 `research/`：
+研究分析資產可放在 `research/`，但目前預設由 `.gitignore` 排除（避免大型檔案進入版本庫）：
 
 - `research/paper/`
-- `research/Generative-AI-evaluation-system-main/`
+- `research/Generative-AI-evaluation-system-main/`（選配，建議本機保存）
 
 **輸出位置**: `output/<Category>/<Age>/<Title>/`
 
@@ -624,7 +624,7 @@ python trans.py --quantize
 
 ### 自訂生成參數
 
-編輯 `chief.py` 中的 `DEFAULT_CHIEF_OPTIONS`:
+編輯 `pipeline/options.py` 中的 `DEFAULT_CHIEF_OPTIONS`（`chief.py` 目前是相容入口）:
 
 ```python
 DEFAULT_CHIEF_OPTIONS = ChiefOptions(
@@ -638,7 +638,7 @@ DEFAULT_CHIEF_OPTIONS = ChiefOptions(
     photo_steps=8,                # 採樣步數 (6-15)
     photo_guidance=7.5,           # CFG 引導強度
     photo_refiner_steps=4,        # 精煉步數
-    skip_refiner=False,           # 跳過精煉 (2倍速)
+    photo_skip_refiner=False,     # 跳過精煉 (2倍速)
     
     # === 翻譯 ===
     translation_beam_size=5,      # Beam Search 寬度
@@ -800,9 +800,9 @@ docker compose run --rm genai --count 1
 | 套件 | 版本 | 用途 | 相容性 |
 |------|------|------|--------|
 | **torch** | RTX50:`2.8.0+cu128` / RTX40:`2.6.0+cu124` | 深度學習框架 | ✅ 由自動腳本依硬體選擇 |
-| **transformers** | 4.51.0 | LLM 推理 | ✅ Qwen3 相容 |
+| **transformers** | 4.46.1 | LLM 推理 | ✅ 與 GPTQ 堆疊穩定相容 |
 | **diffusers** | 0.30.0 | SDXL 推理 | ✅ 最新穩定版 |
-| **accelerate** | 0.31.0 | 模型加速 | ✅ |
+| **accelerate** | 1.12.0 | 模型加速 | ✅ |
 | **bitsandbytes** | 0.43.0+ | 量化支援 | ✅ Windows 相容 |
 | **TTS** | 0.22.0 | 語音合成 | ✅ XTTS-v2 |
 | **sentencepiece** | 0.1.99 | 分詞器 | ✅ NLLB 必需 |
@@ -823,11 +823,9 @@ python -c "from optimum.gptq.quantizer import GPTQQuantizer; GPTQQuantizer(bits=
 
 ### 已知相容性問題
 
-✅ **已解決**:
-- ~~`transformers` 4.50.0 與 `compat_transformers.py` 衝突~~ → 已修補
-- ~~`torch 2.7` 不支援 sm_120~~ → 已升級至 2.8.0
-
 ⚠️ **注意事項**:
+- 專案目前固定 `transformers==4.46.1` 以維持 GPTQ/runtime 穩定；Qwen3 會走相容 fallback 路徑，品質可能低於原生 Qwen3 支援。
+- `torch 2.7` 不支援 sm_120，RTX 50 系列請使用 `torch 2.8.0+cu128`。
 - `bitsandbytes` 在 Windows 上需要 CUDA 12.8+
 - `TTS` 需要 Visual Studio C++ Build Tools
 - `rembg` (去背功能) 為可選套件
