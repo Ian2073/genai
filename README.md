@@ -39,17 +39,13 @@
 
 ## 🚀 快速開始
 
-在跨電腦部署或移機前，建議先閱讀：
+在跨電腦部署或移機前，建議先閱讀文件索引：
+- 文件總覽：`docs/README.md`
+
+第一次部署建議優先看：
 - 環境建置總覽：`docs/ENV_SETUP.md`
 - CUDA 排障手冊：`docs/CUDA_TROUBLESHOOTING.md`
-- 執行期相容層說明：`docs/RUNTIME_COMPAT.md`
-- 模型後端架構：`docs/MODEL_BACKENDS.md`
-- 專案目錄規劃：`docs/PROJECT_LAYOUT.md`
-- 架構地圖（快速總覽）：`docs/ARCHITECTURE_MAP.md`
-- 專案經理檢視視角：`docs/PROJECT_MANAGER_VIEW.md`
 - 主控流程架構：`docs/PIPELINE_ARCHITECTURE.md`
-- 第 0 階段契約與關卡：`docs/PHASE0_CONTRACT.md`
-- 第 1 階段遷移地圖：`docs/PHASE1_MIGRATION_MAP.md`
 
 ### 系統需求
 
@@ -209,7 +205,7 @@ models/
 ```bash
 python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, Arch: {torch.cuda.get_arch_list()}')"
 python -c "from optimum.gptq.quantizer import GPTQQuantizer; GPTQQuantizer(bits=4); print('GPTQ OK')"
-python -c "import run_experiment; print('run_experiment import OK')"
+python -c "from scripts import run_experiment; print('scripts.run_experiment import OK')"
 ```
 
 預期輸出: `CUDA: True, Arch: [..., 'sm_120']`
