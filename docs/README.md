@@ -18,11 +18,11 @@
 
 ## 契約與遷移
 
-1. `PHASE0_CONTRACT.md`：重構期間不可破壞契約與驗收 gate
-2. `PHASE1_MIGRATION_MAP.md`：Root 瘦身遷移路徑
+1. `archive/PHASE0_CONTRACT.md`：重構期間不可破壞契約與驗收 gate（封存）
+2. `archive/PHASE1_MIGRATION_MAP.md`：Root 瘦身遷移路徑（封存）
 3. `LEGACY_FILES.md`：舊版檔案分類與保留策略
 
 ## 規劃與封存
 
-1. `MODULE_WORKBENCH_PLAN.md`：模組化工作台規劃草案
+1. `archive/MODULE_WORKBENCH_PLAN.md`：模組化工作台規劃草案（封存）
 2. `archive/sideproject.md`：歷史研究筆記封存

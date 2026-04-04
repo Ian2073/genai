@@ -17,7 +17,7 @@ Root 應主要保留：
 2. 移除已淘汰的 wrapper 啟動/建置腳本。
 3. 移除 root 的 legacy 筆記檔。
 4. 新增 smoke gate 腳本：`scripts/smoke_gate.py`。
-5. 新增第 0 階段契約文件：`docs/PHASE0_CONTRACT.md`。
+5. 新增第 0 階段契約文件：`docs/archive/PHASE0_CONTRACT.md`。
 
 ## 3. 第一批實體搬移（已完成）
 
@@ -58,7 +58,7 @@ Root 應主要保留：
 
 1. 新增 `scripts/check_archive_boundaries.py`。
 2. 在 smoke gate 新增整合步驟：`archive_boundary_policy`。
-3. 在 `docs/PHASE0_CONTRACT.md` 增加 archive gate 契約命令。
+3. 在 `docs/archive/PHASE0_CONTRACT.md` 增加 archive gate 契約命令。
 
 ## 9. 驗證命令
 
