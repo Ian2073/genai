@@ -155,11 +155,39 @@ for %%I in (
 goto :eof
 
 :find_vcvars
+set "MSVC_HINT_BAT="
+
+if defined VSINSTALLDIR (
+    if exist "%VSINSTALLDIR%\VC\Auxiliary\Build\vcvars64.bat" (
+        set "MSVC_HINT_BAT=%VSINSTALLDIR%\VC\Auxiliary\Build\vcvars64.bat"
+        goto :eof
+    )
+)
+
+set "VSWHERE_EXE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+if not exist "%VSWHERE_EXE%" set "VSWHERE_EXE=%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"
+if exist "%VSWHERE_EXE%" (
+    for /f "usebackq delims=" %%I in (`"%VSWHERE_EXE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2^>nul`) do (
+        if exist "%%I\VC\Auxiliary\Build\vcvars64.bat" (
+            set "MSVC_HINT_BAT=%%I\VC\Auxiliary\Build\vcvars64.bat"
+            goto :eof
+        )
+    )
+)
+
 for %%I in (
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"

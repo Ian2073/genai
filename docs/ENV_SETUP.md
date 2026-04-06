@@ -31,6 +31,7 @@ Windows 路線的目標是在新機器上做到「盡可能接近一鍵完成」
 - 過濾依賴安裝
 - spaCy 模型安裝
 - smoke 測試與 doctor 檢查
+- MSVC 偵測（支援 `VSINSTALLDIR`、`vswhere`、`%ProgramFiles%` 與 `%ProgramFiles(x86)%` 路徑回退）
 
 無法完全自動化項目：
 - NVIDIA 驅動安裝
@@ -40,6 +41,8 @@ Windows 路線的目標是在新機器上做到「盡可能接近一鍵完成」
 
 目前缺少 `cl.exe` 會被視為效能警告，而不是預設 GPTQ 文本路徑的硬性阻擋條件。
 在此情況下，系統可能略過 exllamav2 JIT kernel，改用較慢的 AutoGPTQ fallback，而非靜默切換到其他文本模型。
+
+若 `vcvars64.bat` 未被偵測到，但 shell 已有可用的 `cl.exe`，`Build_GenAI_DevTools.bat` 會視為 MSVC 可用，不再誤報 `MSVC tools: not found`。
 
 ## 2. 各 GPU Profile 的安裝內容
 
@@ -53,7 +56,9 @@ Windows 路線的目標是在新機器上做到「盡可能接近一鍵完成」
 - `torch==2.6.0+cu124`
 - `torchvision==0.21.0+cu124`
 - `torchaudio==2.6.0+cu124`
-- `torchcodec==0.6.0`
+- `torchcodec==0.7.0`
+
+`scripts/setup_env.py` 會先安裝 profile 釘選的 `torchcodec`，若該版本在目標機器不可用（例如 PyPI 移除舊版），會自動退回安裝可用最新版，避免整體建置直接失敗。
 
 - CPU profile：
 - `torch==2.8.0`

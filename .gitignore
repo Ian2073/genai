@@ -4,7 +4,6 @@ runs/
 logs/
 __pycache__/
 *.pyc
-observability/
 genai_env/
 
 # Local workspace tooling

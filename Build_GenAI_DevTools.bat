@@ -8,6 +8,7 @@ set "AUTO_ENV_DIR=genai_env"
 set "VCVARS_BAT="
 set "PREFERRED_VCVARS_VER=14.44"
 set "VCVARS_USED_VER=default"
+set "MSVC_CL_ON_PATH="
 set "CHECK_STATUS=0"
 
 call :find_vcvars
@@ -34,13 +35,27 @@ if defined VCVARS_BAT (
         goto :fail
     )
 ) else (
-    echo [WARN] Visual C++ build tools were not found.
-    echo        Attempting automatic repair via Build_GenAI.bat...
-    call :run_build_repair
-    call :find_vcvars
-    if defined VCVARS_BAT (
-        call "%VCVARS_BAT%" -vcvars_ver=%PREFERRED_VCVARS_VER% >nul 2>&1
-        if not errorlevel 1 set "VCVARS_USED_VER=%PREFERRED_VCVARS_VER%"
+    where cl >nul 2>&1
+    if errorlevel 1 (
+        echo [WARN] Visual C++ build tools were not found.
+        echo        Attempting automatic repair via Build_GenAI.bat...
+        call :run_build_repair
+        call :find_vcvars
+        if defined VCVARS_BAT (
+            call "%VCVARS_BAT%" -vcvars_ver=%PREFERRED_VCVARS_VER% >nul 2>&1
+            if not errorlevel 1 (
+                set "VCVARS_USED_VER=%PREFERRED_VCVARS_VER%"
+            ) else (
+                echo [WARN] Requested MSVC toolset %PREFERRED_VCVARS_VER% was not available after repair, using default.
+                call "%VCVARS_BAT%" >nul
+            )
+            if errorlevel 1 (
+                echo [ERROR] Failed to load Visual C++ build tools after repair.
+                goto :fail
+            )
+        )
+    ) else (
+        echo [INFO] vcvars64.bat was not found, but cl.exe is already available on PATH.
     )
 )
 
@@ -49,6 +64,7 @@ if errorlevel 1 (
     echo [WARN] cl.exe is still not available on PATH.
     set "CHECK_STATUS=2"
 ) else (
+    set "MSVC_CL_ON_PATH=1"
     for /f "usebackq delims=" %%I in (`where cl 2^>nul`) do (
         echo   cl=%%I
         goto :cl_found
@@ -95,9 +111,12 @@ if "%CHECK_STATUS%"=="0" (
 ) else (
     echo   status: WARN ^(exit code %CHECK_STATUS%^)
 )
-if defined VCVARS_BAT echo   MSVC tools: enabled
+set "MSVC_SUMMARY=not found"
+if defined MSVC_CL_ON_PATH set "MSVC_SUMMARY=enabled ^(cl.exe on PATH^)"
+if defined VCVARS_BAT set "MSVC_SUMMARY=enabled ^(vcvars64.bat found^)"
+if defined VCVARS_BAT if defined MSVC_CL_ON_PATH set "MSVC_SUMMARY=enabled ^(vcvars64.bat + cl.exe^)"
+echo   MSVC tools: %MSVC_SUMMARY%
 if /I not "%VCVARS_USED_VER%"=="default" echo   MSVC toolset: %VCVARS_USED_VER%
-if not defined VCVARS_BAT echo   MSVC tools: not found
 echo ====================================================
 echo.
 call :hold_and_exit %CHECK_STATUS%
@@ -110,11 +129,39 @@ if errorlevel 1 (
 goto :eof
 
 :find_vcvars
+set "VCVARS_BAT="
+
+if defined VSINSTALLDIR (
+    if exist "%VSINSTALLDIR%\VC\Auxiliary\Build\vcvars64.bat" (
+        set "VCVARS_BAT=%VSINSTALLDIR%\VC\Auxiliary\Build\vcvars64.bat"
+        goto :eof
+    )
+)
+
+set "VSWHERE_EXE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+if not exist "%VSWHERE_EXE%" set "VSWHERE_EXE=%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"
+if exist "%VSWHERE_EXE%" (
+    for /f "usebackq delims=" %%I in (`"%VSWHERE_EXE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2^>nul`) do (
+        if exist "%%I\VC\Auxiliary\Build\vcvars64.bat" (
+            set "VCVARS_BAT=%%I\VC\Auxiliary\Build\vcvars64.bat"
+            goto :eof
+        )
+    )
+)
+
 for %%I in (
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
+    "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
     "%ProgramFiles%\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"

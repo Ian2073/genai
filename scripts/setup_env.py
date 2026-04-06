@@ -55,7 +55,7 @@ TORCH_PROFILES = {
         torch="torch==2.6.0+cu124",
         torchvision="torchvision==0.21.0+cu124",
         torchaudio="torchaudio==2.6.0+cu124",
-        torchcodec="torchcodec==0.6.0",
+        torchcodec="torchcodec==0.7.0",
         index_url="https://download.pytorch.org/whl/cu124",
     ),
     "cpu": TorchProfile(
@@ -281,7 +281,14 @@ def install_torch_profile(py: Path, profile: TorchProfile) -> None:
     run(cmd)
 
     if profile.torchcodec:
-        run([str(py), "-m", "pip", "install", profile.torchcodec])
+        try:
+            run([str(py), "-m", "pip", "install", profile.torchcodec])
+        except subprocess.CalledProcessError:
+            print(
+                "[warn] Failed to install pinned torchcodec package "
+                f"({profile.torchcodec}); retrying with latest available torchcodec."
+            )
+            run([str(py), "-m", "pip", "install", "torchcodec"])
 
 
 def install_core_scope(py: Path) -> None:

@@ -126,8 +126,10 @@ python scripts/setup_env.py --env-path genai_env --install-scope full --gpu-seri
 | 硬體 | 自動安裝組合 |
 |------|--------------|
 | RTX 50 | `torch==2.8.0+cu128` `torchvision==0.23.0+cu128` `torchaudio==2.8.0+cu128` `torchcodec==0.7.0` |
-| RTX 40 | `torch==2.6.0+cu124` `torchvision==0.21.0+cu124` `torchaudio==2.6.0+cu124` `torchcodec==0.6.0` |
+| RTX 40 | `torch==2.6.0+cu124` `torchvision==0.21.0+cu124` `torchaudio==2.6.0+cu124` `torchcodec==0.7.0` |
 | CPU | `torch==2.8.0` `torchvision==0.23.0` `torchaudio==2.8.0` |
+
+> 若 `torchcodec` 釘選版本在目標機器不可用，`scripts/setup_env.py` 會自動退回安裝可用最新版，避免中斷整體環境建置。
 
 可手動覆蓋判斷：
 
