@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import platform
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -287,11 +288,13 @@ def generate_photos_for_story(
 		# 簡單起見，我們用任務數 * 2 (Base + Refiner)
 		total_steps = len(tasks) * (2 if not config.skip_refiner else 1)
 		progress = tqdm(total=total_steps, desc=progress_label, disable=not console, unit="step")
+		base_started_at = time.perf_counter()
+		progress_stride = max(1, len(tasks) // 10)
 
 		logger.info("Phase 1: Generating Base Latents...")
 		generator.load_base()
 		
-		for task in tasks:
+		for idx, task in enumerate(tasks, start=1):
 			# Profiling wrapper
 			def _run_base():
 				return generator.run_base_step(
@@ -317,6 +320,17 @@ def generate_photos_for_story(
 				task["latents"] = result
 			
 			progress.update(1)
+			if (not console) and (idx % progress_stride == 0 or idx == len(tasks)):
+				elapsed = time.perf_counter() - base_started_at
+				avg = elapsed / max(1, idx)
+				eta = max(0.0, avg * (len(tasks) - idx))
+				logger.info(
+					"Phase 1 progress: %d/%d tasks | elapsed %.1fs | eta %.1fs",
+					idx,
+					len(tasks),
+					elapsed,
+					eta,
+				)
 		
 		# Unload Base
 		# Phase 2: Refiner (只有在需要時才執行)
@@ -324,8 +338,9 @@ def generate_photos_for_story(
 		if not config.skip_refiner:
 			logger.info("Phase 2: Refining Images...")
 			generator.load_refiner()
+			refiner_started_at = time.perf_counter()
 			
-			for task in tasks:
+			for idx, task in enumerate(tasks, start=1):
 				if task.get("latents") is None:
 					continue
 
@@ -349,6 +364,17 @@ def generate_photos_for_story(
 				# 釋放 latents
 				task["latents"] = None
 				progress.update(1)
+				if (not console) and (idx % progress_stride == 0 or idx == len(tasks)):
+					elapsed = time.perf_counter() - refiner_started_at
+					avg = elapsed / max(1, idx)
+					eta = max(0.0, avg * (len(tasks) - idx))
+					logger.info(
+						"Phase 2 progress: %d/%d tasks | elapsed %.1fs | eta %.1fs",
+						idx,
+						len(tasks),
+						elapsed,
+						eta,
+					)
 
 		# --- Phase 3: Saving & Post-processing ---
 		logger.info("Phase 3: Saving Images...")

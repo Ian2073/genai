@@ -1,0 +1,51 @@
+# 整合模式下的本地大型產物（不放在 evaluation/ 內）
+models/
+pending/
+evaluated/
+reports/
+
+# 校準模型快照屬執行產物；資料集可保留版控
+calibration/models/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+
+# 環境變數與虛擬環境
+.env
+.env.*
+venv/
+.venv/
+
+# 作業系統與編輯器
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+.idea/
+
+# 建置與分發
+build/
+dist/
+*.egg-info/
+
+# Jupyter/測試/日誌
+.ipynb_checkpoints/
+.pytest_cache/
+*.log
+
+# KG 產出檔案（只保留核心程式碼）
+kg/*.json
+kg/*.html
+kg/__pycache__/
+!kg/__init__.py
+!kg/kg.py
+
+# 保留 config/ 和 kg/ 核心程式碼（這些要上傳）
+!config/
+!kg/__init__.py
+!kg/kg.py
+

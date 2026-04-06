@@ -101,19 +101,11 @@ SPECIAL_REQUIREMENT_SPECS = {
         "https://github.com/explosion/spacy-models/releases/download/"
         "en_core_web_sm-3.4.0/en_core_web_sm-3.4.0-py3-none-any.whl"
     ),
-    "en-coreference-web-trf": (
-        "https://github.com/explosion/spacy-experimental/releases/download/"
-        "v0.6.1/en_coreference_web_trf-3.4.0a2-py3-none-any.whl"
-    ),
 }
 
-SPECIAL_NO_DEPS_REQUIREMENTS = {
-    "spacy-transformers": "spacy-transformers==1.1.9",
-}
+SPECIAL_NO_DEPS_REQUIREMENTS = {}
 
-KNOWN_PIP_CHECK_WARNINGS = (
-    "spacy-transformers 1.1.9 has requirement transformers<4.26.0,>=3.4.0, but you have transformers 4.46.1.",
-)
+KNOWN_PIP_CHECK_WARNINGS = ()
 
 BOOTSTRAP_PACKAGES = (
     "pip==26.0.1",
@@ -133,10 +125,8 @@ CRITICAL_LOCK_PACKAGES = (
     "exllamav2",
     "peft",
     "spacy",
-    "spacy-transformers",
     "spacy-experimental",
     "en-core-web-sm",
-    "en-coreference-web-trf",
     "pyyaml",
 )
 
@@ -481,8 +471,7 @@ def run_smoke_checks(py: Path, workspace_root: Path) -> None:
             (
                 "import spacy; "
                 "assert spacy.util.is_package('en_core_web_sm'), 'Missing spaCy model: en_core_web_sm'; "
-                "assert spacy.util.is_package('en_coreference_web_trf'), 'Missing spaCy model: en_coreference_web_trf'; "
-                "print('spaCy evaluator models OK')"
+                "print('spaCy evaluator model OK: en_core_web_sm')"
             ),
         ],
         cwd=workspace_root,

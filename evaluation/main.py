@@ -35,15 +35,15 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 # 導入六維度評估系統的主控制器
-from evaluator import MultiAspectEvaluator
-from shared.story_data import collect_branch_story_paths, discover_story_dirs
+from .evaluator import MultiAspectEvaluator
+from .shared.story_data import collect_branch_story_paths, discover_story_dirs
 
 # 導入終端美化工具（用於在命令列顯示漂亮的評估結果表格）
 from rich.console import Console
 from rich.table import Table
 
 # 導入工具函數
-from utils import (
+from .utils import (
     DEFAULT_ASPECTS,      # 預設的六大評估維度
     get_bool_env,         # 從環境變數讀取布林值
     get_int_env,          # 從環境變數讀取整數值
@@ -234,28 +234,9 @@ def evaluate_all(story_text: str, story_title: str = "Story", aspects: Optional[
             "processing_time": report.processing_summary["total_processing_time"]
         }
     except Exception as e:
-        # 錯誤處理：返回錯誤資訊而非直接崩潰
-        return {
-            "overall_score": 0.0,
-            "dimension_scores": {},
-            "dimension_summaries": {},
-            "governance": {
-                "confidence": 0.0,
-                "confidence_score": 0.0,
-                "risk_level": "critical",
-                "review_recommendation": "manual_review_required",
-                "risk_flags": [
-                    {
-                        "severity": "critical",
-                        "code": "evaluation_failure",
-                        "message": str(e),
-                    }
-                ],
-            },
-            "key_issues": 0,
-            "recommendations": [f"評估失敗: {str(e)}"],
-            "processing_time": 0.0
-        }
+        logger.error(f"評估失敗，發生嚴重錯誤: {str(e)}", exc_info=True)
+        # OOM 或嚴重崩潰應明確拋出例外，阻斷流程，避免 Dashboard 吃到假資料
+        raise RuntimeError(f"評估失敗: {str(e)}") from e
 
 
 def evaluate_multi_document(document_paths: Dict[str, str], story_title: str = "Story", aspects: List[str] = None) -> Dict:
@@ -310,7 +291,7 @@ def evaluate_story_by_dimension(story_folder_path: str,
     返回:
         評估結果字典
     """
-    from consistency import AutoStoryProcessor
+    from .consistency import AutoStoryProcessor
     
     processor = AutoStoryProcessor()
     result = processor.check_story_by_dimension(story_folder_path, target_dimensions)
@@ -324,6 +305,7 @@ def evaluate_story_directory(
     evaluator: Optional[MultiAspectEvaluator] = None,
     config: Optional[EvaluatorConfig] = None,
     branch: str = "auto",
+    save_report: bool = False,
 ) -> Dict:
     """
     評估單一故事資料夾
@@ -396,6 +378,26 @@ def evaluate_story_directory(
                     source_document=str(source_path),
                     evaluation_scope=effective_mode,
                 )
+
+                report_path: Optional[str] = None
+                radar_path: Optional[str] = None
+                if save_report:
+                    adjusted_overall = round(float(report.overall_score), 1)
+                    try:
+                        report_path = _write_report(story_dir, report, adjusted_overall, branch_id=branch_id)
+                    except Exception as write_exc:
+                        logger.warning("寫入分支 %s 評估報告失敗: %s", branch_id, write_exc)
+                    try:
+                        radar_path = _generate_radar_chart(
+                            story_dir,
+                            story_title,
+                            report.dimension_scores,
+                            list(report.dimension_scores.keys()),
+                            branch_id=branch_id,
+                        )
+                    except Exception as radar_exc:
+                        logger.warning("生成分支 %s 雷達圖失敗: %s", branch_id, radar_exc)
+
                 branch_results.append(
                     {
                         "branch_id": branch_id,
@@ -407,16 +409,20 @@ def evaluate_story_directory(
                         "processing_time": report.processing_summary["total_processing_time"],
                         "degradation_report": report.degradation_report,
                         "source_document": str(source_path),
+                        "report_path": report_path,
+                        "radar_path": radar_path,
                     }
                 )
 
             overall_values = [float(item.get("overall_score", 0.0)) for item in branch_results]
             overall_avg = round(sum(overall_values) / len(overall_values), 1) if overall_values else 0.0
+            report_paths = [str(item.get("report_path")) for item in branch_results if item.get("report_path")]
             return {
                 "overall_score": overall_avg,
                 "evaluation_scope": effective_mode,
                 "branch_results": branch_results,
                 "branches_evaluated": [item["branch_id"] for item in branch_results],
+                "report_paths": report_paths,
             }
 
         selected_branch_id, selected_path = branch_sources[0]
@@ -429,6 +435,25 @@ def evaluate_story_directory(
             evaluation_scope=effective_mode,
         )
 
+        report_path: Optional[str] = None
+        radar_path: Optional[str] = None
+        if save_report:
+            adjusted_overall = round(float(report.overall_score), 1)
+            try:
+                report_path = _write_report(story_dir, report, adjusted_overall, branch_id=selected_branch_id)
+            except Exception as write_exc:
+                logger.warning("寫入評估報告失敗: %s", write_exc)
+            try:
+                radar_path = _generate_radar_chart(
+                    story_dir,
+                    story_title,
+                    report.dimension_scores,
+                    list(report.dimension_scores.keys()),
+                    branch_id=selected_branch_id,
+                )
+            except Exception as radar_exc:
+                logger.warning("生成雷達圖失敗: %s", radar_exc)
+
         return {
             "overall_score": report.overall_score,
             "dimension_scores": report.dimension_scores,
@@ -440,10 +465,14 @@ def evaluate_story_directory(
             "branch_id": selected_branch_id,
             "source_document": str(selected_path),
             "evaluation_scope": effective_mode,
+            "report_path": report_path,
+            "radar_path": radar_path,
+            "report_paths": [report_path] if report_path else [],
         }
     
     except Exception as e:
-        return {"error": f"評估目錄 {story_dir} 失敗: {str(e)}"}
+        logger.error(f"評估目錄 {story_dir} 失敗，拋出嚴重例外: {str(e)}", exc_info=True)
+        raise RuntimeError(f"評估目錄 {story_dir} 失敗: {str(e)}") from e
 
 
 def batch_evaluate_stories(stories_dir: str = "output", 

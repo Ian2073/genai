@@ -9,7 +9,6 @@ Combines all reporting functions: terminal analysis, Excel reports, and visualiz
 import json
 import logging
 import os
-import sys
 import statistics
 import math
 from pathlib import Path
@@ -17,16 +16,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from shared.stats_utils import pearson_correlation as calculate_correlation
-from shared.stats_utils import spearman_correlation as calculate_spearman
-from shared.score_utils import extract_raw_score as _extract_raw_score
-from shared.score_utils import normalize_score_fields
-from shared.story_data import load_story_records
+from ..shared.stats_utils import pearson_correlation as calculate_correlation
+from ..shared.stats_utils import spearman_correlation as calculate_spearman
+from ..shared.score_utils import extract_raw_score as _extract_raw_score
+from ..shared.score_utils import normalize_score_fields
+from ..shared.story_data import load_story_records
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
@@ -99,7 +93,7 @@ def _autofit_columns(worksheet, min_width: int = 8, max_width: int = 80, padding
 
 # Delayed import of evaluator for reusing alignment logic when needed
 try:
-    from evaluator import MultiAspectEvaluator  # Only for recalculating alignment scores, won't load large models
+    from ..evaluator import MultiAspectEvaluator  # Only for recalculating alignment scores, won't load large models
 except Exception:
     MultiAspectEvaluator = None  # If import fails, disable alignment score recalculation
 

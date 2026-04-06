@@ -25,7 +25,6 @@
 """
 
 import os
-import sys
 import json
 import math
 import argparse
@@ -33,15 +32,10 @@ import textwrap
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from shared.stats_utils import mean, median, pearson_correlation, spearman_correlation, stdev
-from shared.score_utils import extract_calibrated_score, normalize_score_fields
-from shared.score_policy import apply_cross_dimension_constraints, compute_consensus_adjustment
-from shared.story_data import load_story_records
+from ..shared.stats_utils import mean, median, pearson_correlation, spearman_correlation, stdev
+from ..shared.score_utils import extract_calibrated_score, normalize_score_fields
+from ..shared.score_policy import apply_cross_dimension_constraints, compute_consensus_adjustment
+from ..shared.story_data import load_story_records
 
 # ── 嘗試匯入 Rich（容器內有安裝），否則降級為純文字 ──
 try:

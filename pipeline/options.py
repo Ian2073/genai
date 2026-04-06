@@ -37,6 +37,7 @@ class ChiefOptions:
     main_category: Optional[str]
     age_group: Optional[str]
     seed: Optional[int]
+    resume: Optional[str]
     rebuild_interval: int
 
     story_language: str
@@ -107,6 +108,8 @@ class ChiefOptions:
     voice_no_concat: bool
     voice_drop_raw: bool
     strict_voice: bool
+    pre_eval_policy: str
+    pre_eval_threshold: float
     max_book_retries: int
     status_json_path: Optional[Path]
 
@@ -117,6 +120,8 @@ def _default_chief_options() -> ChiefOptions:
         count=1,
         main_category=None,
         age_group=None,
+        resume=None,
+        seed=None,
         story_language="en",
         languages=["zh"],
         story_input_mode="preset",
@@ -165,17 +170,16 @@ def _default_chief_options() -> ChiefOptions:
         photo_dtype="float16",
         photo_width=1024,
         photo_height=768,
-        photo_steps=40,
-        photo_guidance=7.0,
+        photo_steps=ImageConfig.steps,
+        photo_guidance=ImageConfig.guidance,
         photo_refiner_steps=None,
-        photo_skip_refiner=False,
+        photo_skip_refiner=ImageConfig.skip_refiner,
         photo_negative_prompt="",
         photo_cover_suffix=ImageConfig.cover_prompt_suffix,
         photo_character_suffix=ImageConfig.character_prompt_suffix,
         photo_scene_suffix=ImageConfig.scene_prompt_suffix,
         photo_seed=None,
         photo_no_remove_bg=False,
-        seed=None,
         rebuild_interval=3,
         voice_page_start=None,
         voice_page_end=None,
@@ -183,6 +187,8 @@ def _default_chief_options() -> ChiefOptions:
         voice_no_concat=False,
         voice_drop_raw=False,
         strict_voice=True,
+        pre_eval_policy="stop",
+        pre_eval_threshold=65.0,
         max_book_retries=1,
         status_json_path=None,
     )
@@ -208,207 +214,199 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--count", type=int, default=1, help="要生成的故事本數，預設 1")
     parser.add_argument("--seed", type=int, default=None, help="固定隨機種子，便於重現結果")
     parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Resume from a previous run directory",
+    )
+    parser.add_argument(
         "--age",
         type=str,
         default=None,
-        help="指定年齡組（輸入 2-3, 4-5, 6-8，或單一數字例如 6），未指定則隨機選擇 (9-10 暫時停用)",
     )
     parser.add_argument(
         "--category",
         type=str,
         default=None,
         choices=CATEGORY_CHOICES,
-        help="指定主類別（adventure, educational, fun, cultural），未指定則隨機選擇",
     )
     parser.add_argument(
         "--theme",
         type=str,
         default=None,
-        help="指定主題提示（可輸入 KG 已有主題標籤或自由文字，未指定則由 KG 自動選擇）",
     )
     parser.add_argument(
         "--subcategory",
         type=str,
         default=None,
-        help="指定子類別提示（可輸入 KG 子類別標籤，未指定則由 KG 自動選擇）",
     )
     parser.add_argument(
         "--story-input-mode",
         type=str,
         default="preset",
         choices=["preset", "custom"],
-        help="故事輸入模式：preset 直接使用系統預設，custom 會啟用使用者自由輸入的結構化轉換",
     )
     parser.add_argument("--pages", type=int, default=0, help="指定預期頁數，0 表示使用知識圖譜的動態設定 (預設 0)")
     parser.add_argument(
         "--story-prompt",
         type=str,
         default=None,
-        help="額外的自由敘事指令，會經過正規化後注入提示詞模板",
     )
     parser.add_argument(
         "--story-materials",
         type=str,
         default=None,
-        help="補充素材（可用換行分點），會轉為結構化素材提示注入模板",
     )
     parser.add_argument(
         "--story-device",
         type=str,
         default=None,
-        help="LLM 模型使用的設備（例如 cuda:0, cuda, cpu），未指定則使用預設值 auto",
     )
     parser.add_argument(
         "--story-dtype",
         type=str,
         default=None,
         choices=["float16", "bfloat16", "float32"],
-        help="LLM 模型的資料類型（float16, bfloat16, float32），未指定則使用預設值 float16",
     )
     parser.add_argument(
         "--story-quantization",
         type=str,
         default=None,
         choices=["4bit", "8bit", "gptq", "none"],
-        help="LLM 量化模式 (4bit, 8bit, gptq, none)，預設使用模型相容的建議值",
     )
     parser.add_argument(
         "--low-vram",
+        dest="low_vram",
         action="store_true",
-        default=None,
-        help="啟用低顯存模式 (Aggressive Cleanup / Model Offloading)",
     )
     parser.add_argument(
         "--no-low-vram",
-        action="store_false",
         dest="low_vram",
-        help="禁用低顯存模式 (適用於大顯存 GPU，如 24GB+ 或 16GB+ 且模型較小)",
+        action="store_false",
     )
+    parser.set_defaults(low_vram=None)
     parser.add_argument(
         "--max-retries",
         type=int,
         default=None,
-        help="單本故事失敗時的自動整本重跑次數 (不含首次執行)",
+    )
+    parser.add_argument(
+        "--pre-eval-policy",
+        type=str,
+        default="warn",
+        choices=["warn", "stop"],
+        help="Pre-evaluation gate policy: warn (continue) or stop (hard-stop)",
+    )
+    parser.add_argument(
+        "--pre-eval-threshold",
+        type=float,
+        default=50.0,
+        help="Fail-fast threshold used by stage 1.5 pre-evaluation",
     )
     parser.add_argument(
         "--status-file",
         type=Path,
         default=None,
-        help="輸出即時狀態 JSON 檔案路徑（供儀表板讀取）",
     )
 
     parser.add_argument(
         "--photo",
-        action="store_true",
         dest="photo_enabled",
-        default=None,
-        help="啟用圖像生成階段",
+        action="store_true",
     )
     parser.add_argument(
         "--no-photo",
-        action="store_false",
         dest="photo_enabled",
-        help="停用圖像生成階段",
+        action="store_false",
     )
+    parser.set_defaults(photo_enabled=None)
     parser.add_argument(
         "--translation",
-        action="store_true",
         dest="translation_enabled",
-        default=None,
-        help="啟用翻譯階段",
+        action="store_true",
     )
     parser.add_argument(
         "--no-translation",
-        action="store_false",
         dest="translation_enabled",
-        help="停用翻譯階段",
+        action="store_false",
     )
+    parser.set_defaults(translation_enabled=None)
     parser.add_argument(
         "--voice",
-        action="store_true",
         dest="voice_enabled",
-        default=None,
-        help="啟用語音合成階段",
+        action="store_true",
     )
     parser.add_argument(
         "--no-voice",
-        action="store_false",
         dest="voice_enabled",
-        help="停用語音合成階段",
+        action="store_false",
     )
+    parser.set_defaults(voice_enabled=None)
     parser.add_argument(
         "--verify",
-        action="store_true",
         dest="verify_enabled",
-        default=None,
-        help="啟用完整性驗證階段",
+        action="store_true",
     )
     parser.add_argument(
         "--no-verify",
-        action="store_false",
         dest="verify_enabled",
-        help="停用完整性驗證階段",
+        action="store_false",
     )
+    parser.set_defaults(verify_enabled=None)
 
     parser.add_argument(
         "--strict-translation",
-        action="store_true",
         dest="strict_translation",
-        default=None,
-        help="翻譯失敗視為整本失敗",
+        action="store_true",
     )
     parser.add_argument(
         "--no-strict-translation",
-        action="store_false",
         dest="strict_translation",
-        help="翻譯失敗僅記為警告",
+        action="store_false",
     )
+    parser.set_defaults(strict_translation=None)
     parser.add_argument(
         "--strict-voice",
-        action="store_true",
         dest="strict_voice",
-        default=None,
-        help="語音失敗視為整本失敗",
+        action="store_true",
     )
     parser.add_argument(
         "--no-strict-voice",
-        action="store_false",
         dest="strict_voice",
-        help="語音失敗僅記為警告",
+        action="store_false",
     )
+    parser.set_defaults(strict_voice=None)
     parser.add_argument(
         "--speaker-wav",
         type=Path,
         default=None,
-        help="指定語音克隆的說話人參考音檔（WAV）",
     )
     parser.add_argument(
         "--speaker-dir",
         type=Path,
         default=None,
-        help="指定語音克隆的說話人樣本資料夾",
     )
 
     parser.add_argument(
         "--dashboard",
         action="store_true",
-        help="啟動本地儀表板（可視化操作與監看）",
+        help="Start dashboard"
     )
     parser.add_argument(
         "--dashboard-host",
         type=str,
         default="127.0.0.1",
-        help="儀表板綁定主機",
+        help="Dashboard host"
     )
     parser.add_argument(
         "--dashboard-port",
         type=int,
         default=8765,
-        help="儀表板連接埠",
+        help="Dashboard port"
     )
     parser.add_argument(
         "--dashboard-no-open",
         action="store_true",
-        help="啟動儀表板時不自動開啟瀏覽器",
+        help="Do not open dashboard"
     )
     return parser

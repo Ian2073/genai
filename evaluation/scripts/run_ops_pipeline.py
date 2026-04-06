@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from pathlib import Path
 
 
 def _run_step(command: list[str], name: str) -> int:
@@ -28,10 +27,9 @@ def main() -> int:
     parser.add_argument("--skip-report", action="store_true", help="Skip scripts/report.py step.")
     args = parser.parse_args()
 
-    root = Path(__file__).resolve().parents[1]
     py = sys.executable
 
-    validate_cmd = [py, str(root / "scripts" / "validate.py"), "--evaluated-dir", args.evaluated_dir]
+    validate_cmd = [py, "-m", "evaluation.scripts.validate", "--evaluated-dir", args.evaluated_dir]
     if args.with_synthetic:
         validate_cmd.append("--synthetic")
 
@@ -42,7 +40,8 @@ def main() -> int:
     if not args.skip_report:
         steps.append(([
             py,
-            str(root / "scripts" / "report.py"),
+            "-m",
+            "evaluation.scripts.report",
             "--roots",
             args.evaluated_dir,
             "--output-dir",
@@ -53,11 +52,12 @@ def main() -> int:
         (
             [
                 py,
-                str(root / "scripts" / "ops_dashboard.py"),
+                "-m",
+                "evaluation.scripts.ops_dashboard",
                 "--roots",
                 args.evaluated_dir,
                 "--output",
-                str(Path(args.report_dir) / "ops_dashboard.json"),
+                f"{args.report_dir}/ops_dashboard.json",
             ],
             "ops_dashboard",
         )

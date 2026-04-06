@@ -61,8 +61,15 @@ class CoquiXTTSBackend(BaseVoiceBackend):
             with _suppress_io():
                 from TTS.api import TTS
         except ImportError as exc:
+            detail = str(exc)
+            if "monotonic_align" in detail or "Building module TTS.tts.utils.monotonic_align.core failed" in detail:
+                raise RuntimeError(
+                    "Coqui-TTS 匯入失敗：monotonic_align 核心編譯失敗。"
+                    "已啟用 Python fallback，但目前依然無法完成匯入，"
+                    "請檢查 TTS 相依套件與編譯工具鏈。"
+                ) from exc
             raise RuntimeError(
-                "找不到 coqui-TTS 套件。請執行 `pip install TTS` 進行安裝。"
+                "找不到 coqui-TTS 套件或其必要相依。請確認目前環境已安裝 TTS。"
             ) from exc
 
         gpu_enabled = self.config.device.startswith("cuda") and torch.cuda.is_available()

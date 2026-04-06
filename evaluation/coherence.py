@@ -13,9 +13,9 @@ import torch
 import os
 
 # 共用你的一致性模組裡的工具
-from consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
-from shared.story_data import collect_full_story_paths, discover_story_dirs
-from utils import (
+from .consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
+from .shared.story_data import collect_full_story_paths, discover_story_dirs
+from .utils import (
     SentenceSplitterMixin,
     ensure_instance,
     get_default_model_path,
@@ -24,7 +24,7 @@ from utils import (
     load_category_keywords,
     load_spacy_model,
 )
-from shared.ai_safety import (
+from .shared.ai_safety import (
     get_dimension_fallback_score,
     normalize_confidence_0_1,
     normalize_score_0_100,
@@ -90,7 +90,7 @@ class CoherenceChecker(SentenceSplitterMixin):
         self.logger = logging.getLogger(__name__)
         
         # 載入中央化詞彙資源（從配置文件）
-        from kb import LocalCategoryMatcher
+        from .kb import LocalCategoryMatcher
         self.local_categories = LocalCategoryMatcher()
         self.temporal_markers = load_category_keywords(self.local_categories, 'coherence.temporal_markers')  # 時間標記詞
         self.stop_words = load_category_keywords(self.local_categories, 'coherence.stop_words.basic')  # 停用詞

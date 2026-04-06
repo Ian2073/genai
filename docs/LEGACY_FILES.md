@@ -29,6 +29,7 @@
 另外，以下屬於「相容入口」，不建議直接刪除：
 
 - `evaluator.py`（研究評估流程相容入口）
+- `evaluation/coref.py`（舊版 FastAPI 共指微服務入口；主線改走 `evaluation/shared/coref_backends.py`）
 
 `exllamav2` 相容層目前統一放在 `runtime/exllamav2_shim.py`，不再保留 root 的 `shim.py` 轉接檔。
 

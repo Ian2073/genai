@@ -10,6 +10,23 @@ from .chief_runner import ChiefRunner
 from .options import DEFAULT_CHIEF_OPTIONS, ChiefOptions, build_arg_parser
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _summary_exit_code(summary: Any) -> int:
+    if not isinstance(summary, dict):
+        return 0
+    total = _safe_int(summary.get("total"), 0)
+    success = _safe_int(summary.get("success"), 0)
+    if total <= 0:
+        return 0
+    return 0 if success >= total else 1
+
+
 def resolve_options(options: Optional[ChiefOptions] = None) -> ChiefOptions:
     """由外部傳入 options 或 CLI 參數解析出最終設定。"""
 
@@ -27,14 +44,17 @@ def resolve_options_from_args(args: Any) -> ChiefOptions:
     mode = "batch" if count > 1 else "single"
     option_updates = {
         "count": count,
+        "resume": getattr(args, 'resume', None),
         "mode": mode,
         "age_group": args.age,
         "main_category": args.category,
-        "story_input_mode": getattr(args, "story_input_mode", "preset"),
+        "story_input_mode": getattr(args, "story_input_mode", None) or DEFAULT_CHIEF_OPTIONS.story_input_mode,
         "story_theme": args.theme,
         "story_subcategory": args.subcategory,
         "story_pages_expected": args.pages,
         "seed": args.seed,
+        "pre_eval_policy": getattr(args, "pre_eval_policy", "stop"),
+        "pre_eval_threshold": getattr(args, "pre_eval_threshold", 65.0),
     }
     if args.story_prompt is not None:
         option_updates["story_user_prompt"] = str(args.story_prompt).strip()
@@ -71,7 +91,7 @@ def resolve_options_from_args(args: Any) -> ChiefOptions:
     return replace(DEFAULT_CHIEF_OPTIONS, **option_updates)
 
 
-def main(options: Optional[ChiefOptions] = None) -> None:
+def main(options: Optional[ChiefOptions] = None) -> int:
     """系統主程式進入點。"""
     if options is None:
         args = build_arg_parser().parse_args()
@@ -83,10 +103,11 @@ def main(options: Optional[ChiefOptions] = None) -> None:
                 port=args.dashboard_port,
                 auto_open=not args.dashboard_no_open,
             )
-            return
+            return 0
         selected_options = resolve_options_from_args(args)
     else:
         selected_options = resolve_options(options)
     runner = ChiefRunner(selected_options)
     summary = runner.run()
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return _summary_exit_code(summary)

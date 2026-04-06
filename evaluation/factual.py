@@ -7,35 +7,57 @@
 import logging
 import re
 import os
+import json
 from collections import Counter
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Set, Union
 import yaml
-from consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
-from utils import (
-    SentenceSplitterMixin,
-    ensure_instance,
-    get_bool_env,
-    get_default_model_path,
-    get_env,
-    get_kg_path,
-    load_spacy_model,
-)
-from shared.ai_safety import (
-    get_dimension_fallback_score,
-    normalize_confidence_0_1,
-    normalize_score_0_100,
-)
+try:
+    from .consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
+    from .utils import (
+        SentenceSplitterMixin,
+        ensure_instance,
+        get_bool_env,
+        get_default_model_path,
+        get_env,
+        get_kg_path,
+        load_spacy_model,
+    )
+    from .shared.ai_safety import (
+        get_dimension_fallback_score,
+        normalize_confidence_0_1,
+        normalize_score_0_100,
+    )
+except ImportError:
+    from consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
+    from utils import (
+        SentenceSplitterMixin,
+        ensure_instance,
+        get_bool_env,
+        get_default_model_path,
+        get_env,
+        get_kg_path,
+        load_spacy_model,
+    )
+    from shared.ai_safety import (
+        get_dimension_fallback_score,
+        normalize_confidence_0_1,
+        normalize_score_0_100,
+    )
 
 logger = logging.getLogger(__name__)
 FACTUAL_AI_FALLBACK_SCORE = get_dimension_fallback_score("factuality")
 # 直接使用多知識庫系統，不再依賴維基百科API
 try:
-    from kb import MultiKnowledgeBase, KnowledgeResult
+    from .kb import MultiKnowledgeBase, KnowledgeResult
     MULTI_KB_AVAILABLE = True
 except ImportError:
-    MULTI_KB_AVAILABLE = False
-    logger.warning("多知識庫系統不可用，事實檢測功能將受限")
+    try:
+        from kb import MultiKnowledgeBase, KnowledgeResult
+        MULTI_KB_AVAILABLE = True
+    except ImportError:
+        MULTI_KB_AVAILABLE = False
+        logger.warning("多知識庫系統不可用，事實檢測功能將受限")
 from concurrent.futures import ThreadPoolExecutor
 
 @dataclass
@@ -2221,52 +2243,128 @@ class FactualityChecker(SentenceSplitterMixin):
     # （移除 _check_local_knowledge 與 _texts_similar，統一走外部驗證）
     
     def _ai_fact_check(self, claim: FactualClaim) -> Optional[FactCheckResult]:
-        """使用AI進行事實檢查"""
+        """使用受限 RAG 進行事實檢查：LLM 只輸出結構化證據，不直接猜分。"""
         if not self.ai or not self.ai.model_available:
             return None
-        
+
+        entity_names: List[str] = []
+        if claim.entities:
+            for entity_text, _entity_label in claim.entities[:8]:
+                token = str(entity_text).strip()
+                if token:
+                    entity_names.append(token)
+
+        kg_context: List[Dict[str, object]] = []
+        if self.kg and entity_names:
+            for raw_name in entity_names:
+                canonical = raw_name
+                if hasattr(self.kg, "get_canonical_name"):
+                    canonical = self.kg.get_canonical_name(raw_name)
+
+                item: Dict[str, object] = {"entity": canonical}
+                if hasattr(self.kg, "query_relationships"):
+                    rel = self.kg.query_relationships(canonical)
+                    item["aliases"] = (rel.get("aliases") or [])[:8]
+                    item["direct_relationships"] = rel.get("direct_relationships") or {}
+                    item["kg_connections"] = (rel.get("kg_connections") or [])[:6]
+                elif hasattr(self.kg, "characters") and canonical in getattr(self.kg, "characters", {}):
+                    item["character_profile"] = self.kg.characters.get(canonical, {})
+                kg_context.append(item)
+
+        if not kg_context:
+            kg_context = [{"entity": name} for name in entity_names[:8]]
+
+        kg_json = json.dumps(kg_context, ensure_ascii=False, default=str)
+        if len(kg_json) > 5000:
+            kg_json = kg_json[:5000] + "... (truncated)"
+
         prompt = f"""
-        請評估以下聲明的事實正確性：
-        
-        聲明：{claim.text}
-        上下文：{claim.context}
-        類型：{claim.claim_type}
-        
-        請回答：
-        1. 這個聲明是否正確？(正確/錯誤/不確定)
-        2. 你的置信度如何？(0-1)
-        3. 簡要說明理由
-        
-        格式：VERDICT: [正確/錯誤/不確定], CONFIDENCE: [0-1], REASON: [理由]
-        """
-        
+你是「事實查核證據抽取器」。
+你只能依據提供的 Knowledge Graph 與聲明內容判斷，不可憑空補充知識。
+
+[Knowledge Graph Context]
+{kg_json}
+
+[Claim]
+text: {claim.text}
+context: {claim.context}
+type: {claim.claim_type}
+
+請只輸出合法 JSON（不要 Markdown）：
+{{
+  "verdict": "supported|refuted|uncertain",
+  "confidence": 0.0,
+  "matched_evidence": ["..."],
+  "contradictions": ["..."],
+  "reason": "..."
+}}
+"""
+
         try:
-            # 使用現有的AI分析介面
-            ai_result = self.ai.analyze_consistency(claim.context, [], {})
-            
-            # 簡化的結果解析
-            ai_score = ai_result.get("ai_score", 50)
-            
-            if ai_score >= 70:
-                verdict = "supported"
-                confidence = 0.7
-            elif ai_score <= 30:
-                verdict = "refuted"
-                confidence = 0.7
-            else:
+            inputs = self.ai.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1200)
+            if getattr(self.ai, "device", "cpu") == "cuda":
+                inputs = {k: v.to(self.ai.device) for k, v in inputs.items()}
+
+            with torch.no_grad():
+                outputs = self.ai.model.generate(
+                    **inputs,
+                    max_new_tokens=200,
+                    temperature=0.1,
+                    do_sample=False,
+                    pad_token_id=self.ai.tokenizer.eos_token_id,
+                    eos_token_id=self.ai.tokenizer.eos_token_id,
+                )
+
+            raw = self.ai.tokenizer.decode(
+                outputs[0][inputs["input_ids"].shape[1]:],
+                skip_special_tokens=True,
+            ).strip()
+
+            json_match = re.search(r"\{[\s\S]*\}", raw)
+            if not json_match:
+                return None
+
+            payload = json.loads(json_match.group(0))
+            verdict = str(payload.get("verdict", "uncertain")).strip().lower()
+            if verdict not in {"supported", "refuted", "uncertain"}:
                 verdict = "uncertain"
+
+            try:
+                confidence = float(payload.get("confidence", 0.5))
+            except (TypeError, ValueError):
                 confidence = 0.5
-            
+            confidence = max(0.0, min(1.0, confidence))
+
+            matched_evidence = payload.get("matched_evidence", [])
+            contradictions = payload.get("contradictions", [])
+            reason = str(payload.get("reason", "")).strip()
+
+            evidence: List[str] = []
+            if isinstance(matched_evidence, list):
+                evidence.extend(str(item).strip() for item in matched_evidence[:4] if str(item).strip())
+            if isinstance(contradictions, list):
+                evidence.extend(f"[contradiction] {str(item).strip()}" for item in contradictions[:4] if str(item).strip())
+            if reason:
+                evidence.append(reason)
+            if not evidence:
+                evidence = ["AI 未提供足夠結構化證據"]
+
+            # 若同時出現大量矛盾與支持證據，保守降為 uncertain
+            if isinstance(contradictions, list) and isinstance(matched_evidence, list):
+                if len(contradictions) >= 2 and len(matched_evidence) >= 2 and verdict != "refuted":
+                    verdict = "uncertain"
+                    confidence = min(confidence, 0.6)
+
             return FactCheckResult(
                 claim=claim,
                 verdict=verdict,
-                evidence=[f"AI分析: {ai_result.get('analysis', '無詳細分析')}"],
+                evidence=evidence,
                 confidence=confidence,
-                sources=["ai_analysis"],
-                risk_level=self._assess_claim_risk(claim)
+                sources=["ai_grounded_kg"],
+                risk_level=self._assess_claim_risk(claim),
             )
-            
-        except Exception as e:
+
+        except Exception:
             return None
     
     def _web_fact_check(self, claim: FactualClaim) -> Optional[FactCheckResult]:
@@ -2366,7 +2464,7 @@ class FactualityChecker(SentenceSplitterMixin):
     
     def _advanced_ai_fact_check(self, story_text: str, claims: List[FactualClaim], 
                                results: List[FactCheckResult]) -> Dict:
-        """AI 深度事實檢查分析"""
+        """AI 深度事實檢查分析：LLM 只做風險摘要，分數仍以統計基礎分為主。"""
         if not self.ai or not self.ai.model_available:
             return {"score": FACTUAL_AI_FALLBACK_SCORE, "analysis": "AI模型不可用，使用基礎評分"}
         
@@ -2374,37 +2472,94 @@ class FactualityChecker(SentenceSplitterMixin):
         total_claims = len(claims)
         verifiable_claims = len([c for c in claims if c.verifiable])
         supported_claims = len([r for r in results if r.verdict == "supported"])
-        
+        refuted_claims = len([r for r in results if r.verdict == "refuted"])
+        uncertain_claims = len([r for r in results if r.verdict == "uncertain"])
+
+        if verifiable_claims > 0:
+            base_score = (supported_claims / verifiable_claims) * 100.0
+        else:
+            base_score = FACTUAL_AI_FALLBACK_SCORE
+
         prompt = f"""
-        請分析以下故事的事實正確性：
-        
-        故事摘要：{story_text[:800]}...
-        
-        事實聲明統計：
-        - 總聲明數：{total_claims}
-        - 可驗證聲明：{verifiable_claims}  
-        - 支持的聲明：{supported_claims}
-        
-        請評估整體事實可信度（0-100分）並說明主要風險。
-        """
-        
+你是「事實風險摘要器」。請基於統計資料輸出 JSON，不能自由猜分。
+
+[Stats]
+total_claims={total_claims}
+verifiable_claims={verifiable_claims}
+supported_claims={supported_claims}
+refuted_claims={refuted_claims}
+uncertain_claims={uncertain_claims}
+base_score={base_score:.2f}
+
+請只輸出合法 JSON（不要 Markdown）：
+{{
+  "risk_level": "low|medium|high",
+  "score_adjustment": 0,
+  "reason": "...",
+  "recommendations": ["..."]
+}}
+"""
+
         try:
-            # 使用整理過的提示詞，避免把原文直接丟進通用一致性入口造成上下文失焦
-            ai_result = self.ai.analyze_consistency(prompt, [], {})
-            ai_score = normalize_score_0_100(
-                ai_result.get("ai_score", FACTUAL_AI_FALLBACK_SCORE),
-                FACTUAL_AI_FALLBACK_SCORE,
-            )
-            ai_confidence = normalize_confidence_0_1(ai_result.get("confidence", 0.6), 0.6)
+            inputs = self.ai.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=900)
+            if getattr(self.ai, "device", "cpu") == "cuda":
+                inputs = {k: v.to(self.ai.device) for k, v in inputs.items()}
+
+            with torch.no_grad():
+                outputs = self.ai.model.generate(
+                    **inputs,
+                    max_new_tokens=160,
+                    temperature=0.1,
+                    do_sample=False,
+                    pad_token_id=self.ai.tokenizer.eos_token_id,
+                    eos_token_id=self.ai.tokenizer.eos_token_id,
+                )
+
+            raw = self.ai.tokenizer.decode(
+                outputs[0][inputs["input_ids"].shape[1]:],
+                skip_special_tokens=True,
+            ).strip()
+
+            json_match = re.search(r"\{[\s\S]*\}", raw)
+            payload = json.loads(json_match.group(0)) if json_match else {}
+
+            risk_level = str(payload.get("risk_level", "medium")).strip().lower()
+            if risk_level not in {"low", "medium", "high"}:
+                risk_level = "medium"
+
+            try:
+                score_adjustment = float(payload.get("score_adjustment", 0.0))
+            except (TypeError, ValueError):
+                score_adjustment = 0.0
+            score_adjustment = max(-15.0, min(15.0, score_adjustment))
+
+            # 以統計基礎分為主，LLM 調整幅度受限
+            ai_score = base_score + score_adjustment
+            ai_score -= {"low": 0.0, "medium": 5.0, "high": 12.0}.get(risk_level, 5.0)
+            ai_score = normalize_score_0_100(ai_score, FACTUAL_AI_FALLBACK_SCORE)
+
+            reason = str(payload.get("reason", "")).strip() or "AI 風險摘要完成"
+            ai_recommendations = payload.get("recommendations", [])
+            if not isinstance(ai_recommendations, list):
+                ai_recommendations = []
+            recommendations = [str(item).strip() for item in ai_recommendations[:4] if str(item).strip()]
+            recommendations.extend(self._generate_ai_recommendations(results))
+
+            ai_confidence = 0.75 if verifiable_claims > 0 else 0.60
             
             return {
                 "score": ai_score,
-                "analysis": ai_result.get("analysis", "AI事實檢查分析完成"),
+                "analysis": reason,
                 "confidence": ai_confidence,
-                "recommendations": self._generate_ai_recommendations(results)
+                "recommendations": recommendations
             }
         except Exception as e:
-            return {"score": FACTUAL_AI_FALLBACK_SCORE, "analysis": f"AI分析失敗: {str(e)}"}
+            return {
+                "score": normalize_score_0_100(base_score, FACTUAL_AI_FALLBACK_SCORE),
+                "analysis": f"AI分析失敗: {str(e)}",
+                "confidence": 0.6,
+                "recommendations": self._generate_ai_recommendations(results),
+            }
     
     def _generate_ai_recommendations(self, results: List[FactCheckResult]) -> List[str]:
         """生成AI建議"""
@@ -2504,8 +2659,8 @@ class FactualityChecker(SentenceSplitterMixin):
             # 使用調整後的基礎分數，但仍考慮驗證覆蓋度（權重降低）
             claim_accuracy = base_unverifiable
         
-        # 權重：準確度與風險為主，覆蓋度次之，AI 輔助提升（從 0.1 提升到 0.15）
-        weights = [0.45, 0.2, 0.2, 0.15]  # 調整權重分配
+        # 權重：準確度與風險為主，AI 僅保留小幅度輔助
+        weights = [0.50, 0.20, 0.20, 0.10]
         components = [claim_accuracy, verification_coverage, risk_assessment_score, ai_score]
         final_score = sum(c * w for c, w in zip(components, weights))
         

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, TypeVar
@@ -277,9 +278,11 @@ def get_model_root(default: str = "/app/models") -> str:
         return os.path.dirname(default_model_path.rstrip("/\\")) or default
 
     project_dir = Path(__file__).resolve().parent
+    preferred_local = project_dir.parent / "models"
+    legacy_local = project_dir / "models"
     candidates = [
-        project_dir.parent / "models",  # 共用新生成系統 models
-        project_dir / "models",         # 舊評測系統本地 models
+        preferred_local,
+        legacy_local,
         Path(default),
     ]
     for candidate in candidates:
@@ -289,7 +292,8 @@ def get_model_root(default: str = "/app/models") -> str:
         except Exception:
             continue
 
-    return default
+    # 本地優先：即使尚未建立也回傳工作區路徑，避免落到 /app/*。
+    return str(preferred_local)
 
 
 def get_kg_path(default: str = "/app/kg") -> str:
@@ -299,8 +303,9 @@ def get_kg_path(default: str = "/app/kg") -> str:
         return configured
 
     project_dir = Path(__file__).resolve().parent
+    preferred_local = project_dir.parent / "kg"
     candidates = [
-        project_dir.parent / "kg",
+        preferred_local,
         project_dir / "kg",
         Path(default),
     ]
@@ -311,7 +316,8 @@ def get_kg_path(default: str = "/app/kg") -> str:
         except Exception:
             continue
 
-    return default
+    # 本地優先：即使尚未建立也回傳工作區路徑，避免落到 /app/*。
+    return str(preferred_local)
 
 
 def get_generation_kg_module_path(default: Optional[str] = None) -> str:
@@ -337,6 +343,26 @@ def get_generation_kg_module_path(default: Optional[str] = None) -> str:
     return str(project_dir.parent / "kg.py")
 
 
+def ensure_kg_module_importable(module_path: Optional[str] = None) -> Optional[str]:
+    """確保 kg.py 所在目錄可被 import，回傳可用模組路徑。"""
+    target = module_path or get_generation_kg_module_path()
+    if not target:
+        return None
+
+    try:
+        resolved = Path(target).resolve()
+    except Exception:
+        resolved = Path(target)
+
+    if not resolved.exists() or not resolved.is_file():
+        return None
+
+    parent = str(resolved.parent)
+    if parent and parent not in sys.path:
+        sys.path.insert(0, parent)
+    return str(resolved)
+
+
 def resolve_model_path(model_name: str, *, model_root: Optional[str] = None) -> str:
     """將模型資料夾名稱解析為完整路徑。"""
     root = model_root or get_model_root()
@@ -347,7 +373,40 @@ def get_default_model_path(default_model_name: str = "Qwen2.5-14B") -> str:
     """回傳預設 LLM 路徑，優先讀取 DEFAULT_MODEL_PATH。"""
     env_path = get_env("DEFAULT_MODEL_PATH")
     if env_path:
-        return env_path
+        env_candidate = Path(env_path)
+        looks_like_local_path = (
+            env_candidate.is_absolute()
+            or env_path.startswith(".")
+            or ("/" in env_path)
+            or ("\\" in env_path)
+        )
+        if not looks_like_local_path:
+            return env_path
+        try:
+            if env_candidate.exists():
+                return env_path
+        except Exception:
+            pass
+
+    # 將預設名稱映射到現有模型目錄，避免使用不存在的路徑。
+    model_aliases = {
+        "Qwen2.5-14B": [
+            "Qwen2.5-14B",
+            "Qwen2.5-14B-Instruct-GPTQ-Int4",
+            "Qwen3.5-9B",
+            "Qwen3-8B",
+        ],
+    }
+
+    candidates = model_aliases.get(default_model_name, [default_model_name])
+    for name in candidates:
+        candidate_path = resolve_model_path(name)
+        try:
+            if Path(candidate_path).exists():
+                return candidate_path
+        except Exception:
+            continue
+
     return resolve_model_path(default_model_name)
 
 
@@ -384,6 +443,17 @@ _LOCAL_MODEL_DIR_PREFIX = "/app/models"
 
 @lru_cache(maxsize=1)
 def load_spacy_model(max_length: int = 5_000_000) -> "spacy.language.Language":
+    try:
+        import sys
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        import runtime.compat
+        runtime.compat.prepare_evaluator_runtime()
+    except Exception as e:
+        pass
+    
     """
     載入 spaCy NLP 模型（帶智能快取）
     
@@ -417,32 +487,53 @@ def load_spacy_model(max_length: int = 5_000_000) -> "spacy.language.Language":
         >>> for sent in doc.sents:
         ...     print(sent.text)
     """
-    # 嘗試啟用 GPU 加速
-    try:
-        spacy.prefer_gpu()
-    except Exception:
-        pass  # GPU 不可用時靜默失敗，使用 CPU
+    prefer_gpu = get_bool_env("SPACY_PREFER_GPU", True)
+    require_gpu = get_bool_env("SPACY_REQUIRE_GPU", False)
+    require_trf = get_bool_env("SPACY_REQUIRE_TRF", False)
 
-    # 按優先級嘗試載入模型
-    for model_name in _DEFAULT_MODEL_NAMES:
+    gpu_enabled = False
+    if prefer_gpu or require_gpu:
         try:
-            # 嘗試從系統載入模型
-            nlp = spacy.load(model_name)
-            nlp.max_length = max_length
-            return nlp
+            gpu_enabled = bool(spacy.prefer_gpu())
         except Exception:
-            # 若系統找不到模型，嘗試從本地路徑載入
-            local_path = f"{_LOCAL_MODEL_DIR_PREFIX}/{model_name}"
+            gpu_enabled = False
+
+    if require_gpu and not gpu_enabled:
+        raise RuntimeError("SPACY_REQUIRE_GPU=true 但 spaCy GPU 後端不可用")
+
+    configured_priority = get_env("SPACY_MODEL_PRIORITY")
+    if configured_priority:
+        model_candidates = [item.strip() for item in configured_priority.split(",") if item.strip()]
+    else:
+        model_candidates = list(_DEFAULT_MODEL_NAMES)
+
+    if require_trf:
+        if "en_core_web_trf" not in model_candidates:
+            model_candidates.insert(0, "en_core_web_trf")
+        model_candidates = [name for name in model_candidates if name == "en_core_web_trf"]
+
+    load_errors: List[str] = []
+    for model_name in model_candidates:
+        # 先嘗試套件模型，再嘗試本地掛載路徑
+        for target in (model_name, f"{_LOCAL_MODEL_DIR_PREFIX}/{model_name}"):
             try:
-                nlp = spacy.load(local_path)
+                nlp = spacy.load(target)
                 nlp.max_length = max_length
+                setattr(nlp, "_loaded_model_name", model_name)
+                setattr(nlp, "_gpu_enabled", gpu_enabled)
                 return nlp
-            except Exception:
-                continue  # 繼續嘗試下一個模型
+            except Exception as exc:
+                load_errors.append(f"{target}: {exc}")
+
+    if require_trf:
+        err_preview = "; ".join(load_errors[:2]) if load_errors else "unknown error"
+        raise RuntimeError(f"SPACY_REQUIRE_TRF=true 但 en_core_web_trf 載入失敗: {err_preview}")
 
     # 所有模型都載入失敗，建立空白英文模型（最基本功能）
     nlp = spacy.blank("en")
     nlp.max_length = max_length
+    setattr(nlp, "_loaded_model_name", "blank_en")
+    setattr(nlp, "_gpu_enabled", gpu_enabled)
     return nlp
 
 

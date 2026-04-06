@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from statistics import fmean
 from typing import Any, Dict, Mapping, Optional, Tuple
 
-from kb import LocalCategoryMatcher
+from .kb import LocalCategoryMatcher
 
 DEFAULT_GENRE_KEYWORDS = {
     "fable": {

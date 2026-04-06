@@ -8,7 +8,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from shared.story_data import collect_full_story_paths, discover_story_dirs, load_json_dict
+try:
+    from ..shared.story_data import collect_full_story_paths, discover_story_dirs, load_json_dict
+except ImportError:
+    from shared.story_data import collect_full_story_paths, discover_story_dirs, load_json_dict
 
 
 def compute_counts(text: str) -> Tuple[int, int]:

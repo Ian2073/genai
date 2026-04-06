@@ -16,8 +16,8 @@ from pathlib import Path
 from collections import defaultdict, Counter
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Set, Union
-from consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
-from utils import (
+from .consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
+from .utils import (
     SentenceSplitterMixin,
     ensure_instance,
     get_default_model_path,
@@ -67,7 +67,7 @@ class MultimodalChecker(SentenceSplitterMixin):
     
     def __init__(self, 
                  kg_path: str = get_kg_path(),
-                 model_path: str = get_default_model_path("phi-3.5-mini"),
+                 model_path: str = get_default_model_path("Qwen2.5-14B"),
                  use_multiple_ai_prompts: bool = False,
                  image_analysis_enabled: bool = False,
                  ai: AIAnalyzer = None,

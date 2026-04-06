@@ -811,7 +811,7 @@ def build_story_profile(
 		# Try to get a consistent seed from RNG state if possible, otherwise just use a random int
 		try:
 			layout_seed = rng.randint(0, 999999)
-		except:
+		except Exception:
 			layout_seed = random.randint(0, 999999)
 	else:
 		layout_seed = random.randint(0, 999999)
@@ -846,7 +846,8 @@ def build_story_profile(
 		# Fallback query if not in quality_reqs structure
 		try: 
 			visual_style = kg._get_age_group_for_age(age_value).properties.get("visual_style", "")
-		except: pass
+		except Exception:
+			pass
 		
 	# [Adjust] Generate Interaction Plan based on Layout
 	interaction_plan = _generate_interaction_plan(layout, age_value)
@@ -959,7 +960,19 @@ def setup_logging(
 
 	logger = logging.getLogger(module_name)
 	logger.setLevel(level)
-	if logger.handlers:
+
+	# If setup_logging is called with a specific file, ensure it's added.
+	already_has_file = False
+	for h in logger.handlers:
+		if isinstance(h, logging.FileHandler) and log_path and getattr(h, "baseFilename", "") == str(log_path.resolve()):
+			already_has_file = True
+
+	if hasattr(logger, "_console_added"):
+		console = False # Don't add console twice
+
+	if logger.handlers and already_has_file:
+		return logger
+	elif logger.handlers and not log_path:
 		return logger
 
 	formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
@@ -968,6 +981,7 @@ def setup_logging(
 		stream_handler = logging.StreamHandler()
 		stream_handler.setFormatter(formatter)
 		logger.addHandler(stream_handler)
+		setattr(logger, "_console_added", True)
 
 	if log_path:
 		try:

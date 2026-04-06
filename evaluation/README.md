@@ -61,7 +61,7 @@ python main.py --input output/你的故事
 
 | 模型 | 路徑 | 大小 | 用途 |
 |------|------|------|------|
-| **Qwen2.5-14B** | `models/Qwen2.5-14B-Instruct-GPTQ-Int4` | ~27.5 GB | 唯一 LLM，文字理解、推理分析、生成建議（INT4 量化） |
+| **Qwen2.5-14B** | `models/Qwen2.5-14B` | ~27.5 GB | 唯一 LLM，文字理解、推理分析、生成建議（INT4 量化） |
 | **roberta-base-go_emotions** | `models/roberta-base-go_emotions` | ~0.93 GB | GoEmotions 28 類情感分類器，情感影響力分析 |
 | **bge-large-zh-v1.5** | `models/bge-large-zh-v1.5` | ~1.21 GB | 語義相似度計算（中英文雙語） |
 | **gliner_large-v2.1** | `models/gliner_large-v2.1` | ~1.66 GB | 命名實體識別（角色、地點提取） |
@@ -89,7 +89,7 @@ python main.py --input output/你的故事
 pip install huggingface_hub
 
 # 核心模型（必要）
-huggingface-cli download Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4 --local-dir models/Qwen2.5-14B-Instruct-GPTQ-Int4
+huggingface-cli download Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4 --local-dir models/Qwen2.5-14B
 huggingface-cli download BAAI/bge-large-zh-v1.5 --local-dir models/bge-large-zh-v1.5
 huggingface-cli download urchade/gliner_large-v2.1 --local-dir models/gliner_large-v2.1
 huggingface-cli download SamLowe/roberta-base-go_emotions --local-dir models/roberta-base-go_emotions
@@ -373,7 +373,7 @@ output/
 | 變數 | 功能 | 預設值 |
 |------|------|--------|
 | `MODEL_ROOT_HOST_PATH` | Docker 掛載模型主機路徑 | `./models` |
-| `DEFAULT_MODEL_PATH` | 主要 LLM 路徑 | `/app/models/Qwen2.5-14B-Instruct-GPTQ-Int4` |
+| `DEFAULT_MODEL_PATH` | 主要 LLM 路徑 | `/app/models/Qwen2.5-14B` |
 | `GENERATION_KG_MODULE_PATH` | 新生成系統 `kg.py` 路徑覆寫 | 自動探測 |
 | `USE_4BIT_QUANTIZATION` | 啟用 INT4 量化 | `true` |
 | `USE_CPU_HYBRID` | CPU/GPU 混合推理 | `true` |

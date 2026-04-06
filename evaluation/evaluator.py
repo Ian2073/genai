@@ -31,24 +31,25 @@ from statistics import mean
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from collections import Counter
 from dataclasses import dataclass
-from completeness import CompletenessChecker
-from coherence import CoherenceChecker  
-from readability import ReadabilityChecker
-from factual import FactualityChecker
-from emotion import EmotionalImpactChecker
-from consistency import AdvancedStoryChecker  # 實體一致性
-from genre import GenreDetector
-from shared.score_governance import build_score_governance
-from shared.score_policy import apply_cross_dimension_constraints, compute_consensus_adjustment
-from shared.story_data import collect_branch_story_paths, collect_full_story_paths, find_metadata_for_story
-from shared.ai_safety import (
+from .completeness import CompletenessChecker
+from .coherence import CoherenceChecker  
+from .readability import ReadabilityChecker
+from .factual import FactualityChecker
+from .emotion import EmotionalImpactChecker
+from .consistency import AdvancedStoryChecker  # 實體一致性
+from .genre import GenreDetector
+from .shared.score_governance import build_score_governance
+from .shared.score_policy import apply_cross_dimension_constraints, compute_consensus_adjustment
+from .shared.story_data import collect_branch_story_paths, collect_full_story_paths, find_metadata_for_story
+from .shared.ai_safety import (
     build_dimension_fallback_payload,
     get_dimension_fallback_score,
     normalize_confidence_0_1,
     normalize_score_0_100,
 )
-from utils import (
+from .utils import (
     get_default_model_path,
+    load_spacy_model,
     get_kg_path,
     get_semantic_model_candidates,
     resolve_model_path,
@@ -74,9 +75,6 @@ DEFAULT_MODEL_PATH = get_default_model_path("Qwen2.5-14B")
 DEFAULT_CONFIG_PATH = "aspects_sources.yaml"
 DEFAULT_TARGET_AGE_GROUP = "children_7_8"
 DEFAULT_SEMANTIC_MODEL_PATH = get_semantic_model_candidates()[0]
-
-# SpaCy 模型優先級列表
-SPACY_MODELS = ["en_core_web_trf", "en_core_web_lg", "en_core_web_md", "en_core_web_sm"]
 
 # 簡易情緒詞典（避免依賴額外套件）
 _POSITIVE_LEXICON = {
@@ -255,7 +253,22 @@ class DocumentSourceManager:
         return bool(self.document_cache.get('full_story.txt') and self.document_cache['full_story.txt'].available)
 
     def get_degradation_report(self) -> Dict[str, Dict]:
-        return {}
+        report: Dict[str, Dict[str, Any]] = {}
+        full_story = self.document_cache.get('full_story.txt')
+        if full_story is None:
+            report['full_story.txt'] = {
+                'status': 'missing',
+                'reason': 'not_registered',
+            }
+            return report
+
+        if not full_story.available:
+            report['full_story.txt'] = {
+                'status': 'missing',
+                'reason': full_story.error or 'unavailable',
+                'path': full_story.file_path,
+            }
+        return report
 
 @dataclass
 class DimensionResult:
@@ -360,15 +373,15 @@ class MultiAspectEvaluator:
         }
         
         # 計算最佳處理順序（減少重複載入模型）
-        self.optimal_dimension_order = self._calculate_optimal_processing_order()
-        
-        # 保留結構但不再使用維度權重（總分改為簡單平均）
-        self.dimension_weights = {}
-        
         # 維度依賴關係
         self.dimension_dependencies = {
             'coherence': ['entity_consistency'],  # 連貫性依賴實體一致性
         }
+
+        self.optimal_dimension_order = self._calculate_optimal_processing_order()
+        
+        # 保留結構但不再使用維度權重（總分改為簡單平均）
+        self.dimension_weights = {}
         
         self.processing_stats = {
             'total_evaluations': 0,
@@ -447,7 +460,57 @@ class MultiAspectEvaluator:
                 ordered_dimensions.append(next_dim)
                 current_loaded_models.update(self.dimension_model_requirements[next_dim])
         
-        return ordered_dimensions
+        return self._apply_dependency_order(ordered_dimensions)
+
+    def _apply_dependency_order(self, preferred_order: List[str]) -> List[str]:
+        """在既有偏好順序上，套用維度依賴約束。"""
+        unique_order: List[str] = []
+        for dimension in preferred_order:
+            if dimension not in unique_order:
+                unique_order.append(dimension)
+
+        if not unique_order:
+            return []
+
+        order_index = {dimension: idx for idx, dimension in enumerate(unique_order)}
+        dependencies: Dict[str, List[str]] = {
+            dimension: [
+                dep for dep in self.dimension_dependencies.get(dimension, [])
+                if dep in order_index
+            ]
+            for dimension in unique_order
+        }
+
+        in_degree: Dict[str, int] = {
+            dimension: len(dependencies.get(dimension, []))
+            for dimension in unique_order
+        }
+        dependents: Dict[str, List[str]] = {dimension: [] for dimension in unique_order}
+        for dimension, deps in dependencies.items():
+            for dep in deps:
+                dependents.setdefault(dep, []).append(dimension)
+
+        ready: List[str] = sorted(
+            [dimension for dimension, degree in in_degree.items() if degree == 0],
+            key=lambda item: order_index[item],
+        )
+        ordered: List[str] = []
+
+        while ready:
+            current = ready.pop(0)
+            ordered.append(current)
+            for dependent in dependents.get(current, []):
+                in_degree[dependent] -= 1
+                if in_degree[dependent] == 0:
+                    ready.append(dependent)
+            ready.sort(key=lambda item: order_index[item])
+
+        if len(ordered) != len(unique_order):
+            remaining = [item for item in unique_order if item not in ordered]
+            remaining.sort(key=lambda item: order_index[item])
+            ordered.extend(remaining)
+
+        return ordered
     
     def _load_dimension_checker(self, dimension: str):
         """建立或取回指定維度的檢測器實例。
@@ -574,56 +637,69 @@ class MultiAspectEvaluator:
         logger.info("  📦 載入模型組件: %s", model_type)
         
         if model_type == 'ai_model':
-            from consistency import AIAnalyzer
+            from .consistency import AIAnalyzer
             self.loaded_models['ai_model'] = AIAnalyzer(self.model_path, self.use_multiple_ai_prompts)
             
         elif model_type == 'kg':
-            from consistency import ComprehensiveKnowledgeGraph
+            from .consistency import ComprehensiveKnowledgeGraph
             self.loaded_models['kg'] = ComprehensiveKnowledgeGraph(self.kg_path)
             
         elif model_type == 'spacy_model':
-            import spacy
-            for model_name in SPACY_MODELS:
-                try:
-                    nlp = spacy.load(model_name)
-                    self.loaded_models['spacy_model'] = nlp
-                    logger.info("    ✅ 載入 spaCy: %s", model_name)
-                    break
-                except:
-                    continue
-            else:
+            try:
+                nlp = load_spacy_model()
+                loaded_name = getattr(nlp, '_loaded_model_name', nlp.meta.get('name', 'unknown'))
+                gpu_enabled = bool(getattr(nlp, '_gpu_enabled', False))
+                self.loaded_models['spacy_model'] = nlp
+                logger.info("    ✅ 載入 spaCy: %s (gpu=%s)", loaded_name, gpu_enabled)
+            except Exception as e:
+                import spacy
+                logger.warning("    ⚠️ spaCy 載入失敗: %s，退回 blank(en)", e)
                 self.loaded_models['spacy_model'] = spacy.blank("en")
         
         elif model_type == 'gliner_model':
             try:
                 from gliner import GLiNER
                 gliner_path = resolve_model_path("gliner_large-v2.1")
-                gliner = GLiNER.from_pretrained(gliner_path)
+                gliner_local_path = os.path.abspath(str(gliner_path))
+                if not os.path.isdir(gliner_local_path):
+                    raise FileNotFoundError(f"GLiNER model directory not found: {gliner_local_path}")
+
+                # GLiNER checkpoints use gliner_config.json; create a compatibility config.json
+                # to suppress HubMixin warnings on local directory loading.
+                gliner_config_path = os.path.join(gliner_local_path, "gliner_config.json")
+                hf_config_path = os.path.join(gliner_local_path, "config.json")
+                if os.path.isfile(gliner_config_path) and not os.path.isfile(hf_config_path):
+                    try:
+                        with open(gliner_config_path, 'r', encoding='utf-8') as src:
+                            gliner_config_payload = json.load(src)
+                        with open(hf_config_path, 'w', encoding='utf-8') as dst:
+                            json.dump(gliner_config_payload, dst, ensure_ascii=False, indent=2)
+                        logger.info("    ℹ️ 建立 GLiNER 相容設定檔: %s", hf_config_path)
+                    except Exception as cfg_exc:
+                        logger.warning("    ⚠️ 無法建立 GLiNER config.json 相容檔: %s", cfg_exc)
+
+                # Work around protobuf/sentencepiece incompatibility seen on some Windows envs.
+                os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
+
+                gliner = GLiNER.from_pretrained(gliner_local_path, local_files_only=True)
                 
                 # 優先使用 GPU
                 import torch
                 if torch.cuda.is_available():
                     gliner = gliner.to('cuda')
-                    logger.info("    ✅ 載入 GLiNER 到 GPU: %s", gliner_path)
+                    logger.info("    ✅ 載入 GLiNER 到 GPU: %s", gliner_local_path)
                 else:
-                    logger.info("    ✅ 載入 GLiNER 到 CPU: %s", gliner_path)
+                    logger.info("    ✅ 載入 GLiNER 到 CPU: %s", gliner_local_path)
                 
                 self.loaded_models['gliner_model'] = gliner
             except Exception as e:
                 logger.warning("    ⚠️ GLiNER 載入失敗: %s，退回使用 SpaCy", e)
-                # 退回使用 SpaCy
-                import spacy
-                for model_name in SPACY_MODELS:
-                    try:
-                        nlp = spacy.load(model_name)
-                        self.loaded_models['gliner_model'] = nlp
-                        break
-                    except:
-                        continue
+                # Keep gliner_model type-safe; spaCy should stay in spacy_model slot only.
+                self.loaded_models['gliner_model'] = None
                 
         elif model_type == 'goemotion_model':
             try:
-                from emotion import GoEmotionsAnalyzer
+                from .emotion import GoEmotionsAnalyzer
                 analyzer = GoEmotionsAnalyzer()
                 analyzer._load_model()
                 self.loaded_models['goemotion_model'] = analyzer
@@ -698,11 +774,8 @@ class MultiAspectEvaluator:
             if model_type == 'ai_model':
                 ai_model = self.loaded_models['ai_model']
                 try:
-                    # 安全釋放AI模型
-                    if hasattr(ai_model, 'model'):
-                        del ai_model.model
-                    if hasattr(ai_model, 'tokenizer'):
-                        del ai_model.tokenizer
+                    if ai_model and hasattr(ai_model, 'release'):
+                        ai_model.release()
                 except Exception:
                     pass  # 靜默處理釋放錯誤
                 del self.loaded_models['ai_model']
@@ -712,29 +785,37 @@ class MultiAspectEvaluator:
                 if semantic_model and isinstance(semantic_model, dict):
                     try:
                         if 'model' in semantic_model:
+                            if hasattr(semantic_model['model'], 'to'):
+                                semantic_model['model'].to('cpu')
                             del semantic_model['model']
                         if 'tokenizer' in semantic_model:
                             del semantic_model['tokenizer']
                     except Exception:
                         pass
                 del self.loaded_models['semantic_model']
-                
+
             elif model_type == 'goemotion_model':
-                goemotion = self.loaded_models['goemotion_model']
+                goemotion = self.loaded_models['goemotion_model']       
                 if goemotion and hasattr(goemotion, 'release'):
                     try:
                         goemotion.release()
+                    except Exception:
+                        pass
+                elif goemotion and hasattr(goemotion, 'to'):
+                    try:
+                        goemotion.to('cpu')
                     except Exception:
                         pass
                 del self.loaded_models['goemotion_model']
 
             else:
                 # 其他模型組件的簡單釋放
-                del self.loaded_models[model_type]
-            
-            # 強制垃圾回收
-            gc.collect()
-            
+                component = self.loaded_models[model_type]
+                if hasattr(component, 'to'):
+                    try:
+                        component.to('cpu')
+                    except Exception:
+                        pass
             # 清理GPU記憶體
             try:
                 import torch
@@ -857,9 +938,9 @@ class MultiAspectEvaluator:
         
         # 檢查維度可行性
         viable_dimensions = self._check_dimension_viability(enabled_dimensions)
-        
-        # 按最佳順序排序維度（最大化模型重用）
-        ordered_dimensions = [d for d in self.optimal_dimension_order if d in viable_dimensions]
+
+        # 按最佳順序 + 依賴約束排序維度（必要時自動補齊相依維度）
+        ordered_dimensions = self._resolve_dimension_execution_order(viable_dimensions)
         
         # 顯示智能處理順序和模型重用情況
         self._display_processing_plan(ordered_dimensions)
@@ -915,8 +996,8 @@ class MultiAspectEvaluator:
         # 生成綜合建議
         recommendations = self._generate_comprehensive_recommendations(dimension_results, overall_score)
         
-        # 獲取降級報告
-        degradation_report = self.source_manager.get_degradation_report()
+        # 獲取降級報告（文檔來源 + 維度執行）
+        degradation_report = self._build_degradation_report(dimension_results)
         
         # 處理統計
         processing_time = (datetime.now() - start_time).total_seconds()
@@ -995,6 +1076,39 @@ class MultiAspectEvaluator:
                 logger.warning("⚠️ 維度 %s 不可行：缺少必要文檔", dimension)
         
         return viable_dimensions
+
+    def _resolve_dimension_execution_order(self, viable_dimensions: List[str]) -> List[str]:
+        """在可行維度中套用依賴約束，輸出最終執行順序。"""
+        if not viable_dimensions:
+            return []
+
+        preferred: List[str] = [d for d in self.optimal_dimension_order if d in viable_dimensions]
+        for dimension in viable_dimensions:
+            if dimension not in preferred:
+                preferred.append(dimension)
+        return self._apply_dependency_order(preferred)
+
+    def _build_degradation_report(self, dimension_results: List[DimensionResult]) -> Dict[str, Dict[str, Any]]:
+        """彙總文檔與維度層級的降級/失敗訊號。"""
+        report: Dict[str, Dict[str, Any]] = dict(self.source_manager.get_degradation_report())
+
+        dimension_entries: Dict[str, Dict[str, Any]] = {}
+        for result in dimension_results:
+            if result.status in {'success'} and not result.degradation_info:
+                continue
+            dimension_entries[result.dimension] = {
+                'status': result.status,
+                'reason': result.degradation_info,
+                'score': result.score,
+                'issues_count': result.issues_count,
+                'processing_time': result.processing_time,
+                'confidence': (result.normalized_summary or {}).get('confidence'),
+            }
+
+        if dimension_entries:
+            report['dimensions'] = dimension_entries
+
+        return report
     
     def _display_processing_plan(self, ordered_dimensions: List[str]):
         """輸出精簡的維度處理順序，方便追蹤流程。"""
@@ -1274,9 +1388,39 @@ class MultiAspectEvaluator:
     def _release_all_models(self):
         """釋放所有已載入模型與檢測器快取，釋出記憶體。"""
         logger.info("🧹 釋放所有模型...")
-        
+
+        released_refs = set()
         for model_type in list(self.loaded_models.keys()):
+            component = self.loaded_models.get(model_type)
+            if component is not None:
+                released_refs.add(id(component))
             self._release_model_component(model_type)
+
+        # 釋放各檢測器的內部模型（如共指消解的 FCoref、AIAnalyzer 的 LLM）
+        for dim, checker in self.checkers.items():
+            coref = getattr(checker, 'coref', None)
+            if coref is not None and hasattr(coref, 'release') and id(coref) not in released_refs:
+                try:
+                    coref.release()
+                except Exception:
+                    pass
+
+            ai = getattr(checker, 'ai', None)
+            if ai is not None and hasattr(ai, 'release') and id(ai) not in released_refs:
+                try:
+                    ai.release()
+                except Exception:
+                    pass
+
+            # 斷開檢測器對大型元件的引用，避免延遲 GC。
+            try:
+                checker.coref = None
+            except Exception:
+                pass
+            try:
+                checker.ai = None
+            except Exception:
+                pass
         
         # 清理檢測器快取
         self.checkers.clear()

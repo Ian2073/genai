@@ -41,44 +41,17 @@ services:
       - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
       # Evaluation-specific environmental variables
-      - COREF_SERVICE_URL=${COREF_SERVICE_URL:-http://coref-service:8001}
       - TOKENIZERS_PARALLELISM=false
-      - DEFAULT_MODEL_PATH=${DEFAULT_MODEL_PATH:-/app/models/Qwen2.5-14B}
+      - DEFAULT_MODEL_PATH=${DEFAULT_MODEL_PATH:-/app/models/Qwen2.5-14B-Instruct-GPTQ-Int4}
       - USE_4BIT_QUANTIZATION=${USE_4BIT_QUANTIZATION:-true}
       - USE_CPU_HYBRID=${USE_CPU_HYBRID:-true}
       - USE_CPU_FOR_SEMANTIC=${USE_CPU_FOR_SEMANTIC:-true}
       - DISABLE_CALIBRATION=${DISABLE_CALIBRATION:-true}
-      - COREF_BACKEND_MODE=${COREF_BACKEND_MODE:-auto}
+      - COREF_BACKEND_MODE=${COREF_BACKEND_MODE:-local}
       - COREF_TIMEOUT_SEC=${COREF_TIMEOUT_SEC:-120}
+      - COREF_ENABLE_LOCAL_FASTCOREF=${COREF_ENABLE_LOCAL_FASTCOREF:-true}
+      - SPACY_PREFER_GPU=${SPACY_PREFER_GPU:-true}
+      - SPACY_REQUIRE_TRF=${SPACY_REQUIRE_TRF:-false}
 
     shm_size: '2gb'
     restart: "no"
-    depends_on:
-      coref-service:
-        condition: service_healthy
-
-  coref-service:
-    build:
-      context: .
-      dockerfile: evaluation/Dockerfile.coref
-    image: coref-service:latest
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - COREF_DEVICE=${COREF_DEVICE:-auto}
-      - COREF_MAX_TOKENS=${COREF_MAX_TOKENS:-2048}
-    volumes:
-      - ${MODEL_ROOT_HOST_PATH:-./models}:/app/models:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "8001:8001"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]

@@ -37,8 +37,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from evaluator import MultiAspectEvaluator
-from shared.story_data import discover_story_dirs, load_json_dict, load_story_text_from_dir
+try:
+    from ..evaluator import MultiAspectEvaluator
+    from ..shared.story_data import discover_story_dirs, load_json_dict, load_story_text_from_dir
+except ImportError:
+    from evaluator import MultiAspectEvaluator
+    from shared.story_data import discover_story_dirs, load_json_dict, load_story_text_from_dir
 
 def _write_dataset(csv_path: Path, rows: Iterable[Dict[str, str]]) -> None:
     """將資料集寫入 CSV 檔案
@@ -603,7 +607,7 @@ def _fit_model_from_rows(
             for name, weight in zip(agg_dims, beta.tolist()):
                 clean = name.replace('dim_', '')
                 aggregation_weights[clean] = float(weight)
-        except:
+        except Exception:
             pass
 
     # ==== 高級模型：使用 XGBoost GPU 加速 ====

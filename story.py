@@ -413,16 +413,6 @@ class StoryPipeline:
 			return base + "\n\n" + user_block
 		return user_block
 
-	def _parse_decision_options(self, text: str, count: int) -> List[Tuple[str, str]]:
-		"""
-		Robustly parse decision options from text. 
-		Returns list of (option_id, description_text).
-		e.g. [("option_1", "Go to the cave"), ("option_2", "Climb the tree")]
-		"""
-	# [DEPRECATED] _parse_decision_options was removed in favor of KG-Strict-Branching.
-	# The system now pre-selects branch archetypes in utils.build_story_profile
-	# and enforces them via layout.branch_slots.
-
 	def create_branch(self, new_branch_id: str, divergence_point: int, parent_id: Optional[str] = None) -> None:
 		"""建立一個新分支並註冊。
 		
@@ -735,11 +725,87 @@ class StoryPipeline:
 		self._major_step_total = 3 + (branch_total * 4) + 2
 		self._major_step_index = 0
 		self._log_major_step("outline")
-		outline = self._run_single_step(
-			"outline",
-			{"kg_enabled": self.options.kg_enabled},
-			self.paths["outline"],
-		)
+
+		# --- Stage 0.5: Outline Generation with Self-Critique Gate ---
+
+		max_outline_attempts = 3
+
+		candidate_outline = ""
+
+		outline = ""
+
+		self.logger.info("Beginning Stage 0.5: Outline Generation and Self-Critique Gate")
+
+		for attempt in range(1, max_outline_attempts + 1):
+
+		    self.logger.info("Generating outline (Attempt %d/%d)...", attempt, max_outline_attempts)
+
+		    candidate_outline = self._run_single_step(
+
+		        "outline",
+
+		        {"kg_enabled": self.options.kg_enabled},
+
+		        self.paths["outline"],
+
+		    )
+
+		    
+
+		    # Self-Critique check
+
+		    self.logger.info("Running Stage 0.5 Self-Critique on generated outline...")
+
+		    critique_prompt = f"""
+請你扮演資深的兒童故事編輯，嚴格審查以下故事大綱。
+【審查標準】
+1. 邏輯合理性：起承轉合是否流暢，有沒有情節斷層或矛盾？
+2. 安全性與適當性：是否完全適合兒童閱讀，無暴力、恐怖或不當情節？
+
+【大綱內容】
+{candidate_outline}
+
+如果上述大綱符合標準，沒有嚴重缺陷，請只回覆 "PASS" (全大寫)。
+如果有嚴重的邏輯漏洞或不適當的內容，不能繼續發展成完整故事，請回覆 "FAIL: [簡述原因]"。
+"""
+
+		    validation_result = "PASS"
+
+		    try:
+
+		        from backends.llm import get_generator
+
+		        temp_gen = get_generator("outline")
+
+		        validation_result = temp_gen.generate(critique_prompt, {"max_new_tokens": 100}).strip()
+
+		    except Exception as e:
+
+		        self.logger.warning("Stage 0.5 Self-Critique execution error: %s", e)
+
+		        validation_result = "PASS"
+
+		        
+
+		    if "PASS" in validation_result.upper():
+
+		        self.logger.info("Stage 0.5 Outline Self-Critique PASSED.")
+
+		        outline = candidate_outline
+
+		        break
+
+		    else:
+
+		        self.logger.warning("Stage 0.5 Outline Self-Critique REJECTED (Attempt %d): %s", attempt, validation_result)
+
+		        if attempt == max_outline_attempts:
+
+		            self.logger.warning("Max outline attempts reached. Proceeding with the last generated outline despite rejection.")
+
+		            outline = candidate_outline
+
+		# --- End Stage 0.5 ---
 		
 		# Extract dynamic turning point from outline
 		detected_turning_point = self._extract_turning_point_from_outline(outline)
@@ -1593,7 +1659,6 @@ class StoryPipeline:
 					bad_words_ids.append(ids)
 			except Exception as e:
 				self.logger.debug(f"Failed to encode bad word '{word}': {e}")
-				continue
 				continue
 				
 		if bad_words_ids:

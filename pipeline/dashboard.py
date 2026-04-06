@@ -6,10 +6,19 @@ import base64
 import json
 import mimetypes
 import os
+import sys
+from pathlib import Path
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+import runtime.compat
 import subprocess
 import sys
 import threading
 import time
+import re
+import traceback
 import psutil
 try:
     import pynvml
@@ -93,7 +102,7 @@ def get_system_status():
 
 import webbrowser
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -132,6 +141,9 @@ _DEFAULT_GPU_HOURLY_USD = 0.85
 _MODEL_REUSE_WINDOW_SEC_DEFAULT = 150
 _MODEL_CLEANUP_WINDOW_SEC_DEFAULT = 900
 _MODEL_REAPER_INTERVAL_SEC = 10
+_LOG_LINE_PATTERN = re.compile(
+    r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)?\s+\[(?P<level>[A-Za-z]+)\]\s?(?P<msg>.*)$"
+)
 
 
 def _utc_now_iso() -> str:
@@ -185,6 +197,260 @@ def _safe_text(value: Any, *, default: str = "", max_length: int = 4000) -> str:
     if max_length > 0 and len(text) > max_length:
         text = text[:max_length]
     return text
+
+
+def _safe_report_branch_token(value: Any, *, default: str = "canonical") -> str:
+    text = _safe_text(value, default=default, max_length=120)
+    token = re.sub(r"[^A-Za-z0-9_.-]+", "_", text).strip("_")
+    return token or default
+
+
+def _normalize_eval_source(value: Any, *, default: str = "latest") -> str:
+    token = _safe_text(value, default=default, max_length=40).lower()
+    if token in {"run", "run_id"}:
+        return "run"
+    if token in {"story", "story_root", "path"}:
+        return "story_root"
+    return "latest"
+
+
+def _normalize_pre_eval_policy(value: Any, *, default: str = "stop") -> str:
+    token = _safe_text(value, default=default, max_length=16).lower()
+    if token in {"stop", "hard_stop", "hard-stop"}:
+        return "stop"
+    return "warn"
+
+
+def _normalize_progress_line(line: str) -> str:
+    # Some Windows code pages turn unicode bar glyphs into replacement pairs
+    # like "�i" in tqdm output. Normalize these pairs to readable ASCII.
+    if "�" in line and "%" in line and "|" in line:
+        return re.sub(r"�.", "#", line)
+    return line
+
+
+def _build_subprocess_env() -> Dict[str, str]:
+    env = dict(os.environ)
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
+    # Do not force TQDM_ASCII via env string; a single-char value can break tqdm
+    # formatting (nsyms=0) in some call paths.
+    return env
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = str(os.environ.get(name, "")).strip().lower()
+    if not raw:
+        return bool(default)
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _process_cmdline_text(cmdline: Any) -> str:
+    if isinstance(cmdline, (list, tuple)):
+        return " ".join(str(part) for part in cmdline if part is not None)
+    return str(cmdline or "")
+
+
+def _looks_like_dashboard_process(cmdline: Any) -> bool:
+    text = _process_cmdline_text(cmdline)
+    normalized = " ".join(text.lower().replace('"', " ").split())
+    return "--dashboard" in normalized and "-m pipeline" in normalized
+
+
+def _collect_port_listener_processes(port: int) -> List[psutil.Process]:
+    target_port = _safe_int(port, 8765, min_value=1, max_value=65535)
+    try:
+        conns = psutil.net_connections(kind="tcp")
+    except Exception:
+        return []
+
+    seen: Dict[int, psutil.Process] = {}
+    for conn in conns:
+        if conn.status != psutil.CONN_LISTEN:
+            continue
+        laddr = conn.laddr
+        local_port: Optional[int] = None
+        if hasattr(laddr, "port"):
+            local_port = getattr(laddr, "port")
+        elif isinstance(laddr, tuple) and len(laddr) >= 2:
+            local_port = _safe_int(laddr[1], default=0, min_value=0, max_value=65535)
+        if local_port != target_port:
+            continue
+        pid = _safe_int(getattr(conn, "pid", 0), default=0, min_value=0)
+        if pid <= 0 or pid in seen:
+            continue
+        try:
+            seen[pid] = psutil.Process(pid)
+        except Exception:
+            continue
+    return list(seen.values())
+
+
+def _terminate_psutil_tree(root: psutil.Process, *, graceful_timeout: float = 6.0, force_timeout: float = 2.5) -> None:
+    targets: List[psutil.Process] = []
+    try:
+        targets = root.children(recursive=True)
+    except Exception:
+        targets = []
+    targets.append(root)
+
+    unique: Dict[int, psutil.Process] = {}
+    for proc in targets:
+        try:
+            unique[proc.pid] = proc
+        except Exception:
+            continue
+    all_targets = list(unique.values())
+    if not all_targets:
+        return
+
+    for proc in all_targets:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+
+    _, alive = psutil.wait_procs(all_targets, timeout=max(0.5, float(graceful_timeout)))
+    if alive:
+        for proc in alive:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        psutil.wait_procs(alive, timeout=max(0.3, float(force_timeout)))
+
+
+def _terminate_subprocess_tree(
+    process: subprocess.Popen[str],
+    *,
+    graceful_timeout: float = 8.0,
+    force_timeout: float = 3.0,
+) -> Optional[int]:
+    if process.poll() is not None:
+        return process.poll()
+
+    try:
+        root = psutil.Process(process.pid)
+    except Exception:
+        root = None
+
+    if root is not None:
+        _terminate_psutil_tree(root, graceful_timeout=graceful_timeout, force_timeout=force_timeout)
+    else:
+        try:
+            process.terminate()
+            process.wait(timeout=max(0.5, float(graceful_timeout)))
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=max(0.3, float(force_timeout)))
+
+    if process.poll() is None:
+        try:
+            process.kill()
+        except Exception:
+            pass
+        try:
+            process.wait(timeout=max(0.3, float(force_timeout)))
+        except Exception:
+            pass
+    return process.poll()
+
+
+def _describe_process(proc: psutil.Process) -> str:
+    try:
+        exe = proc.exe()
+    except Exception:
+        exe = ""
+    try:
+        cmdline = _process_cmdline_text(proc.cmdline())
+    except Exception:
+        cmdline = ""
+    if exe and cmdline:
+        return f"{exe} | {cmdline}"
+    return exe or cmdline or f"pid={proc.pid}"
+
+
+def _same_workspace_dashboard_process(proc: psutil.Process) -> bool:
+    def _norm_path(value: str) -> str:
+        return str(value or "").strip().replace("\\", "/").lower().rstrip("/")
+
+    workspace_root = _norm_path(str(Path(__file__).resolve().parent.parent))
+    if not workspace_root:
+        return True
+
+    try:
+        proc_cwd = _norm_path(proc.cwd())
+        if proc_cwd == workspace_root or proc_cwd.startswith(workspace_root + "/"):
+            return True
+    except Exception:
+        pass
+
+    try:
+        cmdline_text = _norm_path(_process_cmdline_text(proc.cmdline()))
+        if workspace_root in cmdline_text:
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+def _ensure_dashboard_port_ready(port: int) -> None:
+    reclaim_enabled = _env_flag("DASHBOARD_RECLAIM_PORT", default=True)
+    listeners = _collect_port_listener_processes(port)
+    if not listeners:
+        return
+    survivors: List[psutil.Process] = []
+
+    for proc in listeners:
+        if proc.pid == os.getpid():
+            continue
+        is_dashboard = False
+        try:
+            is_dashboard = _looks_like_dashboard_process(proc.cmdline())
+        except Exception:
+            is_dashboard = False
+
+        if not is_dashboard:
+            raise RuntimeError(
+                f"Port {port} is already in use by non-dashboard process: {_describe_process(proc)}"
+            )
+
+        if not _same_workspace_dashboard_process(proc):
+            raise RuntimeError(
+                f"Port {port} is occupied by dashboard from another workspace: {_describe_process(proc)}"
+            )
+
+        if not reclaim_enabled:
+            raise RuntimeError(
+                f"Port {port} occupied by another dashboard (PID {proc.pid}). "
+                f"Set DASHBOARD_RECLAIM_PORT=1 to auto-reclaim, or stop it manually."
+            )
+
+        print(f"[dashboard] Reclaiming port {port} from PID {proc.pid}...")
+        try:
+            _terminate_psutil_tree(proc)
+        except Exception as exc:
+            survivors.append(proc)
+            print(f"[dashboard] Failed to terminate PID {proc.pid}: {exc}")
+
+    if survivors:
+        raise RuntimeError(f"Unable to reclaim port {port}; stale dashboard process still running")
+
+    # Final guard against race conditions (progressive backoff for Windows).
+    for attempt in range(15):
+        if not _collect_port_listener_processes(port):
+            return
+        time.sleep(0.25 + attempt * 0.1)
+    raise RuntimeError(f"Port {port} is still occupied after reclaim attempts")
+
+
+def _popen_kwargs() -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = {}
+    if os.name == "nt":
+        kwargs["creationflags"] = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    return kwargs
 
 
 def _parse_iso_datetime(raw: Any) -> Optional[datetime]:
@@ -250,7 +516,9 @@ def _default_runner_payload(last_config: Dict[str, Any]) -> Dict[str, Any]:
         "current_book": None,
         "current_attempt": 1,
         "current_stage": "idle",
+        "last_story_root": None,
         "last_error": None,
+        "pre_evaluation": None,
         "updated_at": _utc_now_iso(),
     }
 
@@ -273,6 +541,7 @@ class DashboardRuntime:
         self.runs_dir = self.root_dir / "runs"
         self.records_dir = self.runs_dir / "dashboard_records"
         self.status_file = self.records_dir / "dashboard_status.json"
+        self.run_lock_file = self.records_dir / "dashboard_run.lock"
         self.history_file = self.records_dir / "dashboard_history.json"
         self.configs_file = self.records_dir / "dashboard_config_versions.json"
         self.alert_file = self.records_dir / "dashboard_alerts.json"
@@ -292,6 +561,7 @@ class DashboardRuntime:
         self.current_run_started_iso: Optional[str] = None
         self.current_exit_code: Optional[int] = None
         self.current_status_signature: Optional[str] = None
+        self.current_lock_token: Optional[str] = None
 
         self.active_job: Optional[Dict[str, Any]] = None
         self.pending_jobs: List[Dict[str, Any]] = []
@@ -412,6 +682,159 @@ class DashboardRuntime:
                     legacy_path.unlink()
                 except Exception:
                     pass
+
+    @staticmethod
+    def _pid_alive(pid: Any) -> bool:
+        candidate = _safe_int(pid, 0, min_value=0)
+        if candidate <= 0:
+            return False
+        try:
+            proc = psutil.Process(candidate)
+            return proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
+        except Exception:
+            return False
+
+    @staticmethod
+    def _normalize_cmdline_text(value: Any) -> str:
+        return str(value or "").strip().replace("\\", "/").lower()
+
+    def _find_external_chief_process(self) -> Optional[Dict[str, Any]]:
+        managed_pid = self.process.pid if self.process and self.process.poll() is None else 0
+        dashboard_pid = os.getpid()
+        chief_hint = self._normalize_cmdline_text(str((self.root_dir / "chief.py").resolve()))
+        status_hint = self._normalize_cmdline_text(str(self.status_file.resolve()))
+
+        try:
+            iterator = psutil.process_iter(attrs=["pid", "cmdline"])
+        except Exception:
+            return None
+
+        for proc in iterator:
+            try:
+                pid = _safe_int(proc.info.get("pid"), 0, min_value=0)
+                if pid <= 0 or pid in {dashboard_pid, managed_pid}:
+                    continue
+                if not self._pid_alive(pid):
+                    continue
+
+                cmdline_parts = proc.info.get("cmdline") or []
+                if not cmdline_parts:
+                    continue
+                cmdline_text = self._normalize_cmdline_text(
+                    " ".join(str(part) for part in cmdline_parts if part)
+                )
+                if "chief.py" not in cmdline_text:
+                    continue
+
+                same_workspace = (chief_hint and chief_hint in cmdline_text) or (
+                    status_hint and status_hint in cmdline_text
+                )
+                if not same_workspace:
+                    continue
+
+                return {
+                    "pid": pid,
+                    "command": " ".join(str(part) for part in cmdline_parts if part),
+                }
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+            except Exception:
+                continue
+
+        return None
+
+    def _acquire_cross_process_run_lock(self, run_id: str) -> Tuple[bool, str]:
+        stale_startup_window_sec = 120.0
+
+        for _ in range(3):
+            token = uuid4().hex
+            payload = {
+                "token": token,
+                "run_id": str(run_id or ""),
+                "dashboard_pid": os.getpid(),
+                "chief_pid": None,
+                "created_at": _utc_now_iso(),
+                "created_at_ts": time.time(),
+            }
+
+            try:
+                fd = os.open(str(self.run_lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                existing = self._read_json_dict(self.run_lock_file)
+                now_ts = time.time()
+                if not existing:
+                    try:
+                        self.run_lock_file.unlink()
+                        continue
+                    except Exception:
+                        return False, "run lock exists but cannot be inspected"
+
+                existing_run = str(existing.get("run_id") or "")
+                existing_chief_pid = _safe_int(existing.get("chief_pid"), 0, min_value=0)
+                existing_dashboard_pid = _safe_int(existing.get("dashboard_pid"), 0, min_value=0)
+                existing_created_ts = _safe_float(existing.get("created_at_ts"), 0.0)
+
+                if self._pid_alive(existing_chief_pid):
+                    return False, f"another run is active (run_id={existing_run}, pid={existing_chief_pid})"
+
+                startup_recent = (now_ts - existing_created_ts) < stale_startup_window_sec
+                if self._pid_alive(existing_dashboard_pid) and startup_recent:
+                    return False, f"another dashboard is starting a run (run_id={existing_run})"
+
+                try:
+                    self.run_lock_file.unlink()
+                    continue
+                except Exception:
+                    return False, f"stale run lock detected but cannot remove (run_id={existing_run})"
+            except Exception as exc:
+                return False, f"failed to create run lock: {exc}"
+
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(payload, handle, ensure_ascii=False, indent=2)
+            except Exception as exc:
+                try:
+                    if self.run_lock_file.exists():
+                        self.run_lock_file.unlink()
+                except Exception:
+                    pass
+                return False, f"failed to write run lock: {exc}"
+
+            self.current_lock_token = token
+            return True, ""
+
+        return False, "unable to acquire run lock"
+
+    def _update_cross_process_run_lock(self, chief_pid: int) -> None:
+        token = self.current_lock_token
+        if not token:
+            return
+
+        payload = self._read_json_dict(self.run_lock_file)
+        if not payload:
+            return
+        if str(payload.get("token") or "") != str(token):
+            return
+
+        payload["chief_pid"] = _safe_int(chief_pid, 0, min_value=0)
+        payload["updated_at"] = _utc_now_iso()
+        payload["updated_at_ts"] = time.time()
+        self._write_json_dict(self.run_lock_file, payload)
+
+    def _release_cross_process_run_lock(self) -> None:
+        token = self.current_lock_token
+        if not token:
+            return
+        try:
+            payload = self._read_json_dict(self.run_lock_file)
+            if payload and str(payload.get("token") or "") != str(token):
+                return
+            if self.run_lock_file.exists():
+                self.run_lock_file.unlink()
+        except Exception:
+            pass
+        finally:
+            self.current_lock_token = None
 
     def _load_history(self) -> None:
         self.history = self._read_json_list(self.history_file)[-_HISTORY_LIMIT:]
@@ -636,6 +1059,14 @@ class DashboardRuntime:
                     pass
 
     def shutdown(self) -> None:
+        try:
+            self.stop_run()
+        except Exception:
+            pass
+        try:
+            self.stop_module_job(None)
+        except Exception:
+            pass
         self.module_worker_stop.set()
         try:
             if self.module_worker and self.module_worker.is_alive():
@@ -649,11 +1080,13 @@ class DashboardRuntime:
         except Exception:
             pass
         self._cleanup_cached_models(force=True)
+        self._release_cross_process_run_lock()
 
     def _append_log_line_locked(self, text: str, *, run_id: Optional[str], level: str = "info") -> None:
         line = text.rstrip("\r\n")
         if not line:
             return
+        line = _normalize_progress_line(line)
         rid = run_id or self.current_run_id or "system"
         self.log_seq += 1
         entry = {
@@ -747,7 +1180,17 @@ class DashboardRuntime:
                 payload.get("strict_voice"),
                 bool(DEFAULT_CHIEF_OPTIONS.strict_voice),
             ),
+            "pre_eval_policy": _normalize_pre_eval_policy(
+                payload.get("pre_eval_policy"),
+                default=str(getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_policy", "stop") or "stop"),
+            ),
+            "pre_eval_threshold": _safe_float(
+                payload.get("pre_eval_threshold"),
+                _safe_float(getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_threshold", 65.0), 65.0),
+            ),
         }
+
+        sanitized["pre_eval_threshold"] = max(0.0, min(100.0, float(sanitized["pre_eval_threshold"])))
 
         if story_input_mode != "custom":
             sanitized["story_prompt"] = ""
@@ -760,22 +1203,23 @@ class DashboardRuntime:
     def _append_module_log_line_locked(self, job_id: str, text: str, *, level: str = "info") -> None:
         line = text.rstrip("\r\n")
         if not line:
-          return
+            return
+        line = _normalize_progress_line(line)
         self.module_log_seq += 1
         entry = {
-          "seq": self.module_log_seq,
-          "ts": _utc_now_iso(),
-          "job_id": job_id,
-          "level": level,
-          "text": line,
+            "seq": self.module_log_seq,
+            "ts": _utc_now_iso(),
+            "job_id": job_id,
+            "level": level,
+            "text": line,
         }
         if job_id not in self.module_logs:
-          self.module_logs[job_id] = deque(maxlen=_RUN_LOG_BUFFER_SIZE)
+            self.module_logs[job_id] = deque(maxlen=_RUN_LOG_BUFFER_SIZE)
         self.module_logs[job_id].append(entry)
 
     def _append_module_log_line(self, job_id: str, text: str, *, level: str = "info") -> None:
         with self.lock:
-          self._append_module_log_line_locked(job_id, text, level=level)
+            self._append_module_log_line_locked(job_id, text, level=level)
 
     def _record_module_event_locked(self, job_id: str, event: str, details: Optional[Dict[str, Any]] = None) -> None:
         if job_id not in self.module_events:
@@ -1264,8 +1708,7 @@ class DashboardRuntime:
                 job_id = str(job.get("job_id") or "")
                 self._append_module_log_line(job_id, "[story] command: " + " ".join(cmd))
 
-                env = dict(os.environ)
-                env.setdefault("PYTHONUNBUFFERED", "1")
+                env = _build_subprocess_env()
                 process = subprocess.Popen(
                         cmd,
                         cwd=str(self.root_dir),
@@ -1276,6 +1719,7 @@ class DashboardRuntime:
                         errors="replace",
                         bufsize=1,
                         env=env,
+                        **_popen_kwargs(),
                 )
                 with self.lock:
                         if self.module_active_job and str(self.module_active_job.get("job_id")) == job_id:
@@ -2122,6 +2566,500 @@ class DashboardRuntime:
             return fallback
         return None
 
+    def _normalize_story_root_value(self, raw_value: Any) -> Tuple[Optional[str], Optional[Path]]:
+        text = _safe_text(raw_value, default="", max_length=1200)
+        if not text:
+            return None, None
+        path = self._safe_path_under_root(text)
+        if path and path.exists() and path.is_dir():
+            return self._to_root_relative_path(path), path
+        return text, None
+
+    def _resolve_story_root_for_run(self, run_id: str) -> Optional[Path]:
+        token = _safe_text(run_id, default="", max_length=120)
+        if not token:
+            return None
+
+        candidate_texts: List[str] = []
+        current_run_id = ""
+
+        with self.lock:
+            current_run_id = str(self.current_run_id or "")
+            active = self.active_job if isinstance(self.active_job, dict) else None
+            if active and str(active.get("run_id") or "") == token:
+                payload = active.get("payload") if isinstance(active.get("payload"), dict) else {}
+                active_story_root = _safe_text(payload.get("story_root"), default="", max_length=1200)
+                if active_story_root:
+                    candidate_texts.append(active_story_root)
+
+            for item in reversed(self.history):
+                if str(item.get("run_id") or "") != token:
+                    continue
+                history_story_root = _safe_text(item.get("story_root"), default="", max_length=1200)
+                if history_story_root:
+                    candidate_texts.append(history_story_root)
+                cfg = item.get("config") if isinstance(item.get("config"), dict) else {}
+                cfg_story_root = _safe_text(cfg.get("story_root"), default="", max_length=1200)
+                if cfg_story_root:
+                    candidate_texts.append(cfg_story_root)
+                break
+
+        if token == current_run_id:
+            runner = self._read_runner_status()
+            runner_story_root = _safe_text(runner.get("last_story_root") or runner.get("story_root"), default="", max_length=1200)
+            if runner_story_root:
+                candidate_texts.append(runner_story_root)
+
+        seen: set[str] = set()
+        for raw in candidate_texts:
+            key = str(raw)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            path = self._safe_path_under_root(raw)
+            if path and path.exists() and path.is_dir():
+                return path
+        return None
+
+    def _find_history_item_for_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        token = _safe_text(run_id, default="", max_length=120)
+        if not token:
+            return None
+        with self.lock:
+            for item in reversed(self.history):
+                if str(item.get("run_id") or "") == token:
+                    return dict(item)
+        return None
+
+    def _story_root_from_report_path(self, report_path: Path, output_root: Path) -> Optional[Path]:
+        try:
+            rel = report_path.relative_to(output_root)
+        except Exception:
+            return report_path.parent if report_path.parent.exists() and report_path.parent.is_dir() else None
+        if len(rel.parts) >= 4:
+            candidate = output_root / rel.parts[0] / rel.parts[1] / rel.parts[2]
+        else:
+            candidate = report_path.parent
+        if not candidate.exists() or not candidate.is_dir():
+            return None
+        return candidate
+
+    def _collect_run_story_roots(self, run_id: str, history_item: Optional[Dict[str, Any]] = None) -> List[Path]:
+        token = _safe_text(run_id, default="", max_length=120)
+        if not token:
+            return []
+
+        run_item = dict(history_item) if isinstance(history_item, dict) else (self._find_history_item_for_run(token) or {})
+        cfg = run_item.get("config") if isinstance(run_item.get("config"), dict) else {}
+        total_hint = _safe_int(
+            run_item.get("total_books"),
+            _safe_int(cfg.get("count"), 0, min_value=0),
+            min_value=0,
+        )
+        category_hint = _safe_text(cfg.get("category"), default="", max_length=64).lower()
+        age_hint = _safe_text(cfg.get("age"), default="", max_length=32).lower()
+
+        started_at = _parse_iso_datetime(run_item.get("started_at"))
+        finished_at = _parse_iso_datetime(run_item.get("finished_at"))
+        now_utc = datetime.now(timezone.utc)
+
+        if started_at is None:
+            started_at = now_utc - timedelta(hours=6)
+        if finished_at is None:
+            finished_at = now_utc
+
+        window_start = started_at - timedelta(minutes=3)
+        window_end = finished_at + timedelta(minutes=8)
+
+        roots_by_key: Dict[str, Dict[str, Any]] = {}
+
+        def _push_root(path: Optional[Path], *, mtime_ts: Optional[float], source: str) -> None:
+            if path is None:
+                return
+            if not path.exists() or not path.is_dir():
+                return
+            rel = self._to_root_relative_path(path)
+            parts = rel.split("/")
+            if len(parts) >= 3 and parts[0].lower() == "output":
+                category_value = parts[1].lower()
+                age_value = parts[2].lower()
+                if category_hint and category_value != category_hint:
+                    return
+                if age_hint and age_value != age_hint:
+                    return
+            try:
+                key = str(path.resolve(strict=False)).lower()
+            except Exception:
+                key = rel.lower()
+
+            ts = float(mtime_ts) if isinstance(mtime_ts, (int, float)) else 0.0
+            current = roots_by_key.get(key)
+            if current is not None and _safe_float(current.get("mtime_ts"), 0.0) > ts:
+                return
+
+            roots_by_key[key] = {
+                "path": path,
+                "mtime_ts": ts,
+                "source": source,
+            }
+
+        for raw_story_root in (
+            run_item.get("story_root"),
+            cfg.get("story_root"),
+        ):
+            normalized_value, normalized_path = self._normalize_story_root_value(raw_story_root)
+            if normalized_path is not None:
+                mtime_ts = None
+                try:
+                    mtime_ts = float(normalized_path.stat().st_mtime)
+                except Exception:
+                    mtime_ts = None
+                _push_root(normalized_path, mtime_ts=mtime_ts, source="history")
+
+        current_run_id = ""
+        with self.lock:
+            current_run_id = str(self.current_run_id or "")
+
+        if token == current_run_id:
+            runner = self._read_runner_status()
+            runner_roots: List[Any] = []
+            for key in ("story_roots", "generated_story_roots", "book_story_roots"):
+                value = runner.get(key)
+                if isinstance(value, list):
+                    runner_roots.extend(value)
+            runner_roots.append(runner.get("last_story_root"))
+            runner_roots.append(runner.get("story_root"))
+
+            for raw_story_root in runner_roots:
+                normalized_value, normalized_path = self._normalize_story_root_value(raw_story_root)
+                if normalized_path is not None:
+                    mtime_ts = None
+                    try:
+                        mtime_ts = float(normalized_path.stat().st_mtime)
+                    except Exception:
+                        mtime_ts = None
+                    _push_root(normalized_path, mtime_ts=mtime_ts, source="runner")
+
+        output_root = self.root_dir / "output"
+        if output_root.exists():
+            for report_path in output_root.rglob("assessment_report.json"):
+                if not report_path.exists() or not report_path.is_file():
+                    continue
+                story_root = self._story_root_from_report_path(report_path, output_root)
+                if story_root is None:
+                    continue
+                try:
+                    mtime_dt = datetime.fromtimestamp(float(report_path.stat().st_mtime), tz=timezone.utc)
+                except Exception:
+                    continue
+                if mtime_dt < window_start or mtime_dt > window_end:
+                    continue
+                _push_root(story_root, mtime_ts=mtime_dt.timestamp(), source="report_window")
+
+        if not roots_by_key and output_root.exists():
+            for report_path in output_root.rglob("assessment_report.json"):
+                if not report_path.exists() or not report_path.is_file():
+                    continue
+                story_root = self._story_root_from_report_path(report_path, output_root)
+                if story_root is None:
+                    continue
+                try:
+                    mtime_ts = float(report_path.stat().st_mtime)
+                except Exception:
+                    mtime_ts = 0.0
+                _push_root(story_root, mtime_ts=mtime_ts, source="report_fallback")
+
+        rows = sorted(
+            roots_by_key.values(),
+            key=lambda item: (
+                _safe_float(item.get("mtime_ts"), 0.0),
+                self._to_root_relative_path(item.get("path")) if isinstance(item.get("path"), Path) else "",
+            ),
+        )
+        roots = [item.get("path") for item in rows if isinstance(item.get("path"), Path)]
+
+        if total_hint > 0 and len(roots) > total_hint:
+            roots = roots[-total_hint:]
+
+        return roots
+
+    def _discover_run_log_files(self, run_id: str, *, history_item: Optional[Dict[str, Any]] = None) -> List[Path]:
+        token = _safe_text(run_id, default="", max_length=120)
+        if not token:
+            return []
+
+        run_item = dict(history_item) if isinstance(history_item, dict) else (self._find_history_item_for_run(token) or {})
+        cfg = run_item.get("config") if isinstance(run_item.get("config"), dict) else {}
+        total_hint = _safe_int(
+            run_item.get("total_books"),
+            _safe_int(cfg.get("count"), 1, min_value=1),
+            min_value=1,
+            max_value=60,
+        )
+
+        started_at = _parse_iso_datetime(run_item.get("started_at"))
+        finished_at = _parse_iso_datetime(run_item.get("finished_at"))
+        now_utc = datetime.now(timezone.utc)
+
+        if started_at is None and finished_at is None:
+            started_at = now_utc - timedelta(hours=12)
+            finished_at = now_utc
+        elif started_at is None:
+            started_at = finished_at - timedelta(hours=8)
+        elif finished_at is None:
+            finished_at = started_at + timedelta(hours=8)
+
+        window_start = started_at - timedelta(minutes=8)
+        window_end = finished_at + timedelta(minutes=35)
+
+        rows_in_window: List[Dict[str, Any]] = []
+        rows_all: List[Dict[str, Any]] = []
+        if self.runs_dir.exists():
+            for log_path in self.runs_dir.glob("*/logs/chief.log"):
+                if not log_path.exists() or not log_path.is_file():
+                    continue
+                try:
+                    mtime_dt = datetime.fromtimestamp(float(log_path.stat().st_mtime), tz=timezone.utc)
+                except Exception:
+                    continue
+
+                row = {
+                    "path": log_path,
+                    "mtime_ts": mtime_dt.timestamp(),
+                }
+                rows_all.append(row)
+                if window_start <= mtime_dt <= window_end:
+                    rows_in_window.append(row)
+
+        rows_all.sort(key=lambda item: _safe_float(item.get("mtime_ts"), 0.0))
+        rows_in_window.sort(key=lambda item: _safe_float(item.get("mtime_ts"), 0.0))
+
+        selected = rows_in_window if rows_in_window else rows_all
+        if not selected:
+            return []
+
+        if len(selected) > total_hint:
+            selected = selected[-total_hint:]
+
+        return [item.get("path") for item in selected if isinstance(item.get("path"), Path)]
+
+    def _read_run_logs_from_files(
+        self,
+        run_id: str,
+        *,
+        history_item: Optional[Dict[str, Any]] = None,
+        log_limit: int = 400,
+    ) -> List[Dict[str, Any]]:
+        limit = _safe_int(log_limit, 400, min_value=1, max_value=5000)
+        files = self._discover_run_log_files(run_id, history_item=history_item)
+        if not files:
+            return []
+
+        per_file_limit = max(120, min(1600, (limit // max(1, len(files))) + 120))
+        rows: List[Dict[str, Any]] = []
+        seq = 1
+        add_source_tag = len(files) > 1
+
+        for log_path in files:
+            try:
+                raw_lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception:
+                continue
+
+            if len(raw_lines) > per_file_limit:
+                raw_lines = raw_lines[-per_file_limit:]
+
+            source_tag = log_path.parent.parent.name
+            fallback_ts: Optional[str]
+            try:
+                fallback_ts = datetime.fromtimestamp(float(log_path.stat().st_mtime), tz=timezone.utc).isoformat()
+            except Exception:
+                fallback_ts = None
+
+            for raw in raw_lines:
+                line = _normalize_progress_line(str(raw).rstrip("\r\n"))
+                if not line:
+                    continue
+
+                match = _LOG_LINE_PATTERN.match(line)
+                level = "info"
+                ts: Optional[str] = fallback_ts
+                text = line
+                if match is not None:
+                    ts = str(match.group("ts") or ts or "") or ts
+                    level = str(match.group("level") or "info").lower()
+                    text = str(match.group("msg") or "").strip() or line
+
+                if add_source_tag:
+                    text = f"[{source_tag}] {text}"
+
+                rows.append(
+                    {
+                        "seq": seq,
+                        "ts": ts,
+                        "run_id": run_id,
+                        "level": level,
+                        "text": text,
+                    }
+                )
+                seq += 1
+
+        if len(rows) > limit:
+            rows = rows[-limit:]
+        return rows
+
+    @staticmethod
+    def _extract_overall_score_from_report(payload: Dict[str, Any]) -> Optional[float]:
+        keys = (
+            "overall_score",
+            "overall_score_calibrated",
+            "overall_score_raw",
+            "score",
+        )
+        for key in keys:
+            value = payload.get(key)
+            if isinstance(value, (int, float)):
+                return round(float(value), 2)
+            if isinstance(value, str):
+                try:
+                    return round(float(value.strip()), 2)
+                except Exception:
+                    continue
+        return None
+
+    def _build_run_book_entries(self, run_id: str, *, history_item: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        token = _safe_text(run_id, default="", max_length=120)
+        if not token:
+            return []
+
+        roots = self._collect_run_story_roots(token, history_item=history_item)
+        books: List[Dict[str, Any]] = []
+        for index, story_root in enumerate(roots, start=1):
+            story_root_rel = self._to_root_relative_path(story_root)
+            report_file: Optional[str] = None
+            report_updated_at: Optional[str] = None
+            overall_score: Optional[float] = None
+
+            report_path = None
+            for candidate in self._evaluation_report_candidates(story_root, "canonical"):
+                if candidate.exists() and candidate.is_file():
+                    report_path = candidate
+                    break
+
+            if report_path is not None:
+                report_file = report_path.name
+                try:
+                    report_updated_at = datetime.fromtimestamp(float(report_path.stat().st_mtime), tz=timezone.utc).isoformat()
+                except Exception:
+                    report_updated_at = None
+                try:
+                    report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+                    if isinstance(report_payload, dict):
+                        overall_score = self._extract_overall_score_from_report(report_payload)
+                except Exception:
+                    overall_score = None
+
+            books.append(
+                {
+                    "book_index": index,
+                    "book_id": f"{token}::book:{index}",
+                    "title": story_root.name,
+                    "story_root": story_root_rel,
+                    "report_file": report_file,
+                    "overall_score": overall_score,
+                    "updated_at": report_updated_at,
+                }
+            )
+
+        return books
+
+    def _select_run_book_entry(self, books: List[Dict[str, Any]], book_token: Optional[str]) -> Optional[Dict[str, Any]]:
+        if not books:
+            return None
+
+        token = _safe_text(book_token, default="", max_length=600)
+        if not token:
+            return books[-1]
+
+        if token.isdigit():
+            index = _safe_int(token, 0, min_value=1, max_value=len(books))
+            if 1 <= index <= len(books):
+                return books[index - 1]
+
+        if "::book:" in token:
+            tail = token.rsplit("::book:", 1)[-1]
+            if tail.isdigit():
+                index = _safe_int(tail, 0, min_value=1, max_value=len(books))
+                if 1 <= index <= len(books):
+                    return books[index - 1]
+
+        for item in books:
+            if token == str(item.get("book_id") or ""):
+                return item
+            if token == str(item.get("story_root") or ""):
+                return item
+
+        return books[-1]
+
+    @staticmethod
+    def _evaluation_report_candidates(story_root: Path, requested_branch: str) -> List[Path]:
+        candidates: List[Path] = []
+        branch_token = _safe_report_branch_token(requested_branch)
+        if branch_token != "canonical":
+            candidates.append(story_root / f"assessment_report_{branch_token}.json")
+        candidates.append(story_root / "assessment_report.json")
+        return candidates
+
+    def _find_latest_story_root_with_report(self, requested_branch: str) -> Optional[Path]:
+        output_root = self.root_dir / "output"
+        if not output_root.exists():
+            return None
+
+        branch_token = _safe_report_branch_token(requested_branch)
+        report_names: List[str] = []
+        if branch_token != "canonical":
+            report_names.append(f"assessment_report_{branch_token}.json")
+        report_names.append("assessment_report.json")
+
+        latest_story_root: Optional[Path] = None
+        latest_mtime = -1.0
+        seen_roots: set[str] = set()
+
+        for report_name in report_names:
+            for report_path in output_root.rglob(report_name):
+                try:
+                    rel = report_path.relative_to(output_root)
+                except Exception:
+                    rel = None
+
+                if rel is not None and len(rel.parts) >= 4:
+                    # Normalize to top-level story root: output/<category>/<age>/<story>/...
+                    story_root = output_root / rel.parts[0] / rel.parts[1] / rel.parts[2]
+                else:
+                    story_root = report_path.parent
+
+                if not story_root.exists() or not story_root.is_dir():
+                    continue
+
+                try:
+                    root_key = str(story_root.resolve())
+                except Exception:
+                    root_key = str(story_root)
+                if root_key in seen_roots:
+                    continue
+
+                seen_roots.add(root_key)
+                try:
+                    mtime = float(report_path.stat().st_mtime)
+                except Exception:
+                    mtime = 0.0
+
+                if mtime >= latest_mtime:
+                    latest_mtime = mtime
+                    latest_story_root = story_root
+
+        return latest_story_root
+
     def _find_resource_dirs(self, story_root: Path) -> List[Path]:
         candidates: List[Path] = []
         for name in ("resource", "resources"):
@@ -2330,6 +3268,77 @@ class DashboardRuntime:
             "story_roots": [str(p) for p in story_roots],
             "story_root": str(selected_root),
             "items": items,
+        }
+
+    def list_gallery_stories(self, *, limit: int = 120) -> Dict[str, Any]:
+        roots = self._discover_story_roots_with_images(limit=max(limit, 24) * 2)
+        rows: List[Dict[str, Any]] = []
+
+        for story_root in roots:
+            story_root_rel = self._to_root_relative_path(story_root)
+            rel_parts = story_root_rel.split("/")
+            category = rel_parts[1] if len(rel_parts) >= 2 else "-"
+            age = rel_parts[2] if len(rel_parts) >= 3 else "-"
+
+            info: Dict[str, Any] = {}
+            for candidate in (story_root / "story.json", story_root / "story" / "story.json"):
+                if not candidate.exists() or not candidate.is_file():
+                    continue
+                try:
+                    payload = json.loads(candidate.read_text(encoding="utf-8"))
+                    if isinstance(payload, dict):
+                        info = payload
+                        break
+                except Exception:
+                    continue
+
+            cover_candidates: List[Path] = [
+                story_root / "image" / "main" / "book_cover.png",
+                story_root / "story" / "image" / "main" / "book_cover.png",
+            ]
+            for resource_dir in self._find_resource_dirs(story_root):
+                image_root = self._resolve_image_root_for_resource(story_root, resource_dir)
+                cover_candidates.append(image_root / "main" / "book_cover.png")
+
+            cover_path: Optional[str] = None
+            cover_mtime = 0.0
+            for candidate in cover_candidates:
+                if not candidate.exists() or not candidate.is_file():
+                    continue
+                cover_path = self._to_root_relative_path(candidate)
+                try:
+                    cover_mtime = float(candidate.stat().st_mtime)
+                except Exception:
+                    cover_mtime = 0.0
+                break
+
+            root_mtime = 0.0
+            try:
+                root_mtime = float(story_root.stat().st_mtime)
+            except Exception:
+                root_mtime = 0.0
+
+            modified = max(root_mtime, cover_mtime)
+            title = str(info.get("title") or story_root.name)
+            rows.append(
+                {
+                    "title": title,
+                    "category": category,
+                    "age": age,
+                    "path": story_root_rel,
+                    "story_root": story_root_rel,
+                    "modified": modified,
+                    "cover": cover_path,
+                }
+            )
+
+            if len(rows) >= limit:
+                break
+
+        rows.sort(key=lambda item: float(item.get("modified") or 0.0), reverse=True)
+        return {
+            "ok": True,
+            "images": rows[:limit],
         }
 
     def _discover_story_roots_with_narration(self, limit: int = 120) -> List[Path]:
@@ -2606,6 +3615,10 @@ class DashboardRuntime:
             str(payload["pages"]),
             "--story-input-mode",
             str(payload.get("story_input_mode") or "preset"),
+            "--pre-eval-policy",
+            str(payload.get("pre_eval_policy") or "stop"),
+            "--pre-eval-threshold",
+            str(payload.get("pre_eval_threshold", 65.0)),
         ]
 
         if payload.get("age"):
@@ -2744,6 +3757,25 @@ class DashboardRuntime:
         failed_books = _safe_int(effective_runner.get("failed_books"), 0, min_value=0)
         completed_books = _safe_int(effective_runner.get("completed_books"), success_books + failed_books, min_value=0)
 
+        story_root_value: Optional[str] = None
+        story_root_path: Optional[Path] = None
+        for raw_story_root in (
+            effective_runner.get("last_story_root"),
+            effective_runner.get("story_root"),
+            payload.get("story_root"),
+        ):
+            normalized_value, normalized_path = self._normalize_story_root_value(raw_story_root)
+            if normalized_value and story_root_value is None:
+                story_root_value = normalized_value
+            if normalized_path is not None:
+                story_root_path = normalized_path
+                story_root_value = self._to_root_relative_path(normalized_path)
+                break
+
+        evaluation_ready = False
+        if story_root_path is not None:
+            evaluation_ready = (story_root_path / "assessment_report.json").exists()
+
         history_item = {
             "run_id": run_id,
             "job_id": active.get("job_id"),
@@ -2758,6 +3790,8 @@ class DashboardRuntime:
             "completed_books": completed_books,
             "success_books": success_books,
             "failed_books": failed_books,
+            "story_root": story_root_value,
+            "evaluation_ready": evaluation_ready,
             "current_stage": effective_runner.get("current_stage"),
             "last_error": effective_runner.get("last_error") or self.last_error,
             "config": dict(payload),
@@ -2798,6 +3832,7 @@ class DashboardRuntime:
         self.current_run_started_iso = None
         self.current_exit_code = exit_code
         self.current_status_signature = None
+        self._release_cross_process_run_lock()
 
     def _start_next_job_locked(self) -> Dict[str, Any]:
         if self._is_running():
@@ -2806,6 +3841,38 @@ class DashboardRuntime:
             return {"ok": True, "started": False, "reason": "module_job_running"}
         if not self.pending_jobs:
             return {"ok": True, "started": False, "reason": "queue_empty"}
+
+        first_pending = self.pending_jobs[0] if self.pending_jobs else {}
+        pending_run_id = str(first_pending.get("run_id") or "")
+
+        external_chief = self._find_external_chief_process()
+        if external_chief is not None:
+            external_pid = _safe_int(external_chief.get("pid"), 0, min_value=0)
+            self._append_log_line_locked(
+                f"[queue] Start deferred: external chief process detected (pid={external_pid}).",
+                run_id=pending_run_id,
+                level="warning",
+            )
+            return {
+                "ok": True,
+                "started": False,
+                "reason": "external_chief_running",
+                "external_pid": external_pid,
+            }
+
+        locked, lock_reason = self._acquire_cross_process_run_lock(pending_run_id)
+        if not locked:
+            self._append_log_line_locked(
+                f"[queue] Start deferred: {lock_reason}",
+                run_id=pending_run_id,
+                level="warning",
+            )
+            return {
+                "ok": True,
+                "started": False,
+                "reason": "external_run_lock",
+                "lock_reason": lock_reason,
+            }
 
         # Ensure chief.py gets clean VRAM and no stale dashboard backend instances.
         with self.general_lock:
@@ -2832,8 +3899,7 @@ class DashboardRuntime:
         cmd = self._build_command(payload)
 
         try:
-            env = dict(os.environ)
-            env.setdefault("PYTHONUNBUFFERED", "1")
+            env = _build_subprocess_env()
             process = subprocess.Popen(
                 cmd,
                 cwd=str(self.root_dir),
@@ -2844,8 +3910,10 @@ class DashboardRuntime:
                 errors="replace",
                 bufsize=1,
                 env=env,
+                **_popen_kwargs(),
             )
         except Exception as exc:
+            self._release_cross_process_run_lock()
             self.last_error = str(exc)
             self._append_log_line_locked(f"[dashboard] Failed to start run process: {exc}", run_id=run_id, level="error")
             self._record_run_event_locked(run_id, "failed_to_start", {"error": str(exc)})
@@ -2874,6 +3942,7 @@ class DashboardRuntime:
             return {"ok": False, "started": False, "error": f"Failed to start process: {exc}"}
 
         self.process = process
+        self._update_cross_process_run_lock(process.pid)
         job["status"] = "running"
 
         self._record_run_event_locked(run_id, "started", {
@@ -2981,13 +4050,7 @@ class DashboardRuntime:
 
         exit_code: Optional[int] = None
         try:
-            process.terminate()
-            process.wait(timeout=8)
-            exit_code = process.poll()
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=3)
-            exit_code = process.poll()
+            exit_code = _terminate_subprocess_tree(process, graceful_timeout=8.0, force_timeout=3.0)
         except Exception as exc:
             return {"ok": False, "error": f"Failed to stop process: {exc}"}
 
@@ -3332,7 +4395,14 @@ class DashboardRuntime:
                 return {"ok": True, "config": cfg, "version": item}
         return {"ok": False, "error": f"Config version not found: {version_id}"}
 
-    def get_run_detail(self, run_id: str, *, log_limit: int = 300, event_limit: int = 200) -> Dict[str, Any]:
+    def get_run_detail(
+        self,
+        run_id: str,
+        *,
+        log_limit: int = 300,
+        event_limit: int = 200,
+        book: Optional[str] = None,
+    ) -> Dict[str, Any]:
         self._sync_process_exit()
         log_limit = _safe_int(log_limit, 300, min_value=1, max_value=1200)
         event_limit = _safe_int(event_limit, 200, min_value=1, max_value=1200)
@@ -3346,6 +4416,10 @@ class DashboardRuntime:
 
             if history_item is None and self.active_job and str(self.active_job.get("run_id")) == str(run_id):
                 payload = self.active_job.get("payload") if isinstance(self.active_job.get("payload"), dict) else {}
+                runner_status = self._read_runner_status()
+                story_root_value, story_root_path = self._normalize_story_root_value(
+                    runner_status.get("last_story_root") or payload.get("story_root")
+                )
                 history_item = {
                     "run_id": run_id,
                     "job_id": self.active_job.get("job_id"),
@@ -3360,6 +4434,8 @@ class DashboardRuntime:
                     "completed_books": 0,
                     "success_books": 0,
                     "failed_books": 0,
+                    "story_root": story_root_value,
+                    "evaluation_ready": bool(story_root_path and (story_root_path / "assessment_report.json").exists()),
                     "config": dict(payload),
                 }
 
@@ -3371,12 +4447,185 @@ class DashboardRuntime:
             related_alerts = [dict(item) for item in self.alerts if str(item.get("run_id") or "") == str(run_id)]
             related_alerts.sort(key=lambda item: str(item.get("ts") or ""), reverse=True)
 
+        run_state = str(history_item.get("state") or "").strip().lower()
+        file_logs = self._read_run_logs_from_files(str(run_id), history_item=history_item, log_limit=log_limit)
+        if file_logs:
+            if run_state in {"completed", "failed", "stopped", "error"} or not logs:
+                logs = file_logs[-log_limit:]
+            else:
+                seen: set[Tuple[str, str]] = set()
+                merged: List[Dict[str, Any]] = []
+                for entry in file_logs + logs:
+                    key = (str(entry.get("ts") or ""), str(entry.get("text") or ""))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    merged.append(entry)
+                if len(merged) > log_limit:
+                    merged = merged[-log_limit:]
+                logs = merged
+
+        books = self._build_run_book_entries(run_id, history_item=history_item)
+        selected_book = self._select_run_book_entry(books, book)
+
         return {
             "ok": True,
             "run": history_item,
+            "books": books,
+            "selected_book": selected_book,
             "logs": logs,
             "events": events,
             "alerts": related_alerts,
+        }
+
+    def get_evaluation(
+        self,
+        *,
+        source: Optional[str] = None,
+        run_id: Optional[str] = None,
+        story_root_hint: Optional[str] = None,
+        book: Optional[str] = None,
+        branch: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        source_mode = _normalize_eval_source(source, default="latest")
+        requested_branch = _safe_report_branch_token(branch, default="canonical").lower()
+        run_token = _safe_text(run_id, default="", max_length=120)
+        story_root_token = _safe_text(story_root_hint, default="", max_length=1200)
+        book_token = _safe_text(book, default="", max_length=600)
+
+        base_meta: Dict[str, Any] = {
+            "source": source_mode,
+            "requested_branch": requested_branch,
+            "run_id": run_token or None,
+            "story_root": story_root_token or None,
+            "book": book_token or None,
+            "report_file": None,
+        }
+
+        story_root_path: Optional[Path] = None
+        run_books: List[Dict[str, Any]] = []
+        selected_book: Optional[Dict[str, Any]] = None
+
+        if source_mode == "run":
+            if not run_token:
+                return {
+                    "ok": False,
+                    "error": "run_id is required when source=run.",
+                    "meta": base_meta,
+                }
+
+            run_books = self._build_run_book_entries(run_token)
+            selected_book = self._select_run_book_entry(run_books, book_token)
+            if selected_book is not None:
+                selected_story_root = _safe_text(selected_book.get("story_root"), default="", max_length=1200)
+                story_root_path = self._safe_path_under_root(selected_story_root)
+
+            if story_root_path is None:
+                story_root_path = self._resolve_story_root_for_run(run_token)
+
+            if story_root_path is not None and not run_books:
+                fallback_story_root = self._to_root_relative_path(story_root_path)
+                run_books = [
+                    {
+                        "book_index": 1,
+                        "book_id": f"{run_token}::book:1",
+                        "title": story_root_path.name,
+                        "story_root": fallback_story_root,
+                        "report_file": None,
+                        "overall_score": None,
+                        "updated_at": None,
+                    }
+                ]
+                selected_book = run_books[0]
+
+            if story_root_path is None:
+                return {
+                    "ok": False,
+                    "error": f"Unable to resolve story_root for run_id: {run_token}",
+                    "meta": base_meta,
+                }
+        elif source_mode == "story_root":
+            if not story_root_token:
+                return {
+                    "ok": False,
+                    "error": "story_root is required when source=story_root.",
+                    "meta": base_meta,
+                }
+            story_root_path = self._safe_path_under_root(story_root_token)
+            if story_root_path is None or (not story_root_path.exists()) or (not story_root_path.is_dir()):
+                return {
+                    "ok": False,
+                    "error": f"Invalid story_root: {story_root_token}",
+                    "meta": base_meta,
+                }
+        else:
+            latest_root = self._find_latest_story_root_with_report(requested_branch)
+            if latest_root is None:
+                latest_root = find_latest_story_root(self.root_dir / "output")
+            if latest_root and latest_root.exists() and latest_root.is_dir():
+                story_root_path = latest_root
+            else:
+                return {
+                    "ok": False,
+                    "error": "No stories found.",
+                    "meta": base_meta,
+                }
+
+        if story_root_path is None:
+            return {
+                "ok": False,
+                "error": "No evaluation story root resolved.",
+                "meta": base_meta,
+            }
+
+        story_root_rel = self._to_root_relative_path(story_root_path)
+        base_meta["story_root"] = story_root_rel
+
+        candidate_files = self._evaluation_report_candidates(story_root_path, requested_branch)
+        report_file = next((candidate for candidate in candidate_files if candidate.exists() and candidate.is_file()), None)
+
+        if report_file is None:
+            searched_files = [path.name for path in candidate_files]
+            return {
+                "ok": False,
+                "error": "No assessment report found for selected story.",
+                "meta": {
+                    **base_meta,
+                    "searched_files": searched_files,
+                },
+                "requested_branch": requested_branch,
+                "searched_files": searched_files,
+            }
+
+        try:
+            diagnostics = json.loads(report_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": f"Failed to parse assessment report: {exc}",
+                "meta": {
+                    **base_meta,
+                    "report_file": report_file.name,
+                },
+            }
+
+        response_meta = {
+            **base_meta,
+            "story_root": story_root_rel,
+            "report_file": report_file.name,
+        }
+
+        return {
+            "ok": True,
+            "diagnostics": diagnostics,
+            "meta": response_meta,
+            "source": source_mode,
+            "run_id": run_token or None,
+            "story_root": story_root_rel,
+            "requested_branch": requested_branch,
+            "report_file": report_file.name,
+            "books": run_books,
+            "selected_book": selected_book,
         }
 
     def get_status(self) -> Dict[str, Any]:
@@ -3520,12 +4769,62 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if parsed.path.startswith("/static/"):
+            try:
+                # Remove /static/ prefix
+                safe_path = parsed.path[8:].replace("..", "")
+                full_path = Path("pipeline/static") / safe_path
+                if full_path.is_file():
+                    with open(full_path, "rb") as static_f:
+                        content = static_f.read()
+                    self.send_response(200)
+                    content_type = "text/css" if parsed.path.endswith(".css") else "application/javascript" if parsed.path.endswith(".js") else "application/octet-stream"
+                    self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+                    self.send_header("Content-Length", str(len(content)))
+                    self.end_headers()
+                    self.wfile.write(content)
+                    return
+            except Exception as e:
+                pass
+            self.send_error(404, "File Not Found")
+            return
+
         if parsed.path == "/api/system":
             self._send_json(get_system_status())
             return
 
         if parsed.path == "/api/status":
             self._send_json(self.runtime.get_status())
+            return
+
+        if parsed.path == "/api/evaluation":
+            try:
+                source = (query.get("source") or ["latest"])[0]
+                run_id = (query.get("run_id") or [""])[0]
+                story_root = (query.get("story_root") or [""])[0]
+                book = (query.get("book") or [""])[0]
+                branch = (query.get("branch") or ["canonical"])[0]
+                payload = self.runtime.get_evaluation(
+                    source=source,
+                    run_id=run_id,
+                    story_root_hint=story_root,
+                    book=book,
+                    branch=branch,
+                )
+                self._send_json(payload)
+            except Exception as e:
+                try:
+                    print(
+                        "[dashboard] /api/evaluation failed\n" + traceback.format_exc(),
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                except Exception:
+                    pass
+                try:
+                    self._send_json({"ok": False, "error": f"evaluation endpoint failed: {e}"}, status=500)
+                except Exception:
+                    pass
             return
 
         if parsed.path == "/api/logs":
@@ -3538,6 +4837,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/history":
             limit = _safe_int((query.get("limit") or [20])[0], 20, min_value=1, max_value=200)
             self._send_json(self.runtime.get_history(limit=limit))
+            return
+
+        if parsed.path == "/api/run-detail":
+            run_id = (query.get("run_id") or [""])[0]
+            if not str(run_id or "").strip():
+                self._send_json({"ok": False, "error": "run_id is required"}, status=400)
+                return
+            log_limit = _safe_int((query.get("log_limit") or [300])[0], 300, min_value=1, max_value=1200)
+            event_limit = _safe_int((query.get("event_limit") or [200])[0], 200, min_value=1, max_value=1200)
+            book = (query.get("book") or [""])[0]
+            self._send_json(self.runtime.get_run_detail(run_id=str(run_id), log_limit=log_limit, event_limit=event_limit, book=book))
             return
 
         if parsed.path == "/api/modules/jobs":
@@ -3583,8 +4893,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
 
         if parsed.path == "/api/templates":
-            import json
-
             p = self.runtime.root_dir / "runs" / "prompt_templates.json"
             data = []
             if p.exists():
@@ -3599,71 +4907,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/gallery":
-            galleries = []
-            output_root = self.runtime.root_dir / "output"
-            if output_root.exists():
-                for story_json in output_root.rglob("story.json"):
-                    story = story_json.parent
-                    try:
-                        rel_story = story.relative_to(output_root)
-                    except Exception:
-                        continue
-
-                    # 跳過暫存資料夾
-                    if not rel_story.parts or rel_story.parts[0] == "暫存":
-                        continue
-
-                    info: Dict[str, Any] = {}
-                    try:
-                        info = json.loads(story_json.read_text(encoding="utf-8"))
-                        if not isinstance(info, dict):
-                            info = {}
-                    except Exception:
-                        info = {}
-
-                    cover_candidates = [
-                        story / "image" / "main" / "book_cover.png",
-                        story / "story" / "image" / "main" / "book_cover.png",
-                    ]
-                    try:
-                        for item in story.iterdir():
-                            if item.is_dir():
-                                cover_candidates.append(item / "image" / "main" / "book_cover.png")
-                    except Exception:
-                        pass
-
-                    cover_path: Optional[str] = None
-                    for candidate in cover_candidates:
-                        if not candidate.exists():
-                            continue
-                        try:
-                            cover_path = str(candidate.relative_to(self.runtime.root_dir).as_posix())
-                        except Exception:
-                            cover_path = str(candidate.as_posix())
-                        break
-
-                    try:
-                        modified = float(story.stat().st_mtime)
-                    except Exception:
-                        modified = 0.0
-
-                    category = rel_story.parts[0] if len(rel_story.parts) >= 1 else "-"
-                    age = rel_story.parts[1] if len(rel_story.parts) >= 2 else "-"
-                    title = str(info.get("title") or story.name)
-
-                    galleries.append(
-                        {
-                            "title": title,
-                            "category": category,
-                            "age": age,
-                            "path": str(rel_story.as_posix()),
-                            "modified": modified,
-                            "cover": cover_path,
-                        }
-                    )
-
-            galleries.sort(key=lambda x: float(x.get("modified", 0.0)), reverse=True)
-            self._send_json({"images": galleries})
+            limit = _safe_int((query.get("limit") or [120])[0], 120, min_value=1, max_value=400)
+            self._send_json(self.runtime.list_gallery_stories(limit=limit))
             return
 
         self._send_json({"ok": False, "error": "not found"}, status=404)
@@ -3690,8 +4935,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 story_materials = ""
             if not isinstance(story_input_mode, str):
                 story_input_mode = "preset"
-
-            import json
 
             p = self.runtime.root_dir / "runs" / "prompt_templates.json"
             data = []
@@ -3759,6 +5002,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/stop":
             result = self.runtime.stop_run()
             self._send_json(result, status=200 if result.get("ok") else 500)
+            return
+
+        if parsed.path == "/api/system/shutdown":
+            stop_result = self.runtime.stop_run()
+            module_result = self.runtime.stop_module_job(None)
+
+            def _shutdown_server_later(server: ThreadingHTTPServer) -> None:
+                time.sleep(0.1)
+                try:
+                    server.shutdown()
+                except Exception:
+                    pass
+
+            threading.Thread(target=_shutdown_server_later, args=(self.server,), daemon=True).start()
+            self._send_json(
+                {
+                    "ok": True,
+                    "message": "Dashboard shutdown requested.",
+                    "run_stop": stop_result,
+                    "module_stop": module_result,
+                },
+                status=200,
+            )
             return
 
         if parsed.path == "/api/queue/reprioritize":
@@ -3869,18 +5135,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
 def run_dashboard_server(host: str = "127.0.0.1", port: int = 8765, *, auto_open: bool = True) -> None:
     """Start local dashboard server and block until interrupted."""
 
+    _ensure_dashboard_port_ready(int(port))
+
     root_dir = Path(__file__).resolve().parents[1]
     runtime = DashboardRuntime(root_dir)
     DashboardHandler.runtime = runtime
 
     server = ThreadingHTTPServer((host, int(port)), DashboardHandler)
-    url = f"http://{host}:{port}"
-    print(f"Dashboard started at {url}")
+    bind_url = f"http://{host}:{port}"
+    display_host = "127.0.0.1" if str(host).strip() in {"0.0.0.0", "::", "[::]"} else str(host)
+    access_url = f"http://{display_host}:{port}"
+    if access_url == bind_url:
+        print(f"Dashboard started at {access_url}")
+    else:
+        print(f"Dashboard started. Access URL: {access_url} (bound to {bind_url})")
     print("Press Ctrl+C to stop dashboard server")
 
     if auto_open:
         try:
-            webbrowser.open(url)
+            webbrowser.open(access_url)
         except Exception:
             pass
 

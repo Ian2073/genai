@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gc
 import json
+import shutil
 import multiprocessing as mp
 import os
 import random
@@ -19,6 +20,7 @@ import torch
 
 from observability import Session as ObsSession
 from image import Config as ImageConfig, generate_photos_for_story
+from evaluation.main import evaluate_story_directory, _create_evaluator, EvaluatorConfig
 from story import (
 	GenerationParams,
 	PipelineOptions,
@@ -218,7 +220,9 @@ class ChiefRunner:
 			"current_book": None,
 			"current_attempt": 1,
 			"current_stage": None,
+			"last_story_root": None,
 			"last_error": None,
+			"pre_evaluation": None,
 			"updated_at": datetime.now(timezone.utc).isoformat(),
 		}
 		if self.status_json_path:
@@ -534,6 +538,7 @@ class ChiefRunner:
 			self._log_stage(index, profile, "STORY", "done")
 			self._record_stage_outcome(trace_id, "LLM", story_stage_start, status="success")
 			result["story_root"] = str(story_root)
+			self._write_status_snapshot(last_story_root=str(story_root))
 			self._record_story_steps(trace_id, story_steps, story_root)
 			
 			if story_meta:
@@ -854,7 +859,188 @@ class ChiefRunner:
 			)
 		
 		return verified
+
+	def _run_stage_final_evaluation(
+		self,
+		index: int,
+		profile: StoryProfile,
+		trace_id: str,
+		book_context: Dict[str, Any],
+		result: Dict[str, object],
+		story_root: Path,
+	) -> bool:
+		"""執行 Stage 6 最終六維度評估。
+
+		規則：
+		- 評估執行失敗：視為錯誤，立即中止流程（hard stop）
+		- 評估成功但分數未達門檻：僅告警（warn），不中止流程
+		"""
+		self._log_stage(index, profile, "EVAL", "start")
+		stage_start = time.perf_counter()
+
+		threshold_default = float(getattr(self.options, "pre_eval_threshold", 50.0) or 50.0)
+		try:
+			final_eval_threshold = float(getattr(self.options, "final_eval_threshold", threshold_default))
+		except (TypeError, ValueError):
+			final_eval_threshold = threshold_default
+		final_eval_threshold = max(0.0, min(100.0, final_eval_threshold))
+
+		final_eval_branch = str(getattr(self.options, "final_eval_branch", "canonical") or "canonical").strip().lower()
+		if final_eval_branch in {"", "auto", "all", "*"}:
+			final_eval_branch = "canonical"
+
+		with self._segment_timer(
+			trace_id,
+			"final_evaluation",
+			"evaluation",
+			metadata={**book_context, "branch": final_eval_branch},
+		):
+			try:
+				import multiprocessing as mp
+				ctx = mp.get_context("spawn")
+				eval_q = ctx.Queue()
+				from pipeline._eval_worker import _eval_worker_process
+				eval_p = ctx.Process(
+					target=_eval_worker_process,
+					args=(str(story_root), None, final_eval_branch, True, eval_q)
+				)
+				eval_p.start()
+				eval_p.join()
+				if eval_p.exitcode != 0:
+					raise RuntimeError("Final eval subprocess crashed.")
+				evaluation_result, err_trace = eval_q.get()
+				if err_trace is not None:
+					raise RuntimeError(err_trace)
+				if not isinstance(evaluation_result, dict):
+					raise RuntimeError("Final evaluation returned non-dict payload")
+				if evaluation_result.get("error"):
+					raise RuntimeError(str(evaluation_result.get("error")))
+
+				overall_score = float(evaluation_result.get("overall_score") or 0.0)
+				quality_pass = overall_score >= final_eval_threshold
+
+				result["evaluation"] = {
+					"execution_success": True,
+					"pass": quality_pass,
+					"overall_score": overall_score,
+					"overall_score_raw": evaluation_result.get("overall_score_raw"),
+					"overall_score_calibrated": evaluation_result.get("overall_score_calibrated"),
+					"threshold": final_eval_threshold,
+					"dimension_scores": evaluation_result.get("dimension_scores", {}),
+					"dimension_summaries": evaluation_result.get("dimension_summaries", {}),
+					"recommendations": evaluation_result.get("recommendations", []),
+					"degradation_report": evaluation_result.get("degradation_report", {}),
+					"governance": evaluation_result.get("governance"),
+					"alignment": evaluation_result.get("alignment"),
+					"processing_summary": evaluation_result.get("processing_summary"),
+					"branch_id": evaluation_result.get("branch_id") or final_eval_branch,
+					"evaluation_scope": evaluation_result.get("evaluation_scope") or final_eval_branch,
+					"source_document": evaluation_result.get("source_document"),
+					"report_path": evaluation_result.get("report_path"),
+					"report_paths": evaluation_result.get("report_paths") or [],
+				}
+
+				if quality_pass:
+					self._log_stage(index, profile, "EVAL", "done")
+					self._record_stage_outcome(
+						trace_id,
+						"FINAL_EVAL",
+						stage_start,
+						status="success",
+					)
+					return True
+
+				warn_msg = (
+					f"Final evaluation score {overall_score:.1f} below threshold "
+					f"{final_eval_threshold:.1f}. Continue with warn policy."
+				)
+				self.logger.warning(warn_msg)
+				result["warnings"].append(warn_msg)
+				result["evaluation"]["quality_message"] = warn_msg
+				self._log_stage(index, profile, "EVAL", "degraded")
+				self._record_stage_outcome(
+					trace_id,
+					"FINAL_EVAL",
+					stage_start,
+					status="degraded",
+					degradation={
+						"policy": "warn",
+						"threshold": final_eval_threshold,
+						"overall_score": overall_score,
+					},
+				)
+				return True
+			except Exception as exc:
+				err_msg = f"Final evaluation execution failed: {exc}"
+				self.logger.error(err_msg, exc_info=exc)
+				result["errors"].append("evaluation")
+				result["evaluation"] = {
+					"execution_success": False,
+					"pass": False,
+					"branch_id": final_eval_branch,
+					"threshold": final_eval_threshold,
+					"error": str(exc),
+				}
+				self._log_stage(index, profile, "EVAL", "fail")
+				self._record_stage_outcome(
+					trace_id,
+					"FINAL_EVAL",
+					stage_start,
+					status="error",
+					error_type=exc.__class__.__name__,
+					details=str(exc),
+					degradation={"reason": "final_eval_exception", "branch": final_eval_branch},
+				)
+				return False
 	
+	def _sweep_memory(self, stage_name: str) -> None:
+		"""在階段切換前徹底清理 VRAM。"""
+		self._write_status_snapshot(current_stage=f"CLEANUP:{stage_name}")
+		self.logger.info("Sweeping VRAM before stage: %s", stage_name)
+		max_attempts = 3
+		allocated_mb = 0.0
+		reserved_mb = 0.0
+
+		for attempt in range(1, max_attempts + 1):
+			gc.collect()
+			force_cleanup_models()
+
+			try:
+				if torch.cuda.is_available():
+					allocated_mb = torch.cuda.memory_allocated() / (1024 ** 2)
+					reserved_mb = torch.cuda.memory_reserved() / (1024 ** 2)
+				else:
+					allocated_mb = 0.0
+					reserved_mb = 0.0
+			except Exception:
+				allocated_mb = 0.0
+				reserved_mb = 0.0
+
+			if allocated_mb <= 500:
+				break
+
+			if attempt < max_attempts:
+				self.logger.warning(
+					"VRAM still high after sweep attempt %d/%d: allocated=%.1fMB, reserved=%.1fMB. Retrying...",
+					attempt,
+					max_attempts,
+					allocated_mb,
+					reserved_mb,
+				)
+				time.sleep(0.2 * attempt)
+
+		self.logger.info(
+			"VRAM after sweep: allocated=%.1fMB, reserved=%.1fMB",
+			allocated_mb,
+			reserved_mb,
+		)
+		if allocated_mb > 500:
+			self.logger.warning(
+				"VRAM leak suspected: %.1fMB still allocated after sweep. "
+				"This may slow down the next stage.",
+				allocated_mb,
+			)
+
 	def _run_pipeline_stages(
 		self,
 		index: int,
@@ -867,34 +1053,259 @@ class ChiefRunner:
 		start: float,
 	) -> Optional[Dict[str, object]]:
 		"""協調調度所有子流程階段 (已分解為小方法以提高可讀性)。"""
-		# Stage 1: Story (LLM)
-		story_meta = self._run_stage_story(
-			index, profile, trace_id, book_context, result, workload_complexity
-		)
+		# Try to resume from an existing directory
+		if getattr(self.options, "resume", None):
+			resume_root = Path(self.options.resume)
+			story_json_path = resume_root / "story.json"
+			if story_json_path.exists():
+				self.logger.info("Resuming from %s, skipping Story Generation", resume_root)
+				result["story_root"] = str(resume_root)
+				self._write_status_snapshot(last_story_root=str(resume_root))
+				with open(story_json_path, 'r', encoding='utf-8') as sf:
+					story_meta = json.load(sf)
+			else:
+				self.logger.warning(
+					"Resume path %s not found or no story.json. Generating from scratch.",
+					resume_root,
+				)
+				story_meta = self._run_stage_story(index, profile, trace_id, book_context, result, workload_complexity)
+		else:
+			# Stage 1: Story (LLM)
+			story_meta = self._run_stage_story(
+				index, profile, trace_id, book_context, result, workload_complexity
+			)
 		story_root = Path(result["story_root"]) if result.get("story_root") else None
 		if not story_root:
 			raise _PipelineEarlyExit()
-		
+
+		self._sweep_memory("Stage 1.5 (Pre-eval)")
+		# Stage 1.5: Pre-eval (Lightweight check for Coherence and Consistency)
+		self.logger.info("Running stage 1.5: Pre-evaluation (Lightweight)")
+		pre_eval_stage_start = time.perf_counter()
+		pre_eval_policy = str(getattr(self.options, "pre_eval_policy", "warn") or "warn").strip().lower()
+		if pre_eval_policy not in {"warn", "stop"}:
+			pre_eval_policy = "warn"
+		try:
+			pre_eval_threshold = float(getattr(self.options, "pre_eval_threshold", 50.0))
+		except (TypeError, ValueError):
+			pre_eval_threshold = 50.0
+		if pre_eval_threshold < 0:
+			pre_eval_threshold = 0.0
+		elif pre_eval_threshold > 100:
+			pre_eval_threshold = 100.0
+		pre_eval_evaluator = None
+		try:
+			pre_eval_aspects = ["coherence", "entity_consistency"]
+			pre_eval_branch = "canonical"
+			self._write_status_snapshot(
+				current_stage="PRE_EVAL:start",
+				pre_evaluation={
+					"state": "running",
+					"policy": pre_eval_policy,
+					"threshold": pre_eval_threshold,
+					"branch": pre_eval_branch,
+					"aspects": pre_eval_aspects,
+				},
+			)
+			import multiprocessing as mp
+			ctx = mp.get_context("spawn")
+			eval_q = ctx.Queue()
+			from pipeline._eval_worker import _eval_worker_process
+			eval_p = ctx.Process(
+				target=_eval_worker_process,
+				args=(str(story_root), pre_eval_aspects, pre_eval_branch, False, eval_q)
+			)
+			eval_p.start()
+			eval_p.join()
+			if eval_p.exitcode != 0:
+				raise RuntimeError("Pre-eval subprocess crashed.")
+			pre_eval_result, err_trace = eval_q.get()
+			if err_trace is not None:
+				raise RuntimeError(err_trace)
+			if pre_eval_result.get("error"):
+				raise RuntimeError(str(pre_eval_result.get("error")))
+			overall_score = float(pre_eval_result.get("overall_score") or 0.0)
+			fail_fast_triggered = overall_score < pre_eval_threshold
+			self.logger.info(f"Pre-evaluation completed with overall partial score: {overall_score}")
+			pre_eval_summary = {
+				"state": "completed",
+				"overall_score": overall_score,
+				"metrics": pre_eval_result.get("dimension_scores", {}),
+				"fail_fast_triggered": fail_fast_triggered,
+				"policy": pre_eval_policy,
+				"threshold": pre_eval_threshold,
+				"blocked": False,
+				"branch": pre_eval_branch,
+			}
+			result["pre_evaluation"] = dict(pre_eval_summary)
+			if fail_fast_triggered:
+				gate_msg = (
+					f"Pre-evaluation score {overall_score} below threshold "
+					f"{pre_eval_threshold}."
+				)
+				if pre_eval_policy == "stop":
+					stop_msg = f"{gate_msg} Hard-stop policy enabled, aborting remaining stages."
+					self.logger.error(stop_msg)
+					result["errors"].append("pre_evaluation")
+					pre_eval_summary["state"] = "blocked"
+					pre_eval_summary["blocked"] = True
+					pre_eval_summary["gate_message"] = stop_msg
+					result["pre_evaluation"] = dict(pre_eval_summary)
+					self._write_status_snapshot(
+						current_stage="PRE_EVAL:blocked",
+						pre_evaluation=dict(pre_eval_summary),
+						last_error=stop_msg,
+					)
+					self._record_stage_outcome(
+						trace_id,
+						"PRE_EVAL",
+						pre_eval_stage_start,
+						status="error",
+						error_type="PreEvalGateError",
+						details=stop_msg,
+						degradation={
+							"policy": "stop",
+							"threshold": pre_eval_threshold,
+							"overall_score": overall_score,
+						},
+					)
+					result["success"] = False
+					result["duration_sec"] = round(time.time() - start, 2)
+					raise _PipelineEarlyExit()
+
+				warn_msg = f"{gate_msg} Continuing pipeline with warning policy."
+				self.logger.warning(warn_msg)
+				result["warnings"].append(warn_msg)
+				pre_eval_summary["state"] = "degraded"
+				pre_eval_summary["gate_message"] = warn_msg
+				result["pre_evaluation"] = dict(pre_eval_summary)
+				self._write_status_snapshot(
+					current_stage="PRE_EVAL:degraded",
+					pre_evaluation=dict(pre_eval_summary),
+				)
+				self._record_stage_outcome(
+					trace_id,
+					"PRE_EVAL",
+					pre_eval_stage_start,
+					status="degraded",
+					degradation={
+						"policy": "warn",
+						"threshold": pre_eval_threshold,
+						"overall_score": overall_score,
+					},
+				)
+			else:
+				self._write_status_snapshot(
+					current_stage="PRE_EVAL:done",
+					pre_evaluation=dict(pre_eval_summary),
+				)
+				self._record_stage_outcome(trace_id, "PRE_EVAL", pre_eval_stage_start, status="success")
+		except _PipelineEarlyExit:
+			raise
+		except Exception as exc:
+			self.logger.warning(f"Pre-evaluation failed: {exc}", exc_info=exc)
+			result["pre_evaluation"] = {
+				"state": "error",
+				"error": str(exc),
+				"policy": pre_eval_policy,
+				"threshold": pre_eval_threshold,
+			}
+			self._write_status_snapshot(
+				current_stage="PRE_EVAL:error",
+				pre_evaluation=dict(result["pre_evaluation"]),
+			)
+			self._record_stage_outcome(
+				trace_id,
+				"PRE_EVAL",
+				pre_eval_stage_start,
+				status="degraded",
+				error_type=exc.__class__.__name__,
+				details=str(exc),
+				degradation={
+					"policy": pre_eval_policy,
+					"threshold": pre_eval_threshold,
+					"reason": "pre_eval_exception",
+				},
+			)
+		finally:
+			# 強制釋放 evaluation 載入的所有模型（AIAnalyzer、GLiNER、coref 等）
+			# 確保 VRAM 在 SDXL 階段前完全釋放
+
+			try:
+				from evaluation.main import cleanup_evaluation_models
+				cleanup_evaluation_models()
+			except Exception as cleanup_exc:
+				self.logger.warning('Failed to cleanup eval models: %s', cleanup_exc)
+			force_cleanup_models()
+			self.logger.info("Pre-evaluation VRAM cleanup complete")
+
 		# Stage 2: Image (SDXL)
+		self._sweep_memory("Stage 2 (Image)")
 		photo_ok = self._run_stage_image(
-			index, profile, trace_id, book_context, result, workload_complexity, story_root
+			index,
+			profile,
+			trace_id,
+			book_context,
+			result,
+			workload_complexity,
+			story_root,
 		)
-		
+
 		# Stage 3: Translation (NLLB)
+		self._sweep_memory("Stage 3 (Translation)")
 		translation_outputs = self._run_stage_translation(
-			index, profile, trace_id, book_context, result, workload_complexity, story_root, photo_ok
+			index,
+			profile,
+			trace_id,
+			book_context,
+			result,
+			workload_complexity,
+			story_root,
+			photo_ok,
 		)
 		translation_ok = translation_outputs is not None
-		
+
 		# Stage 4: Voice (XTTS)
+		self._sweep_memory("Stage 4 (Voice)")
 		voice_ok = self._run_stage_voice(
-			index, profile, trace_id, book_context, result, workload_complexity, story_root, translation_ok
+			index,
+			profile,
+			trace_id,
+			book_context,
+			result,
+			workload_complexity,
+			story_root,
+			translation_ok,
 		)
-		
+
 		# Stage 5: Verify
+		self._sweep_memory("Stage 5 (Verify)")
 		verified = self._run_stage_verify(
-			index, profile, trace_id, book_context, result, story_root, translation_ok, voice_ok, photo_ok
+			index,
+			profile,
+			trace_id,
+			book_context,
+			result,
+			story_root,
+			translation_ok,
+			voice_ok,
+			photo_ok,
 		)
+
+		# Stage 6: Final Evaluation
+		self._sweep_memory("Stage 6 (Final Evaluation)")
+		evaluation_exec_ok = self._run_stage_final_evaluation(
+			index,
+			profile,
+			trace_id,
+			book_context,
+			result,
+			story_root,
+		)
+		if not evaluation_exec_ok:
+			result["success"] = False
+			result["duration_sec"] = round(time.time() - start, 2)
+			raise _PipelineEarlyExit()
 		
 		# Finalize
 		result["success"] = not result["errors"] and verified
@@ -913,7 +1324,9 @@ class ChiefRunner:
 			failed_books=0,
 			current_book=None,
 			current_stage="start",
+			last_story_root=None,
 			last_error=None,
+			pre_evaluation=None,
 		)
 		if self.total_books == 1:
 			result = self._run_single_with_retries(1)
@@ -950,6 +1363,7 @@ class ChiefRunner:
 				current_book=index,
 				current_attempt=attempt,
 				current_stage="book_start",
+				pre_evaluation=None,
 			)
 			result = self._run_single_isolated(index, attempt=attempt)
 			result["attempt"] = attempt
@@ -1004,6 +1418,10 @@ class ChiefRunner:
 		book_run_dir = self._prepare_run_directories(index, self.total_books)
 		run_logs_dir = book_run_dir / "logs"
 		run_observability_dir = book_run_dir / "observability"
+
+		# Snapshot prompts to ensure reproducibility
+		if Path("prompts").exists():
+			shutil.copytree("prompts", book_run_dir / "prompts_snapshot", dirs_exist_ok=True)
 		
 		# 2. 重設 logger 到新的目錄 (可選，但為了日誌分流建議這樣做)
 		# 注意：我們保留 console 輸出，但將 file handler 切換到新目錄
@@ -1021,6 +1439,8 @@ class ChiefRunner:
 			current_book=index,
 			current_attempt=attempt,
 			current_stage="init",
+			last_story_root=None,
+			pre_evaluation=None,
 		)
 
 		# 3. 初始化 Observability
@@ -1040,7 +1460,6 @@ class ChiefRunner:
 					# 自動執行進階觀測與效能分析 (產生 Markdown 報告與紀錄)
 					self.logger.info("Running automatic observability analysis...")
 					import sys
-					from pathlib import Path
 					
 					root_dir = Path(__file__).parent.parent
 					if str(root_dir) not in sys.path:
@@ -1292,12 +1711,21 @@ class ChiefRunner:
 			return None, None, []
 			
 		if not queue.empty():
-			final_story_root, meta, step_history, err_trace = queue.get()
-			if err_trace is not None:
-				self.logger.error("Story generation subprocess raised exception:\n%s", err_trace)
-				return None, None, []
-			return final_story_root, meta, step_history
-			
+                        try:
+                                q_item = queue.get()
+                                if not isinstance(q_item, tuple) or len(q_item) != 4:
+                                        self.logger.error(f"Story generation subprocess returned malformed data: {q_item}")
+                                        return None, None, []
+                                
+                                final_story_root, meta, step_history, err_trace = q_item
+                                if err_trace is not None:
+                                        self.logger.error("Story generation subprocess raised exception:\n%s", err_trace)
+                                        return None, None, []
+                                return final_story_root, meta, step_history
+                        except Exception as get_exc:
+                                # 捕捉解包或其它取得錯誤
+                                self.logger.error("Failed to parse worker process queue: %s", get_exc)
+                                return None, None, []
 		self.logger.error("Story generation subprocess returned no result.")
 		return None, None, []
 
@@ -1449,13 +1877,13 @@ class ChiefRunner:
 		)
 
 
-def main(options: Optional[ChiefOptions] = None) -> None:
+def main(options: Optional[ChiefOptions] = None) -> int:
 	"""相容入口：將 CLI/entry 委派到 `pipeline.entry`。"""
 
 	from .entry import main as entry_main
 
-	entry_main(options)
+	return entry_main(options)
 
 
 if __name__ == "__main__":
-	main()
+	raise SystemExit(main())

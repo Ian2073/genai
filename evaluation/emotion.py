@@ -14,9 +14,9 @@ import numpy as np
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple, Optional, Set
-from consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
-from genre import GenreDetector
-from utils import (
+from .consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
+from .genre import GenreDetector
+from .utils import (
     SentenceSplitterMixin,
     ensure_instance,
     get_default_model_path,
@@ -24,8 +24,8 @@ from utils import (
     load_category_keywords,
     load_spacy_model,
 )
-from kb import LocalCategoryMatcher
-from shared.ai_safety import (
+from .kb import LocalCategoryMatcher
+from .shared.ai_safety import (
     get_dimension_fallback_score,
     normalize_confidence_0_1,
     normalize_score_0_100,

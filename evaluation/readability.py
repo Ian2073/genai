@@ -22,15 +22,15 @@ import numpy as np
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Set
-from consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
-from utils import (
+from .consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
+from .utils import (
     SentenceSplitterMixin,
     ensure_instance,
     get_default_model_path,
     get_kg_path,
     load_spacy_model,
 )
-from shared.ai_safety import (
+from .shared.ai_safety import (
     get_dimension_fallback_score,
     normalize_confidence_0_1,
     normalize_score_0_100,
@@ -837,7 +837,7 @@ class ReadabilityChecker(SentenceSplitterMixin):
                 if cv < 0.3:
                     # 降低單調性懲罰
                     monotony_penalty = min(18, (0.3 - cv) * 45)
-            except:
+            except Exception:
                 pass
 
         # 計算總懲罰（全局問題直接累加，不平均化）

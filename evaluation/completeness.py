@@ -13,13 +13,13 @@ import torch
 import os
 
 # 共用你的一致性模組裡的工具
-from consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
-from kb import LocalCategoryMatcher
-from shared.story_data import collect_full_story_paths, discover_story_dirs
+from .consistency import ComprehensiveKnowledgeGraph, AIAnalyzer
+from .kb import LocalCategoryMatcher
+from .shared.story_data import collect_full_story_paths, discover_story_dirs
 
 # 文體檢測器
-from genre import GenreDetector
-from utils import (
+from .genre import GenreDetector
+from .utils import (
     SentenceSplitterMixin,
     ensure_instance,
     get_default_model_path,
@@ -33,7 +33,7 @@ from utils import (
     get_iso_timestamp,
     select_documents_by_matrix,
 )
-from shared.ai_safety import (
+from .shared.ai_safety import (
     get_dimension_fallback_score,
     normalize_confidence_0_1,
     normalize_score_0_100,
@@ -1202,7 +1202,7 @@ class CompletenessChecker(SentenceSplitterMixin):
         # 計算三角係數（局部聚類係數）
         try:
             clustering = nx.average_clustering(concept_graph)
-        except:
+        except Exception:
             clustering = 0.0
         
         # 綜合語義密度

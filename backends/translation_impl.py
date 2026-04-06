@@ -51,6 +51,7 @@ class TransformersNLLBBackend(BaseTranslationBackend):
                 gpu_names = subprocess.check_output(
                     ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
                     text=True,
+                    errors="replace",
                     stderr=subprocess.STDOUT,
                 ).strip()
                 if gpu_names:
