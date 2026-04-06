@@ -23,13 +23,14 @@
 - 以模型名稱直接命名的大型單檔腳本
   - 例如：`story_qwen35_9b.py`
 - `backups/` 內的歷史備份
-- `research/` 內的研究型專案與論文分析資料
+- `docs/archive/` 內的歷史規劃/研究筆記
 - 已被新 package/模組取代、但暫時保留供比對的舊流程檔
 
 另外，以下屬於「相容入口」，不建議直接刪除：
 
-- `evaluator.py`（研究評估流程相容入口）
 - `evaluation/coref.py`（舊版 FastAPI 共指微服務入口；主線改走 `evaluation/shared/coref_backends.py`）
+
+補充：root `evaluator.py` 已移除，評測主線入口為 `evaluation/main.py`。
 
 `exllamav2` 相容層目前統一放在 `runtime/exllamav2_shim.py`，不再保留 root 的 `shim.py` 轉接檔。
 

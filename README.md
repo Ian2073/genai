@@ -35,6 +35,16 @@
 - **批次處理**：多故事並行生成，自動資源隔離
 - **階段式清理**：激進式 CUDA 快取管理，防止記憶體洩漏
 
+### 🧩 主線模型清單（重點版）
+
+| 任務 | 主要模型 | 預設路徑 | 備註 |
+|------|---------|---------|------|
+| 文本生成 | Qwen2.5-14B-Instruct-GPTQ-Int4 | `models/Qwen2.5-14B-Instruct-GPTQ-Int4` | 主線預設 |
+| 文本備援 | Qwen3-8B | `models/Qwen3-8B` | GPTQ 不可用時備援 |
+| 圖像生成 | SDXL Base + Refiner | `models/stable-diffusion-xl-base-1.0`、`models/stable-diffusion-xl-refiner-1.0` | 插圖與封面 |
+| 翻譯 | NLLB-200-3.3B | `models/nllb-200-3.3B` | 多語翻譯 |
+| 語音 | XTTS-v2 | `models/XTTS-v2` | 多語語音合成 |
+
 ---
 
 ## 🚀 快速開始
@@ -151,6 +161,10 @@ Build_GenAI_DevTools.bat
 - 啟動終端：`Start_GenAI.bat`
 - 評測執行：`Start_GenAI.bat --eval-only --input output --branch auto --post-process none`
 - 啟動 dashboard：`Start_GenAI.bat --dashboard`
+
+本機模式相容旗標更新：
+- `Start_GenAI.bat --genai-only`：相容保留，現在是 no-op
+- `Start_GenAI.bat --with-eval`：相容保留，現在是 no-op
 
 ### B. 本機模式 (Conda) 手動流程
 
@@ -362,10 +376,23 @@ Start_GenAI_Docker.bat --dashboard --dashboard-port 8766 --dashboard-no-open
 - `--dashboard-port`: 指定儀表板連接埠
 - `--dashboard-no-open`: 啟動時不自動打開瀏覽器
 
+Dashboard 生命週期管理（同一入口腳本）：
+
+```bash
+Start_GenAI.bat --dashboard-status
+Start_GenAI.bat --dashboard-stop
+Start_GenAI.bat --dashboard-restart
+```
+
 儀表板內建：
 - 簡易模式（只填本數與重跑次數）
 - 進階選項（年齡/類別/頁數/隨機種子與各階段開關）
 - 即時狀態輪詢（目前進行書籍、階段、成功/失敗數）
+- Run Detail 支援多書切換與每本事件時間軸
+- Stage 1.5 pre-evaluation 結果顯示（不隱藏）
+- Evaluation 視圖支援切換 run/book、JSON 檢視與雷達圖
+- Gallery 依 run/book 追蹤輸出封面與主圖
+- 已完成 run 的日誌可回讀 `runs/*/logs/chief.log`，重啟 dashboard 後仍可查看
 
 ### 實驗與分析腳本
 
@@ -378,9 +405,10 @@ python scripts/smoke_gate.py
 python scripts/check_root_layout.py --workspace-root . --strict
 ```
 
-研究分析資產可放在 `research/`，但目前預設由 `.gitignore` 排除（避免大型檔案進入版本庫）：
+研究/分析資產目前建議封存在：
 
-- `research/paper/`
+- `docs/archive/`（決策與設計歷程）
+- `backups/`（歷史快照、比對用資料）
 
 ### 評測系統（正式主線）
 
@@ -817,42 +845,18 @@ docker compose run --rm genai --count 1
 
 ---
 
-## 📦 套件版本確認
+## 📦 版本重點（精簡）
 
-### 核心依賴版本
+- Python：3.11（專案標準）
+- PyTorch：
+    - RTX 50：`2.8.0+cu128`
+    - RTX 40：`2.6.0+cu124`
+- Transformers：固定 `4.46.1`（維持 GPTQ/runtime 穩定）
 
-| 套件 | 版本 | 用途 | 相容性 |
-|------|------|------|--------|
-| **torch** | RTX50:`2.8.0+cu128` / RTX40:`2.6.0+cu124` | 深度學習框架 | ✅ 由自動腳本依硬體選擇 |
-| **transformers** | 4.46.1 | LLM 推理 | ✅ 與 GPTQ 堆疊穩定相容 |
-| **diffusers** | 0.30.0 | SDXL 推理 | ✅ 最新穩定版 |
-| **accelerate** | 1.12.0 | 模型加速 | ✅ |
-| **bitsandbytes** | 0.43.0+ | 量化支援 | ✅ Windows 相容 |
-| **TTS** | 0.22.0 | 語音合成 | ✅ XTTS-v2 |
-| **sentencepiece** | 0.1.99 | 分詞器 | ✅ NLLB 必需 |
-| **safetensors** | 0.4.3 | 模型載入 | ✅ |
-
-### 版本驗證
-
-```bash
-# 檢查核心套件
-pip list | grep -E "torch|transformers|diffusers|TTS"
-
-# 驗證 CUDA 版本
-python -c "import torch; print(torch.version.cuda)"
-
-# 驗證 GPTQ 相容路徑
-python -c "from optimum.gptq.quantizer import GPTQQuantizer; GPTQQuantizer(bits=4); print('GPTQ path OK')"
-```
-
-### 已知相容性問題
-
-⚠️ **注意事項**:
-- 專案目前固定 `transformers==4.46.1` 以維持 GPTQ/runtime 穩定；Qwen3 會走相容 fallback 路徑，品質可能低於原生 Qwen3 支援。
-- `torch 2.7` 不支援 sm_120，RTX 50 系列請使用 `torch 2.8.0+cu128`。
-- `bitsandbytes` 在 Windows 上需要 CUDA 12.8+
-- `TTS` 需要 Visual Studio C++ Build Tools
-- `rembg` (去背功能) 為可選套件
+完整相容矩陣與疑難排解請看：
+- `docs/ENV_SETUP.md`
+- `docs/CUDA_TROUBLESHOOTING.md`
+- `docs/RUNTIME_COMPAT.md`
 
 ---
 

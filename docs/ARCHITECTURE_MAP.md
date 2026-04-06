@@ -8,7 +8,7 @@
 2. 核心實作套件層（`pipeline`、`backends`、`runtime`、`observability`、`story_core`、`evaluation`）
 3. 工具與文件層（`scripts`、`docs`、`prompts`）
 4. 產物與資料層（`models`、`output`、`logs`、`runs`、`reports`）
-5. 研究與封存層（`research`、`backups`）
+5. 封存與快照層（`docs/archive`、`backups`）
 
 ## 2. Root 應維持精簡
 
@@ -17,7 +17,7 @@ Root 僅保留以下內容：
 1. 入口腳本與入口模組（`chief.py`、`story.py`、`image.py`、`trans.py`、`voice.py`）
 2. 建置/啟動腳本（`Build_*.bat`、`Start_*.bat`）
 3. 核心專案設定（`README.md`、`requirements.txt`、`Dockerfile`、`docker-compose.yml`）
-4. 仍需在 root 對外暴露的高層共用模組（`utils.py`、`kg.py`、`evaluator.py`）
+4. 仍需在 root 對外暴露的高層共用模組（`utils.py`、`kg.py`）
 
 可用以下檢查守住 root 乾淨度：
 
@@ -29,7 +29,7 @@ python scripts/check_root_layout.py --workspace-root . --strict
 
 1. `pipeline/`
    - 流程編排與 CLI 入口實作。
-   - 主要批次/儀表板執行流程。
+   - 主要批次/儀表板執行流程（含 `dashboard.py`、`templates/`、`static/`）。
 
 2. `backends/`
    - 模型供應者介面與實作細節。
@@ -59,9 +59,9 @@ python scripts/check_root_layout.py --workspace-root . --strict
 9. `prompts/`
    - Prompt 範本與 Prompt 工具 helper。
 
-10. `research/`
-   - 非執行主線的研究資產與評估實驗。
-   - 含 `research/paper` 與外部評估專案快照。
+10. `docs/archive/`
+   - 非主線 runtime 的歷史規劃、遷移契約與研究筆記封存。
+   - 作為教學與回溯依據，不直接參與執行。
 
 11. `backups/`
    - 僅供比對/回復的歷史快照。
@@ -80,7 +80,7 @@ python scripts/check_root_layout.py --workspace-root . --strict
    - 放在 `docs/`。
 
 4. 新研究資料：
-   - 放在 `research/`。
+   - 預設先放在 `docs/archive/`（文件型）或 `backups/`（快照型）。
 
 5. 生成輸出：
    - 必須放在 `output`、`logs`、`runs`、`reports`。

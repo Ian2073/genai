@@ -21,7 +21,7 @@
   - 在載入 GPTQ 模型前呼叫
   - 註冊 `auto_gptq` 需要的 `exllamav2_kernels` shim
 - `prepare_evaluator_runtime()`
-  - 在 evaluator 載入 spaCy 模型前呼叫
+  - 在 `evaluation/main.py` / `evaluation/evaluator.py` 載入 spaCy 模型前呼叫
   - 處理舊版 RoBERTa 權重在新版 transformers 下的載入差異
 
 ## 為什麼學生需要先理解這一層
@@ -56,8 +56,11 @@
 
 ### Evaluator / spaCy transformers
 
-- 主流程檔案：`evaluator.py`
+- 主流程檔案：`evaluation/main.py`（入口）、`evaluation/evaluator.py`（核心評估器）
 - 統一入口：`runtime/compat.py`
+
+目前在主流程中，Stage 1.5 與 Stage 6 的評測會透過 `pipeline/_eval_worker.py`
+以 subprocess 方式執行，降低評測模型和生成模型互相汙染記憶體的風險。
 
 ## 後續維護規則
 

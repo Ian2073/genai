@@ -32,12 +32,17 @@
   - `ChiefOptions`
   - 預設設定
   - CLI parser 與 dtype 解析
+  - 包含 pre-eval gate 參數（`--pre-eval-policy`、`--pre-eval-threshold`）
 
 - `pipeline/chief_runner.py`
   - 真正的主控流程實作
   - 主要保留 `ChiefRunner`
   - 專注在 stage orchestration 與生命週期控制
   - `main()` 只做相容轉呼叫
+
+- `pipeline/_eval_worker.py`
+  - 評測子程序 worker
+  - 供 Stage 1.5 / Stage 6 呼叫，隔離評測模型生命週期
 
 - `pipeline/chief_runtime.py`
   - 單本書執行時的 context / request metadata / result summary 組裝
@@ -52,8 +57,33 @@
 - `pipeline/chief_workload_stats.py`
   - LLM / image / translation / TTS workload 與 prompt 統計
 
+- `pipeline/dashboard.py`
+  - Dashboard server 與 API（status/history/run-detail/evaluation/gallery）
+
+- `pipeline/templates/dashboard.html`
+  - Dashboard 模板
+
+- `pipeline/static/js/dashboard.js`
+  - Dashboard 前端邏輯（run/book selector、live logs、charts）
+
+- `pipeline/static/css/dashboard.css`
+  - Dashboard 樣式與版面
+
 - `pipeline/__main__.py`
   - 允許使用 `python -m pipeline`
+
+## 目前 Stage 順序（`ChiefRunner`）
+
+1. Stage 1：Story（LLM）
+2. Stage 1.5：Pre-evaluation（輕量門檻檢查）
+3. Stage 2：Image（SDXL）
+4. Stage 3：Translation（NLLB）
+5. Stage 4：Voice（XTTS）
+6. Stage 5：Verify（產物完整性驗證）
+7. Stage 6：Final Evaluation（六維度評測）
+
+Pre-eval 的 gate 行為由 `--pre-eval-policy` 與 `--pre-eval-threshold` 控制；
+final evaluation 結果會回寫到每本書的 summary，並供 dashboard 的 run detail/evaluation 視圖使用。
 
 ## 實務上這代表什麼
 

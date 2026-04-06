@@ -8,6 +8,7 @@
 2. `CUDA_TROUBLESHOOTING.md`：CUDA / 驅動 / wheel 常見問題
 3. `PIPELINE_ARCHITECTURE.md`：主控流程與程式入口
 4. `PROJECT_LAYOUT.md`：目錄分層與放置規則
+5. `../evaluation/README.md`：評測系統操作與輸出格式
 
 ## 架構與維護
 
@@ -26,3 +27,8 @@
 
 1. `archive/MODULE_WORKBENCH_PLAN.md`：模組化工作台規劃草案（封存）
 2. `archive/sideproject.md`：歷史研究筆記封存
+
+## 跨目錄文件
+
+1. `../README.md`：系統總覽、啟動方式與 Dashboard 操作
+2. `../evaluation/README.md`：評測參數、分支策略與報表欄位

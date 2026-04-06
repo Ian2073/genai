@@ -15,7 +15,7 @@
    - `chief.py`、`story.py`、`image.py`、`trans.py`、`voice.py`
    - `Build_*.bat`、`Start_*.bat`
    - `README.md`、`requirements.txt`、`Dockerfile`、`docker-compose.yml`
-   - 為相容性保留於 root 的共用模組：`utils.py`、`kg.py`、`evaluator.py`
+   - 為相容性保留於 root 的共用模組：`utils.py`、`kg.py`
 
 2. Runtime 實作層：
    - `pipeline/`：流程編排與入口處理
@@ -26,7 +26,7 @@
    - `evaluation/`：評測系統主線（品質閘門、分支評估、治理報告）
 
 3. 非 Runtime 區域：
-   - `research/`：實驗、論文資產、外部評估專案
+   - `docs/archive/`：規劃草案、遷移契約、歷史研究筆記
    - `backups/`：歷史快照（僅封存）
 
 ## 3. 權責邊界
@@ -41,7 +41,7 @@
    - 修改 `docs/`
 
 4. 僅研究變更：
-   - 修改 `research/`
+   - 修改 `docs/archive/`（文件型）或 `backups/`（快照型）
 
 ## 4. 護欄機制
 
@@ -71,7 +71,7 @@ python scripts/smoke_gate.py --run-functional
 
 ## 5. 變更管制規則
 
-1. 未經明確核准，不得移除相容檔案（`chief.py`、`story.py`、`image.py`、`trans.py`、`voice.py`、`evaluator.py`）。
+1. 未經明確核准，不得移除相容檔案（`chief.py`、`story.py`、`image.py`、`trans.py`、`voice.py`）。
 2. 任何新增 root 檔案都必須有正當理由，並同步反映到 `scripts/check_root_layout.py`。
 3. 任何資料夾搬移後都必須執行：
    - import/path 驗證
@@ -84,14 +84,20 @@ python scripts/smoke_gate.py --run-functional
    - 先看 `README.md`
    - 依序執行 `Build_GenAI.bat` 與 `Start_GenAI.bat`
 
-2. 「Pipeline 核心邏輯在哪？」
+2. 「我要怎麼控管 dashboard 生命週期？」
+   - `Start_GenAI.bat --dashboard`
+   - `Start_GenAI.bat --dashboard-status`
+   - `Start_GenAI.bat --dashboard-stop`
+   - `Start_GenAI.bat --dashboard-restart`
+
+3. 「Pipeline 核心邏輯在哪？」
    - 從 `pipeline/chief_runner.py` 開始
 
-3. 「故事生成內部邏輯在哪？」
+4. 「故事生成內部邏輯在哪？」
    - 從 `story.py` 開始，再看 `story_core/`
 
-4. 「模型相關細節在哪？」
+5. 「模型相關細節在哪？」
    - 在 `backends/`
 
-5. 「相容性修補在哪？」
+6. 「相容性修補在哪？」
    - 在 `runtime/`

@@ -34,7 +34,6 @@ ALLOWED_ROOT_FILES: Set[str] = {
     "voice.py",
     "kg.py",
     "utils.py",
-    "evaluator.py",
 }
 
 ALLOWED_ROOT_DIRS: Set[str] = {
@@ -53,7 +52,6 @@ ALLOWED_ROOT_DIRS: Set[str] = {
     "pipeline",
     "prompts",
     "reports",
-    "research",
     "runs",
     "runtime",
     "scripts",
