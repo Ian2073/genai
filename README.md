@@ -110,6 +110,11 @@ python scripts/doctor.py --workspace-root . --expect-cuda auto --fix --fix-packa
 # Windows 一鍵入口
 Build_GenAI.bat
 
+# Ubuntu/Linux 一鍵入口
+chmod +x Build_GenAI.sh
+chmod +x Start_GenAI.sh
+bash Build_GenAI.sh
+
 # 或直接執行（可自訂環境路徑）
 python scripts/setup_env.py --env-path genai_env --install-scope full --gpu-series auto
 ```
@@ -143,12 +148,14 @@ python scripts/setup_env.py --env-path genai_env --install-scope full --gpu-seri
 
 ```bash
 Start_GenAI.bat
+bash Start_GenAI.sh --terminal
 ```
 
 評測改為同一入口執行：
 
 ```bash
 Start_GenAI.bat --eval-only --input output --branch auto --post-process none
+bash Start_GenAI.sh --eval-only --input output --branch auto --post-process none
 ```
 
 如果你要在 Windows 上做 MSVC/環境檢查與自動修復：
@@ -160,9 +167,13 @@ Build_GenAI_DevTools.bat
 ### A-2. 建置與啟動（本機）
 
 - 建置：`Build_GenAI.bat`
+- 建置（Ubuntu/Linux）：`bash Build_GenAI.sh`
 - 啟動終端：`Start_GenAI.bat`
+- 啟動終端（Ubuntu/Linux）：`bash Start_GenAI.sh --terminal`
 - 評測執行：`Start_GenAI.bat --eval-only --input output --branch auto --post-process none`
+- 評測執行（Ubuntu/Linux）：`bash Start_GenAI.sh --eval-only --input output --branch auto --post-process none`
 - 啟動 dashboard：`Start_GenAI.bat --dashboard`
+- 啟動 dashboard（Ubuntu/Linux）：`bash Start_GenAI.sh --dashboard`
 
 本機模式相容旗標更新：
 - `Start_GenAI.bat --genai-only`：相容保留，現在是 no-op
@@ -416,7 +427,7 @@ python scripts/check_root_layout.py --workspace-root . --strict
 
 評測模組已納入主線路徑 `evaluation/`，並由主線入口統一調度：
 
-- `Build_GenAI.bat` 會先安裝生成主線，再把 `evaluation/requirements.txt` 當 extras 併入同一 `genai_env`，且套用 root `requirements.txt` constraint（生成版本優先）。
+- `Build_GenAI.bat` 會先安裝生成主線，再把 `evaluation/requirements.txt` 當 extras 併入同一 `genai_env`。預設會先套用 root `requirements.txt` constraint（生成版本優先）；若與 GPU profile 的 torch 組合衝突，會自動重試為不套 constraints。
 
 ```bash
 Build_GenAI.bat

@@ -321,6 +321,15 @@ def run_pip_check(py: Path) -> None:
     output = (proc.stdout or "").strip()
     error = (proc.stderr or "").strip()
 
+    # pip check uses exit code to indicate whether broken requirements exist.
+    # Keep success output (e.g. "No broken requirements found.") as a pass.
+    if proc.returncode == 0:
+        if output:
+            print(output)
+        if error:
+            print(error)
+        return
+
     known_lines: List[str] = []
     unexpected_lines: List[str] = []
     for line in [line.strip() for line in output.splitlines() if line.strip()]:

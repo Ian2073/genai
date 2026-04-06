@@ -1,8 +1,10 @@
 # 評測依賴策略（生成優先）
 # 1) 先安裝 root requirements（生成主線）
-# 2) 再安裝評測專屬 extras（此檔，並以 root requirements 當 constraint）
+# 2) 再安裝評測專屬 extras（此檔）
 #
-# Local build: Build_GenAI.bat 會先呼叫 scripts/setup_env.py，再安裝本檔
+# Local build: Build_GenAI.bat 會先呼叫 scripts/setup_env.py，再安裝本檔。
+# 預設先嘗試套用 root constraints，若與 GPU profile torch 組合衝突，
+# 會自動回退為不套 constraints 的重試流程。
 # Docker build: Build_GenAI_Docker.bat 會建置整合服務，Dockerfile 內再安裝本檔
 
 # 評測專屬工具

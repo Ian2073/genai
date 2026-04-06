@@ -78,9 +78,14 @@ if exist "%PROJECT_DIR%evaluation\requirements.txt" (
     echo [INFO] Installing evaluation extras into unified environment...
     "%GENAI_PY%" -m pip install -r "%PROJECT_DIR%evaluation\requirements.txt" --constraint "%PROJECT_DIR%requirements.txt"
     if errorlevel 1 (
-        echo.
-        echo [ERROR] Failed to install evaluation extras.
-        exit /b 1
+        echo [WARN] Evaluation extras install with root constraints failed.
+        echo [INFO] Retrying evaluation extras without root constraints to avoid profile conflicts...
+        "%GENAI_PY%" -m pip install -r "%PROJECT_DIR%evaluation\requirements.txt"
+        if errorlevel 1 (
+            echo.
+            echo [ERROR] Failed to install evaluation extras.
+            exit /b 1
+        )
     )
 )
 
