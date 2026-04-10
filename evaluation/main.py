@@ -30,13 +30,16 @@ import logging
 import os
 import glob
 import re
+import gc
+import weakref
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 # 導入六維度評估系統的主控制器
 from .evaluator import MultiAspectEvaluator
-from .shared.story_data import collect_branch_story_paths, discover_story_dirs
+from .shared.story_data import collect_branch_story_paths, collect_story_visual_assets, discover_story_dirs
 
 # 導入終端美化工具（用於在命令列顯示漂亮的評估結果表格）
 from rich.console import Console
@@ -44,7 +47,7 @@ from rich.table import Table
 
 # 導入工具函數
 from .utils import (
-    DEFAULT_ASPECTS,      # 預設的六大評估維度
+    DEFAULT_ASPECTS,      # 預設的評估維度
     get_bool_env,         # 從環境變數讀取布林值
     get_int_env,          # 從環境變數讀取整數值
     normalise_dimensions, # 標準化維度名稱
@@ -60,6 +63,29 @@ import math
 import platform
 
 logger = logging.getLogger(__name__)
+_ACTIVE_EVALUATORS: "weakref.WeakSet[MultiAspectEvaluator]" = weakref.WeakSet()
+
+PRE_EVAL_PROFILE_CONFIGS: Dict[str, Dict[str, Any]] = {
+    "fast": {
+        "base_aspects": ["coherence", "entity_consistency"],
+        "blend_weights": {"heuristic": 0.45, "model": 0.55},
+        "skip_margin": 8.0,
+        "hard_fail_margin": 14.0,
+    },
+    "balanced": {
+        "base_aspects": ["coherence", "entity_consistency"],
+        "blend_weights": {"heuristic": 0.35, "model": 0.65},
+        "skip_margin": 10.0,
+        "hard_fail_margin": 18.0,
+    },
+    "strict": {
+        "base_aspects": ["coherence", "entity_consistency", "readability"],
+        "blend_weights": {"heuristic": 0.25, "model": 0.75},
+        "skip_margin": 12.0,
+        "hard_fail_margin": 20.0,
+    },
+}
+_PRE_EVAL_GLITCH_MARKERS: Tuple[str, ...] = ("�", "??", "TODO", "FIXME", "<refined>", "<fixed>", "```")
 
 # =============================================================================
 # 配置類別與輔助函數
@@ -86,6 +112,223 @@ def _configure_matplotlib_fonts() -> None:
     
     plt.rcParams['font.sans-serif'] = fonts
     plt.rcParams['axes.unicode_minus'] = False  # 解決負號顯示問題
+
+def normalize_pre_eval_profile(value: Optional[str], *, default: str = "balanced") -> str:
+    profile = str(value or default).strip().lower()
+    if profile not in PRE_EVAL_PROFILE_CONFIGS:
+        return default
+    return profile
+
+
+def _clip_score(value: float) -> float:
+    return max(0.0, min(100.0, float(value)))
+
+
+def _split_sentences_for_pre_eval(text: str) -> List[str]:
+    parts = re.split(r"(?<=[.!?。！？])\s*|\n{2,}", text or "")
+    return [part.strip() for part in parts if part and part.strip()]
+
+
+def _tokenize_words_for_pre_eval(text: str) -> List[str]:
+    return re.findall(r"[A-Za-z']+|[\u4e00-\u9fff]", text or "")
+
+
+def _duplicate_ratio(values: List[str]) -> float:
+    if not values:
+        return 0.0
+    normalized = [re.sub(r"\s+", " ", str(value or "").strip().lower()) for value in values if str(value or "").strip()]
+    if not normalized:
+        return 0.0
+    counts = Counter(normalized)
+    duplicate_total = sum(count - 1 for count in counts.values() if count > 1)
+    return duplicate_total / max(1, len(normalized))
+
+
+def _read_pre_eval_story_text(story_dir: str, branch: str = "canonical") -> Tuple[Optional[str], str, Optional[str]]:
+    branch_sources = collect_branch_story_paths(story_dir, branch_mode=branch)
+    if not branch_sources:
+        return None, "canonical", None
+    branch_id, source_path = branch_sources[0]
+    try:
+        text = Path(source_path).read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return None, branch_id, str(source_path)
+    return text, branch_id, str(source_path)
+
+
+def score_story_pre_eval_heuristics(story_dir: str, *, branch: str = "canonical") -> Dict[str, Any]:
+    text, resolved_branch, source_document = _read_pre_eval_story_text(story_dir, branch=branch)
+    if not text:
+        return {
+            "overall_score": 0.0,
+            "metrics": {
+                "integrity": 0.0,
+                "readability_guard": 0.0,
+                "repetition_guard": 0.0,
+                "length_guard": 0.0,
+            },
+            "issues": ["missing_story_text"],
+            "high_risk_issues": ["missing_story_text"],
+            "branch": resolved_branch,
+            "source_document": source_document,
+            "stats": {},
+        }
+
+    stripped_text = text.strip()
+    sentences = _split_sentences_for_pre_eval(stripped_text)
+    words = _tokenize_words_for_pre_eval(stripped_text)
+    paragraphs = [chunk.strip() for chunk in re.split(r"\n{2,}", stripped_text) if chunk.strip()]
+    sentence_word_counts = [len(_tokenize_words_for_pre_eval(sentence)) for sentence in sentences]
+    avg_sentence_words = (sum(sentence_word_counts) / len(sentence_word_counts)) if sentence_word_counts else 0.0
+    long_word_ratio = (
+        sum(1 for token in words if len(token) >= 9) / max(1, len(words))
+        if words else 0.0
+    )
+    duplicate_sentence_ratio = _duplicate_ratio(sentences)
+    duplicate_paragraph_ratio = _duplicate_ratio(paragraphs)
+    exclamation_ratio = stripped_text.count("!") / max(1, len(sentences))
+    uppercase_ratio = (
+        sum(1 for ch in stripped_text if ch.isupper()) / max(1, sum(1 for ch in stripped_text if ch.isalpha()))
+    )
+    glitch_hits = sum(stripped_text.count(marker) for marker in _PRE_EVAL_GLITCH_MARKERS)
+
+    length_score = 100.0
+    if len(words) < 120:
+        length_score -= min(45.0, (120 - len(words)) * 0.25)
+    elif len(words) > 2200:
+        length_score -= min(32.0, (len(words) - 2200) * 0.02)
+    if len(sentences) < 8:
+        length_score -= min(24.0, (8 - len(sentences)) * 4.0)
+    if len(paragraphs) < 4:
+        length_score -= min(12.0, (4 - len(paragraphs)) * 4.0)
+
+    readability_score = 100.0
+    if avg_sentence_words > 18.0:
+        readability_score -= min(30.0, (avg_sentence_words - 18.0) * 3.0)
+    elif avg_sentence_words < 4.5:
+        readability_score -= min(12.0, (4.5 - avg_sentence_words) * 4.0)
+    if long_word_ratio > 0.12:
+        readability_score -= min(30.0, (long_word_ratio - 0.12) * 200.0)
+    if exclamation_ratio > 0.35:
+        readability_score -= min(10.0, (exclamation_ratio - 0.35) * 50.0)
+
+    repetition_score = 100.0
+    repetition_score -= min(40.0, duplicate_sentence_ratio * 140.0)
+    repetition_score -= min(22.0, duplicate_paragraph_ratio * 90.0)
+    if uppercase_ratio > 0.18:
+        repetition_score -= min(8.0, (uppercase_ratio - 0.18) * 60.0)
+
+    integrity_score = 100.0
+    integrity_score -= min(60.0, glitch_hits * 18.0)
+    if re.search(r"<[^>]+>", stripped_text):
+        integrity_score -= 18.0
+    if "previous_output:" in stripped_text.lower() or "system_feedback:" in stripped_text.lower():
+        integrity_score -= 25.0
+
+    metrics = {
+        "integrity": round(_clip_score(integrity_score), 2),
+        "readability_guard": round(_clip_score(readability_score), 2),
+        "repetition_guard": round(_clip_score(repetition_score), 2),
+        "length_guard": round(_clip_score(length_score), 2),
+    }
+    overall = round(
+        _clip_score(
+            metrics["integrity"] * 0.35
+            + metrics["readability_guard"] * 0.25
+            + metrics["repetition_guard"] * 0.2
+            + metrics["length_guard"] * 0.2
+        ),
+        2,
+    )
+
+    issues: List[str] = []
+    high_risk: List[str] = []
+    if metrics["integrity"] < 70.0:
+        issues.append("integrity_risk")
+    if metrics["readability_guard"] < 72.0:
+        issues.append("readability_risk")
+    if metrics["repetition_guard"] < 72.0:
+        issues.append("repetition_risk")
+    if metrics["length_guard"] < 68.0:
+        issues.append("length_risk")
+    if metrics["integrity"] < 45.0:
+        high_risk.append("integrity_break")
+    if duplicate_sentence_ratio >= 0.24:
+        high_risk.append("high_duplicate_ratio")
+    if len(sentences) < 5 or len(words) < 80:
+        high_risk.append("story_too_thin")
+
+    return {
+        "overall_score": overall,
+        "metrics": metrics,
+        "issues": issues,
+        "high_risk_issues": high_risk,
+        "branch": resolved_branch,
+        "source_document": source_document,
+        "stats": {
+            "word_count": len(words),
+            "sentence_count": len(sentences),
+            "paragraph_count": len(paragraphs),
+            "avg_sentence_words": round(avg_sentence_words, 2),
+            "long_word_ratio": round(long_word_ratio, 4),
+            "duplicate_sentence_ratio": round(duplicate_sentence_ratio, 4),
+            "duplicate_paragraph_ratio": round(duplicate_paragraph_ratio, 4),
+            "glitch_hits": glitch_hits,
+        },
+    }
+
+
+def build_pre_evaluation_plan(
+    story_dir: str,
+    *,
+    threshold: float = 65.0,
+    profile: str = "balanced",
+    branch: str = "canonical",
+) -> Dict[str, Any]:
+    normalized_profile = normalize_pre_eval_profile(profile)
+    config = PRE_EVAL_PROFILE_CONFIGS[normalized_profile]
+    heuristics = score_story_pre_eval_heuristics(story_dir, branch=branch)
+    metrics = heuristics.get("metrics", {})
+    stats = heuristics.get("stats", {})
+
+    selected_aspects = list(config["base_aspects"])
+    if (
+        float(metrics.get("readability_guard", 100.0)) < 78.0
+        or float(stats.get("avg_sentence_words", 0.0)) > 16.0
+        or float(stats.get("long_word_ratio", 0.0)) > 0.09
+    ):
+        selected_aspects.append("readability")
+    if (
+        float(metrics.get("length_guard", 100.0)) < 72.0
+        or int(stats.get("sentence_count", 0)) < 8
+        or int(stats.get("paragraph_count", 0)) < 4
+    ):
+        selected_aspects.append("completeness")
+    selected_aspects = normalise_dimensions(selected_aspects)
+
+    heuristic_score = float(heuristics.get("overall_score", 0.0) or 0.0)
+    hard_fail_threshold = max(25.0, float(threshold) - float(config["hard_fail_margin"]))
+    skip_threshold = min(100.0, float(threshold) + float(config["skip_margin"]))
+    high_risk = list(heuristics.get("high_risk_issues", []) or [])
+
+    action = "model_eval"
+    if heuristic_score <= hard_fail_threshold or high_risk:
+        action = "heuristic_block"
+    elif normalized_profile == "fast" and heuristic_score >= skip_threshold:
+        action = "skip_model_eval"
+
+    return {
+        "profile": normalized_profile,
+        "threshold": float(threshold),
+        "branch": str(heuristics.get("branch") or branch or "canonical"),
+        "source_document": heuristics.get("source_document"),
+        "heuristics": heuristics,
+        "aspects": selected_aspects,
+        "action": action,
+        "blend_weights": dict(config["blend_weights"]),
+        "skip_threshold": round(skip_threshold, 2),
+        "hard_fail_threshold": round(hard_fail_threshold, 2),
+    }
 
 
 @dataclass(frozen=True)
@@ -144,13 +387,18 @@ def _create_evaluator(config: Optional[EvaluatorConfig] = None) -> MultiAspectEv
         已配置的 MultiAspectEvaluator 實例
     """
     cfg = config or EvaluatorConfig.from_env()
-    return MultiAspectEvaluator(
+    evaluator = MultiAspectEvaluator(
         enable_parallel_processing=cfg.parallel_enabled,      # 是否並行處理
         max_parallel_dimensions=cfg.max_parallel_dimensions,  # 最大並行數
         enable_model_caching=True,                            # 啟用模型快取
         preload_all_models=cfg.preload_models,                # 是否預載模型
         batch_size_optimization=True,                         # 批次大小優化
     )
+    try:
+        _ACTIVE_EVALUATORS.add(evaluator)
+    except Exception:
+        pass
+    return evaluator
 
 
 def _log_performance_config(config: EvaluatorConfig) -> None:
@@ -187,7 +435,7 @@ def evaluate_all(story_text: str, story_title: str = "Story", aspects: Optional[
         story_title: 故事標題（用於報告顯示）
         aspects: 要評估的維度列表，若為 None 則評估所有維度
                 可選值: ['entity_consistency', 'completeness', 'coherence', 
-                         'readability', 'factuality', 'emotional_impact']
+                         'readability', 'factuality', 'emotional_impact', 'multimodal_alignment']
     
     返回:
         包含評估結果的字典：
@@ -370,10 +618,17 @@ def evaluate_story_directory(
         if effective_mode_lower in {"all", "*"}:
             branch_results: List[Dict[str, object]] = []
             for branch_id, source_path in branch_sources:
+                image_context = collect_story_visual_assets(
+                    story_dir,
+                    branch_id=branch_id,
+                    source_document=source_path,
+                )
                 report = local_evaluator.evaluate_story(
                     document_paths={"full_story.txt": str(source_path)},
                     story_title=story_title,
                     enabled_dimensions=enabled_dimensions,
+                    image_paths=list(image_context.get("image_paths") or []),
+                    image_context=image_context,
                     branch_id=branch_id,
                     source_document=str(source_path),
                     evaluation_scope=effective_mode,
@@ -426,10 +681,17 @@ def evaluate_story_directory(
             }
 
         selected_branch_id, selected_path = branch_sources[0]
+        image_context = collect_story_visual_assets(
+            story_dir,
+            branch_id=selected_branch_id,
+            source_document=selected_path,
+        )
         report = local_evaluator.evaluate_story(
             {"full_story.txt": str(selected_path)},
             story_title,
             enabled_dimensions,
+            image_paths=list(image_context.get("image_paths") or []),
+            image_context=image_context,
             branch_id=selected_branch_id,
             source_document=str(selected_path),
             evaluation_scope=effective_mode,
@@ -733,6 +995,26 @@ def _release_models(evaluator: MultiAspectEvaluator) -> None:
             logger.warning("⚠️ 釋放模型時出錯: %s", exc)
 
 
+def cleanup_evaluation_models(evaluator: Optional[MultiAspectEvaluator] = None) -> None:
+    """相容入口：釋放評估器載入的模型並回收記憶體。"""
+    if evaluator is not None:
+        targets: List[MultiAspectEvaluator] = [evaluator]
+    else:
+        targets = [item for item in list(_ACTIVE_EVALUATORS) if item is not None]
+
+    for target in targets:
+        _release_models(target)
+
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except Exception:
+        pass
+
+
 # =============================================================================
 # 命令列介面主程式
 # =============================================================================
@@ -990,6 +1272,7 @@ if __name__ == "__main__":
   - readability: 可讀性（語言是否適合目標讀者）
   - factuality: 事實正確性（事實陳述是否準確）
   - emotional_impact: 情感影響力（情感表達的感染力）
+  - multimodal_alignment: 文圖一致性（圖片品質、提示詞密度與圖文對位）
 
 環境變數配置:
     EVAL_PARALLEL_ENABLED=true        # 保留相容欄位（目前維度評估採順序執行）

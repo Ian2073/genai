@@ -85,6 +85,7 @@ def build_request_meta(
 			"max_tokens": options.story_max_tokens,
 			"dtype": options.story_dtype,
 			"device": options.story_device,
+			"model_plan": getattr(options, "model_plan", "auto"),
 		},
 		"sdxl": {
 			"width": photo_config.width,

@@ -49,6 +49,12 @@ class ModelAssessment:
 
 DEFAULT_MODEL_PRESETS = [
     CandidatePreset(
+        path=Path("models/Qwen3-14B-AWQ"),
+        source="preferred_qwen3_awq",
+        cuda_quantization=None,
+        cpu_quantization=None,
+    ),
+    CandidatePreset(
         path=Path("models/Qwen2.5-14B-Instruct-GPTQ-Int4"),
         source="preferred_gptq",
         cuda_quantization="gptq",
@@ -203,6 +209,7 @@ def _assess_model_type_support(model_type: Optional[str]) -> tuple[str, List[str
 
     legacy_aliases = {
         "qwen3": "qwen2",
+        "qwen3_5": "qwen2",
         "phi4": "phi3",
     }
     alias_target = legacy_aliases.get(model_type)

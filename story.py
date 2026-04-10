@@ -15,6 +15,7 @@ import time
 import torch #勿動此行
 import platform
 import difflib
+from collections import Counter
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -290,6 +291,189 @@ class StoryPipeline:
 			if len(items) >= max_items:
 				break
 		return items
+
+	def _outline_page_count(self, outline_text: str) -> int:
+		return len(re.findall(r"\bPage\s+\d+\b", outline_text or "", flags=re.IGNORECASE))
+
+	def _looks_like_text_glitch(self, text: str) -> bool:
+		if not text:
+			return True
+		bad_markers = ("�", "?", "?", "??")
+		return any(marker in text for marker in bad_markers)
+
+	def _critique_outline_candidate(self, outline_text: str) -> Dict[str, Any]:
+		outline_text = (outline_text or "").strip()
+		if not outline_text:
+			return {"pass": False, "score": 0.0, "issues": ["outline_empty"]}
+
+		critique_prompt = ChatPrompt(
+			system_prompt=(
+				"You review children's story outlines. "
+				"Return compact JSON only with keys: pass, score, issues."
+			),
+			user_prompt=(
+				f"Expected pages: {self._total_pages()}\n"
+				f"Primary characters: {', '.join(self.primary_characters)}\n"
+				"Check for page coverage, character consistency, readability, and obvious glitches.\n"
+				"Outline:\n"
+				f"{outline_text}\n"
+			),
+		)
+		params = replace(self._generation_for("outline"), max_tokens=120, min_tokens=12, temperature=0.1, top_p=0.8)
+		try:
+			raw_text, _tokens = self.llm.generate(critique_prompt, params)
+			payload = self._extract_json_object(strip_hidden_thoughts(raw_text))
+			if isinstance(payload, dict):
+				try:
+					score_value = max(0.0, min(100.0, float(payload.get("score", 0.0))))
+				except (TypeError, ValueError):
+					score_value = 0.0
+				issues = payload.get("issues")
+				if not isinstance(issues, list):
+					issues = []
+				return {
+					"pass": bool(payload.get("pass")) or score_value >= 70.0,
+					"score": score_value,
+					"issues": [str(item) for item in issues[:6]],
+				}
+		except Exception as exc:
+			self.logger.warning("Outline critique fallback engaged: %s", exc)
+		return {"pass": True, "score": 70.0, "issues": []}
+
+	def _score_outline_candidate(self, outline_text: str) -> Dict[str, Any]:
+		expected_pages = max(1, self._total_pages())
+		page_count = self._outline_page_count(outline_text)
+		score = 55.0
+		issues: List[str] = []
+
+		if page_count:
+			score += max(0.0, 20.0 - abs(page_count - expected_pages) * 5.0)
+		else:
+			score -= 15.0
+			issues.append("missing_page_markers")
+
+		char_hits = 0
+		lowered_outline = (outline_text or "").casefold()
+		for name in self.primary_characters:
+			if name and name.casefold() in lowered_outline:
+				char_hits += 1
+		score += min(12.0, char_hits * 6.0)
+		if char_hits == 0:
+			issues.append("missing_primary_character")
+
+		if self.profile and self.profile.layout and self.profile.layout.branch_count > 0:
+			if "turning point" in lowered_outline:
+				score += 6.0
+			else:
+				issues.append("missing_turning_point_signal")
+
+		if self._looks_like_text_glitch(outline_text):
+			score -= 25.0
+			issues.append("encoding_or_token_glitch")
+
+		critique = self._critique_outline_candidate(outline_text)
+		score = max(0.0, min(100.0, score * 0.65 + float(critique.get("score", 0.0)) * 0.35))
+		if not critique.get("pass", True):
+			score = max(0.0, score - 10.0)
+		issues.extend(str(item) for item in critique.get("issues", []) if str(item))
+
+		return {
+			"score": round(score, 2),
+			"page_count": page_count,
+			"issues": issues[:8],
+			"critique": critique,
+		}
+
+	def _score_title_candidate(self, raw_title: str) -> Dict[str, Any]:
+		title = self._extract_title_candidate(raw_title) or self._clean_title_candidate(raw_title)
+		score = 60.0
+		issues: List[str] = []
+		word_count = len(title.split())
+
+		if not self._is_plausible_title(title):
+			score -= 30.0
+			issues.append("implausible_title")
+		if word_count < 2:
+			score -= 10.0
+			issues.append("too_short")
+		elif word_count > 8:
+			score -= min(20.0, float((word_count - 8) * 3))
+			issues.append("too_long")
+		else:
+			score += 10.0
+
+		if re.search(r"\bpage\b", title, flags=re.IGNORECASE):
+			score -= 25.0
+			issues.append("contains_page_marker")
+		if self._looks_like_text_glitch(title):
+			score -= 25.0
+			issues.append("encoding_or_token_glitch")
+
+		return {
+			"score": round(max(0.0, min(100.0, score)), 2),
+			"title": title,
+			"issues": issues[:6],
+		}
+
+	def _rank_step_candidates(
+		self,
+		step: str,
+		extra_context: Dict[str, Any],
+		output_path: Path,
+		*,
+		candidate_count: int,
+		generation: Optional[GenerationParams] = None,
+		banned_phrases: Optional[List[str]] = None,
+	) -> str:
+		candidate_count = max(1, int(candidate_count or 1))
+		if candidate_count <= 1 or output_path.exists():
+			return self._run_single_step(
+				step,
+				extra_context,
+				output_path,
+				generation=generation,
+				banned_phrases=banned_phrases,
+			)
+
+		candidates: List[Dict[str, Any]] = []
+		for idx in range(candidate_count):
+			candidate_path = output_path.with_name(f"{output_path.stem}__candidate_{idx + 1}{output_path.suffix}")
+			candidate_text = self._run_single_step(
+				step,
+				extra_context,
+				candidate_path,
+				generation=generation,
+				banned_phrases=banned_phrases,
+			)
+			if step == "outline":
+				scorecard = self._score_outline_candidate(candidate_text)
+			elif step == "title":
+				scorecard = self._score_title_candidate(candidate_text)
+			else:
+				scorecard = {"score": 0.0, "issues": []}
+			candidates.append({"path": candidate_path, "text": candidate_text, "scorecard": scorecard})
+			self.logger.info(
+				"[Step %s] candidate %d/%d score=%.2f issues=%s",
+				step,
+				idx + 1,
+				candidate_count,
+				float(scorecard.get("score", 0.0)),
+				scorecard.get("issues", []),
+			)
+
+		selected = max(candidates, key=lambda item: float(item["scorecard"].get("score", 0.0)))
+		write_text_or_raise(output_path, str(selected["text"]))
+		self.step_history.append(
+			{
+				"step": f"{step}_selection",
+				"candidate_count": candidate_count,
+				"selected_candidate": output_path.name,
+				"selected_source": Path(str(selected["path"])).name,
+				"selected_score": float(selected["scorecard"].get("score", 0.0)),
+				"issues": list(selected["scorecard"].get("issues", [])),
+			}
+		)
+		return str(selected["text"])
 
 	def _rule_based_story_intent(self) -> Dict[str, List[str]]:
 		"""先做 deterministic 規則式抽取，確保任何情況都有結果。"""
@@ -666,6 +850,194 @@ class StoryPipeline:
 		if guidelines:
 			guideline_path = self.paths["guidelines"]
 			write_text_or_raise(guideline_path, guidelines)
+		self._persist_character_prompt_files()
+		write_json_or_raise(self.paths["resource"] / "character_bible.json", self._build_character_bible())
+		write_json_or_raise(self.paths["resource"] / "world_style_lock.json", self._build_world_style_lock())
+
+	def _persist_character_prompt_files(self) -> None:
+		"""Persist per-character prompt files for the image stage."""
+		resource_root = self.paths["resource"]
+		for name, prompt_text in self._build_character_prompt_texts().items():
+			safe_name = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_") or "character"
+			write_text_or_raise(resource_root / f"character_{safe_name}.txt", prompt_text)
+
+	def _build_character_prompt_texts(self) -> Dict[str, str]:
+		payload = (self.inputs.kg_payload or {}).get("characters") or []
+		result: Dict[str, str] = {}
+		seen: Set[str] = set()
+		category = (self.inputs.category or self.profile.category_label or "storybook").strip()
+		theme = (self.inputs.theme or self.profile.theme_label or "").strip()
+		for item in payload:
+			label = ""
+			role = ""
+			appearance = ""
+			description = ""
+			outfit = ""
+			if isinstance(item, str):
+				label = re.sub(r"\s+", " ", item).strip()
+			elif isinstance(item, dict):
+				label = str(item.get("label") or item.get("name") or "").strip()
+				role = str(item.get("role") or item.get("type") or "").strip()
+				appearance = str(item.get("appearance") or "").strip()
+				description = str(item.get("description") or "").strip()
+				outfit = str(item.get("outfit") or "").strip()
+			if not label:
+				continue
+			key = label.casefold()
+			if key in seen:
+				continue
+			seen.add(key)
+			bits = [label]
+			for extra in (role, appearance, description, outfit):
+				extra = re.sub(r"\s+", " ", extra).strip(" ,")
+				if extra and extra.casefold() not in {part.casefold() for part in bits}:
+					bits.append(extra)
+			if category:
+				bits.append(f"{category} picture-book character")
+			if theme:
+				bits.append(f"theme cue: {theme}")
+			bits.append("consistent outfit colors, readable face, clear silhouette, expressive hands")
+			result[label] = ", ".join(bits[:6])
+
+		if result:
+			return result
+
+		return {
+			name: f"{name}, storybook character, consistent outfit colors, readable face, clear silhouette, expressive hands"
+			for name in self.primary_characters
+		}
+
+	def _story_character_records(self) -> List[Dict[str, Any]]:
+		payload = (self.inputs.kg_payload or {}).get("characters") or []
+		result: List[Dict[str, Any]] = []
+		seen: Set[str] = set()
+		for item in payload:
+			record: Dict[str, Any] = {
+				"name": "",
+				"role": "",
+				"appearance": "",
+				"description": "",
+				"outfit": "",
+				"props": [],
+			}
+			if isinstance(item, str):
+				record["name"] = re.sub(r"\([^)]*\)", "", re.sub(r"\s+", " ", item)).strip(" ,")
+			elif isinstance(item, dict):
+				record["name"] = re.sub(r"\([^)]*\)", "", str(item.get("label") or item.get("name") or "")).strip(" ,")
+				record["role"] = str(item.get("role") or item.get("type") or "").strip()
+				record["appearance"] = str(item.get("appearance") or "").strip()
+				record["description"] = str(item.get("description") or "").strip()
+				record["outfit"] = str(item.get("outfit") or "").strip()
+				raw_props = item.get("props") or []
+				if isinstance(raw_props, str):
+					record["props"] = [re.sub(r"\s+", " ", raw_props).strip(" ,")]
+				elif isinstance(raw_props, list):
+					record["props"] = [
+						re.sub(r"\s+", " ", str(prop or "")).strip(" ,")
+						for prop in raw_props
+						if str(prop or "").strip()
+					]
+			name = str(record.get("name") or "").strip()
+			if not name:
+				continue
+			key = name.casefold()
+			if key in seen:
+				continue
+			seen.add(key)
+			result.append(record)
+		if result:
+			return result
+		return [{"name": name, "role": "", "appearance": "", "description": "", "outfit": "", "props": []} for name in self.primary_characters]
+
+	def _story_scene_anchors(self) -> List[str]:
+		scenes = []
+		payload = (self.inputs.kg_payload or {}).get("scenes") or []
+		for item in payload:
+			text = re.sub(r"\s+", " ", str(item or "")).strip(" ,.")
+			if text and text not in scenes:
+				scenes.append(text)
+		return scenes[:6]
+
+	def _extract_color_locks(self, *chunks: str) -> List[str]:
+		color_vocab = (
+			"red", "orange", "yellow", "green", "blue", "purple", "pink", "brown",
+			"black", "white", "gray", "grey", "gold", "silver", "teal", "navy",
+		)
+		text = " ".join(re.sub(r"\s+", " ", str(chunk or "")).casefold() for chunk in chunks)
+		return [color for color in color_vocab if re.search(rf"\b{re.escape(color)}\b", text)]
+
+	def _build_character_bible(self) -> Dict[str, Any]:
+		characters: List[Dict[str, Any]] = []
+		for record in self._story_character_records():
+			name = str(record.get("name") or "").strip()
+			appearance = str(record.get("appearance") or "").strip()
+			description = str(record.get("description") or "").strip()
+			outfit = str(record.get("outfit") or "").strip()
+			role = str(record.get("role") or "").strip()
+			props = list(record.get("props") or [])
+			color_lock = self._extract_color_locks(appearance, description, outfit)
+			forbidden_drift: List[str] = []
+			if appearance:
+				forbidden_drift.append(f"different appearance from {name}'s canon")
+			if outfit:
+				forbidden_drift.append(f"different outfit from {name}'s canon")
+			if color_lock:
+				forbidden_drift.append(f"wrong outfit colors for {name}")
+			characters.append(
+				{
+					"name": name,
+					"age_look": "young child" if name in self.primary_characters[:2] else "supporting story character",
+					"height_ratio": "child-sized" if name in self.primary_characters[:2] else "adult-sized",
+					"hair": appearance or description,
+					"face_shape": "readable round-friendly storybook face",
+					"outfit_core": outfit or description,
+					"color_lock": color_lock,
+					"silhouette": outfit or appearance or "clean readable silhouette",
+					"props": props,
+					"expression_style": description or "clear child-readable expression",
+					"role": role,
+					"forbidden_drift": forbidden_drift,
+				}
+			)
+		return {
+			"version": "1.0",
+			"story_title": self.story_title,
+			"characters": characters,
+			"readability_goal": "Stable, child-readable characters that stay recognizable across pages.",
+		}
+
+	def _build_world_style_lock(self) -> Dict[str, Any]:
+		visual_frame = self.profile.layout.visual_frame.to_dict() if self.profile and self.profile.layout and self.profile.layout.visual_frame else {}
+		depth_layers = dict(visual_frame.get("depth_layers") or {})
+		return {
+			"version": "1.0",
+			"world_id": re.sub(r"[^a-z0-9]+", "_", f"{self.profile.category_label}_{self.profile.theme_label}".casefold()).strip("_") or "storybook_world",
+			"style_lock": self.image_style_lock,
+			"render_principle": "Stable, readable picture-book storytelling frames instead of showcase art.",
+			"camera_language": {
+				"far": "full environment view with one clear story beat",
+				"mid": "group action focus with readable gesture hierarchy",
+				"close": "emotion and hand detail focus with simple composition",
+			},
+			"lighting_language": {
+				"bright": "clear, welcoming, easy for children to read at a glance",
+				"dim": "gentle magical mood while keeping the action readable",
+			},
+			"space_rules": {
+				"foreground": depth_layers.get("foreground") or "nearest interactive prop or gesture cue",
+				"midground": depth_layers.get("midground") or "main character action zone",
+				"background": depth_layers.get("background") or "setting anchor that keeps the world recognizable",
+			},
+			"story_goal": "Each image should communicate the current page's story state in one glance.",
+			"scene_anchors": self._story_scene_anchors(),
+			"forbidden_styles": [
+				"photorealism",
+				"3d render",
+				"comic panel",
+				"cinematic lens flare",
+				"text overlay",
+			],
+		}
 
 	def _page_file(self, idx: int) -> Path:
 		"""依頁碼回傳單頁文字檔路徑。"""
@@ -725,88 +1097,19 @@ class StoryPipeline:
 		self._major_step_total = 3 + (branch_total * 4) + 2
 		self._major_step_index = 0
 		self._log_major_step("outline")
+		outline_candidate_count = max(1, int(getattr(self.options, "outline_candidates", 1) or 1))
+		outline = self._rank_step_candidates(
+			"outline",
+			{"kg_enabled": self.options.kg_enabled},
+			self.paths["outline"],
+			candidate_count=outline_candidate_count,
+		)
+		self.logger.info(
+			"Stage 0.5 outline selection completed with %d candidate(s)",
+			outline_candidate_count,
+		)
+		self.logger.info("Outline selection is now handled by candidate scoring and rerank.")
 
-		# --- Stage 0.5: Outline Generation with Self-Critique Gate ---
-
-		max_outline_attempts = 3
-
-		candidate_outline = ""
-
-		outline = ""
-
-		self.logger.info("Beginning Stage 0.5: Outline Generation and Self-Critique Gate")
-
-		for attempt in range(1, max_outline_attempts + 1):
-
-		    self.logger.info("Generating outline (Attempt %d/%d)...", attempt, max_outline_attempts)
-
-		    candidate_outline = self._run_single_step(
-
-		        "outline",
-
-		        {"kg_enabled": self.options.kg_enabled},
-
-		        self.paths["outline"],
-
-		    )
-
-		    
-
-		    # Self-Critique check
-
-		    self.logger.info("Running Stage 0.5 Self-Critique on generated outline...")
-
-		    critique_prompt = f"""
-請你扮演資深的兒童故事編輯，嚴格審查以下故事大綱。
-【審查標準】
-1. 邏輯合理性：起承轉合是否流暢，有沒有情節斷層或矛盾？
-2. 安全性與適當性：是否完全適合兒童閱讀，無暴力、恐怖或不當情節？
-
-【大綱內容】
-{candidate_outline}
-
-如果上述大綱符合標準，沒有嚴重缺陷，請只回覆 "PASS" (全大寫)。
-如果有嚴重的邏輯漏洞或不適當的內容，不能繼續發展成完整故事，請回覆 "FAIL: [簡述原因]"。
-"""
-
-		    validation_result = "PASS"
-
-		    try:
-
-		        from backends.llm import get_generator
-
-		        temp_gen = get_generator("outline")
-
-		        validation_result = temp_gen.generate(critique_prompt, {"max_new_tokens": 100}).strip()
-
-		    except Exception as e:
-
-		        self.logger.warning("Stage 0.5 Self-Critique execution error: %s", e)
-
-		        validation_result = "PASS"
-
-		        
-
-		    if "PASS" in validation_result.upper():
-
-		        self.logger.info("Stage 0.5 Outline Self-Critique PASSED.")
-
-		        outline = candidate_outline
-
-		        break
-
-		    else:
-
-		        self.logger.warning("Stage 0.5 Outline Self-Critique REJECTED (Attempt %d): %s", attempt, validation_result)
-
-		        if attempt == max_outline_attempts:
-
-		            self.logger.warning("Max outline attempts reached. Proceeding with the last generated outline despite rejection.")
-
-		            outline = candidate_outline
-
-		# --- End Stage 0.5 ---
-		
 		# Extract dynamic turning point from outline
 		detected_turning_point = self._extract_turning_point_from_outline(outline)
 		self.base_context["detected_turning_point"] = detected_turning_point
@@ -831,7 +1134,8 @@ class StoryPipeline:
 		self.logger.info("Outline generated with turning point at Page %d", detected_turning_point)
 		
 		self._log_major_step("title")
-		raw_title = self._run_single_step(
+		title_candidate_count = max(1, int(getattr(self.options, "title_candidates", 1) or 1))
+		raw_title = self._rank_step_candidates(
 			"title",
 			{
 				"outline": outline, 
@@ -845,6 +1149,7 @@ class StoryPipeline:
 				"character3": self.primary_characters[2] if len(self.primary_characters) > 2 else "",
 			},
 			self.paths["title"],
+			candidate_count=title_candidate_count,
 		)
 		title = self._finalize_story_root(raw_title)
 		self.base_context["story_title"] = title
@@ -1190,6 +1495,93 @@ class StoryPipeline:
 			"decision_options": decision_slots,
 		}
 
+	def _is_key_story_page(self, idx: int, page_structure: Dict[str, Any]) -> bool:
+		total_pages = self._total_pages()
+		if idx <= 1:
+			return True
+		if idx >= total_pages:
+			return True
+		if idx == max(1, total_pages - 1):
+			return True
+		if page_structure.get("branch_trigger"):
+			return True
+		if bool(page_structure.get("is_branch_start")):
+			return True
+		if str(page_structure.get("page_function") or "").upper() == "REFLECTION":
+			return True
+		return False
+
+	def _score_story_page_candidate(
+		self,
+		text: str,
+		*,
+		idx: int,
+		page_structure: Dict[str, Any],
+		history: Optional[List[str]] = None,
+	) -> Dict[str, Any]:
+		score = 62.0
+		issues: List[str] = []
+		word_count = len(re.findall(r"[A-Za-z']+|[\u4e00-\u9fff]", text or ""))
+		min_words, max_words = self._target_word_bounds(idx)
+		risk = self._assess_generation_quality_risks("story_write", text)
+		signals = dict(risk.get("signals") or {})
+
+		if min_words <= word_count <= max_words:
+			score += 16.0
+		elif word_count < min_words:
+			score -= min(22.0, (min_words - word_count) * 0.45)
+			issues.append("too_short")
+		else:
+			score -= min(18.0, (word_count - max_words) * 0.25)
+			issues.append("too_long")
+
+		if signals.get("glitch"):
+			score -= 25.0
+			issues.append("text_glitch")
+		if float(signals.get("duplicate_sentence_ratio", 0.0) or 0.0) >= 0.18:
+			score -= min(20.0, float(signals.get("duplicate_sentence_ratio", 0.0)) * 70.0)
+			issues.append("sentence_repetition")
+		if bool(signals.get("repeated_phrase")):
+			score -= 12.0
+			issues.append("phrase_repetition")
+		if int(signals.get("coref_ambiguity_score", 0) or 0) >= 2:
+			score -= 10.0
+			issues.append("coref_ambiguity")
+		if float(signals.get("avg_sentence_words", 0.0) or 0.0) >= 24.0:
+			score -= 8.0
+			issues.append("dense_sentence")
+
+		if history and self._check_repetition(text, history, threshold=0.74):
+			score -= 18.0
+			issues.append("too_similar_to_recent_page")
+
+		if page_structure.get("branch_trigger"):
+			if "Option 1" in text or "Option 2" in text:
+				score -= 25.0
+				issues.append("explicit_option_list")
+			else:
+				score += 4.0
+
+		if idx == 1:
+			lowered_text = (text or "").casefold()
+			name_hits = sum(1 for name in self.primary_characters[:2] if name and name.casefold() in lowered_text)
+			if name_hits == 0:
+				score -= 8.0
+				issues.append("missing_primary_character")
+			else:
+				score += min(6.0, name_hits * 3.0)
+
+		if idx >= self._total_pages() - 1 and text and text.rstrip()[-1] not in ".!?。！？\"'”":
+			score -= 5.0
+			issues.append("weak_closure")
+
+		return {
+			"score": round(max(0.0, min(100.0, score)), 2),
+			"issues": issues[:8],
+			"signals": signals,
+			"word_count": word_count,
+		}
+
 	def _structure_path(self, idx: int) -> Path:
 		return structure_path(self.paths["story"], idx)
 
@@ -1200,6 +1592,586 @@ class StoryPipeline:
 	def _read_page_structure(self, idx: int) -> Optional[Dict[str, Any]]:
 		"""Read structural metadata for a page if available."""
 		return read_page_structure(self.paths["story"], idx)
+
+	def _read_state_snapshot(self, idx: int) -> Dict[str, Any]:
+		state_path = self.paths["story"].parent / f"page_{idx}_state.json"
+		if not state_path.exists():
+			return {}
+		try:
+			payload = json.loads(state_path.read_text(encoding="utf-8"))
+		except Exception:
+			return {}
+		return payload if isinstance(payload, dict) else {}
+
+	def _infer_scene_stage(self, idx: int, page_structure: Dict[str, Any]) -> str:
+		page_function = str(page_structure.get("page_function") or "").upper()
+		if page_structure.get("branch_trigger") or page_function == "INTERACTION":
+			return "action"
+		if bool(page_structure.get("is_branch_start")):
+			return "action"
+		total_pages = int(page_structure.get("total_pages") or self._total_pages() or 1)
+		if page_function == "REFLECTION" or idx >= total_pages:
+			return "result"
+		decision_page = int(page_structure.get("decision_page") or 0)
+		if idx <= 2:
+			return "setup"
+		if decision_page and idx < decision_page:
+			return "setup"
+		if decision_page and idx > decision_page:
+			return "result" if idx >= max(1, total_pages - 1) else "action"
+		return "result" if idx >= max(1, total_pages - 1) else "action"
+
+	def _infer_scene_shot(self, idx: int, page_structure: Dict[str, Any], scene_stage: str) -> str:
+		page_function = str(page_structure.get("page_function") or "").upper()
+		total_pages = int(page_structure.get("total_pages") or self._total_pages() or 1)
+		if idx == 1:
+			return "far"
+		if page_function == "REFLECTION" or idx >= total_pages:
+			return "close"
+		if page_structure.get("branch_trigger") or bool(page_structure.get("is_branch_start")):
+			return "mid"
+		if scene_stage == "setup" and idx <= 2:
+			return "far"
+		if idx >= max(2, total_pages - 1):
+			return "mid"
+		return "mid"
+
+	def _infer_scene_lighting(self, *chunks: Any) -> str:
+		text = " ".join(re.sub(r"\s+", " ", str(chunk or "")).strip() for chunk in chunks if chunk).casefold()
+		dim_markers = (
+			"night", "moon", "star", "dark", "dim", "shadow", "shadows", "lantern",
+			"cave", "storm", "rain", "mist", "fog", "dusk", "evening", "midnight",
+		)
+		bright_markers = (
+			"day", "daylight", "morning", "sun", "sunny", "sunlight", "bright",
+			"golden", "warm light", "blue sky", "garden", "backyard", "picnic",
+		)
+		if any(marker in text for marker in dim_markers):
+			return "dim"
+		if any(marker in text for marker in bright_markers):
+			return "bright"
+		return "bright"
+
+	def _page_required_characters(self, page_text: str) -> List[str]:
+		lowered = f" {(page_text or '').casefold()} "
+		required = []
+		for record in self._story_character_records():
+			name = str(record.get("name") or "").strip()
+			if name and f" {name.casefold()} " in lowered and name not in required:
+				required.append(name)
+		if required:
+			return required
+		if self.primary_characters:
+			return [self.primary_characters[0]]
+		return []
+
+	def _infer_scene_focus_subject(self, required_characters: Sequence[str], page_text: str) -> str:
+		if len(required_characters) >= 2:
+			return "pair"
+		if len(required_characters) == 1:
+			return "character"
+		object_markers = ("lantern", "key", "map", "book", "box", "bridge", "door", "locket", "boat")
+		lowered = f" {(page_text or '').casefold()} "
+		if any(marker in lowered for marker in object_markers):
+			return "object"
+		return "environment"
+
+	def _infer_scene_motion_level(self, scene_stage: str, page_text: str) -> str:
+		lowered = f" {(page_text or '').casefold()} "
+		active_markers = (
+			" run", " running", " jump", " jumping", " reach", " reaching", " chase",
+			" climb", " climbing", " pull", " pulling", " push", " pushing",
+			" guide", " guiding", " follow", " following", " lead", " leading",
+			" open", " opening", " race", " racing", " dash", " dashing",
+		)
+		if any(marker in lowered for marker in active_markers):
+			return "active"
+		if scene_stage == "action":
+			return "active"
+		if scene_stage == "result":
+			return "still"
+		return "light"
+
+	def _infer_scene_emotion_density(self, state_snapshot: Dict[str, Any], page_text: str) -> str:
+		text = " ".join(
+			[
+				str(state_snapshot.get("character_emotion") or ""),
+				str(state_snapshot.get("world_constraint") or ""),
+				str(state_snapshot.get("world_condition") or ""),
+				str(page_text or ""),
+			]
+		).casefold()
+		if any(marker in text for marker in ("wonder", "curious", "magic", "sparkle", "twinkle", "glow")):
+			return "wonder"
+		if any(marker in text for marker in ("worried", "nervous", "cautious", "afraid", "tense", "careful")):
+			return "tense"
+		if any(marker in text for marker in ("happy", "warm", "relief", "hug", "smile", "gentle", "cozy")):
+			return "warm"
+		return "calm"
+
+	def _infer_scene_composition_balance(self, scene_shot: str, scene_stage: str, required_characters: Sequence[str]) -> str:
+		if scene_shot == "close" or scene_stage == "result":
+			return "centered"
+		if len(required_characters) >= 2 or scene_stage == "action":
+			return "layered"
+		return "centered"
+
+	def _infer_world_anchor(self, page_text: str, state_snapshot: Dict[str, Any]) -> str:
+		anchors = self._story_scene_anchors()
+		page_words = set(re.findall(r"[A-Za-z']+", str(page_text or "").casefold()))
+		best_anchor = ""
+		best_score = 0
+		for anchor in anchors:
+			anchor_words = {word for word in re.findall(r"[A-Za-z']+", anchor.casefold()) if len(word) > 2}
+			score = len(page_words & anchor_words)
+			if score > best_score:
+				best_anchor = anchor
+				best_score = score
+		if best_anchor:
+			return best_anchor
+		world_condition = re.sub(r"\s+", " ", str(state_snapshot.get("world_condition") or "")).strip(" ,.")
+		if world_condition:
+			return world_condition
+		return anchors[0] if anchors else f"{self.profile.category_label} story setting"
+
+	def _build_visual_prompt_context(
+		self,
+		idx: int,
+		page_text: str,
+		page_structure: Dict[str, Any],
+		state_snapshot: Optional[Dict[str, Any]] = None,
+	) -> Dict[str, Any]:
+		state = state_snapshot or {}
+		scene_stage = self._infer_scene_stage(idx, page_structure)
+		scene_shot = self._infer_scene_shot(idx, page_structure, scene_stage)
+		scene_lighting = self._infer_scene_lighting(
+			page_text,
+			state.get("world_condition"),
+			state.get("world_constraint"),
+			self.inputs.theme,
+			self.inputs.category,
+		)
+		required_characters = self._page_required_characters(page_text)
+		scene_focus_subject = self._infer_scene_focus_subject(required_characters, page_text)
+		scene_motion_level = self._infer_scene_motion_level(scene_stage, page_text)
+		scene_emotion_density = self._infer_scene_emotion_density(state, page_text)
+		scene_composition_balance = self._infer_scene_composition_balance(scene_shot, scene_stage, required_characters)
+		world_anchor = self._infer_world_anchor(page_text, state)
+		stage_boundary = {
+			"setup": "keep one clear introductory beat with uncluttered staging",
+			"action": "keep one decisive beat with readable motion and focus",
+			"result": "keep one resolved beat with calm readable aftermath",
+		}.get(scene_stage, "keep one clear beat with uncluttered staging")
+		viewpoint = "eye-level picture-book framing" if scene_shot != "close" else "close picture-book framing focused on faces and hands"
+		return {
+			"scene_stage": scene_stage,
+			"scene_shot": scene_shot,
+			"scene_lighting": scene_lighting,
+			"scene_focus_subject": scene_focus_subject,
+			"scene_motion_level": scene_motion_level,
+			"scene_emotion_density": scene_emotion_density,
+			"scene_composition_balance": scene_composition_balance,
+			"world_anchor": world_anchor,
+			"visual_viewpoint": viewpoint,
+			"visual_stage_boundary": stage_boundary,
+			"visual_foreground": "lead prop, hands, path edge, or texture cue that introduces the scene",
+			"visual_midground": "main characters and the central action or pose",
+			"visual_background": "setting, light source, and depth cues that support the mood",
+			"story_readability_goal": "one clear child-readable story moment, not a showcase illustration",
+			"state_snapshot": json.dumps(state, ensure_ascii=False) if state else "{}",
+			"character_goal": str(state.get("character_goal") or ""),
+			"character_emotion": str(state.get("character_emotion") or ""),
+			"world_constraint": str(state.get("world_constraint") or ""),
+			"world_condition": str(state.get("world_condition") or ""),
+		}
+
+	def _primary_character_for_page(self, page_text: str) -> str:
+		lowered = f" {(page_text or '').casefold()} "
+		for name in self.primary_characters:
+			if name and f" {name.casefold()} " in lowered:
+				return name
+		return self.primary_characters[0] if self.primary_characters else "Friend"
+
+	def _derive_scene_core(self, scene_text: str, page_text: str) -> str:
+		candidate = re.sub(r"\s+", " ", str(scene_text or "").strip()).strip(" .")
+		if candidate:
+			first_clause = candidate.split(",")[0].strip()
+			if len(first_clause.split()) >= 5:
+				return first_clause
+			return candidate
+		page_line = re.sub(r"\s+", " ", str(page_text or "").strip()).strip(" .")
+		return " ".join(page_line.split()[:18]).strip()
+
+	def _extract_scene_layer_phrase(self, scene_text: str, layer: str) -> str:
+		patterns = (
+			rf"([^,.]+?)\s+(?:in the|at the)\s+{layer}\b",
+			rf"{layer}\s*:\s*([^,.]+)",
+			rf"([^,.]+?)\s+{layer}\b",
+		)
+		for pattern in patterns:
+			match = re.search(pattern, str(scene_text or ""), flags=re.IGNORECASE)
+			if match:
+				return re.sub(r"\s+", " ", match.group(1)).strip(" ,.")
+		return ""
+
+	def _canonical_asset_id(self, value: str, fallback: str = "asset") -> str:
+		token = re.sub(r"[^a-z0-9]+", "_", str(value or "").casefold()).strip("_")
+		return token or fallback
+
+	def _infer_pose_id(self, pose_text: str, page_text: str, stage: str) -> str:
+		text = f" {pose_text} {page_text} ".casefold()
+		mapping = (
+			("hold", (" hold", " holding", " carry", " carrying", " hug", " hugging")),
+			("reach", (" reach", " reaching", " point", " pointing", " touch", " touching", " open", " opening", " pull", " pulling", " push", " pushing")),
+			("walk", (" walk", " walking", " step", " stepping", " run", " running", " cross", " crossing", " follow", " following", " guide", " guiding", " lead", " leading", " climb", " climbing")),
+			("surprised", (" surprise", " surprised", " startled", " gasp", " amazed", " shock")),
+			("joyful", (" joyful", " joy", " smile", " smiling", " laugh", " laughing", " cheer", " cheering", " dance", " dancing", " celebrate")),
+			("sad", (" sad", " crying", " cry", " tear", " tears", " worried", " worry", " lonely")),
+		)
+		for pose_id, markers in mapping:
+			if any(marker in text for marker in markers):
+				return pose_id
+		return "neutral" if stage == "setup" else "walk" if stage == "action" else "joyful"
+
+	def _infer_facing(self, pose_text: str, page_text: str, index: int, total: int) -> str:
+		text = f" {pose_text} {page_text} ".casefold()
+		if any(marker in text for marker in (" facing left", " looking left", " turns left", " turned left")):
+			return "left_3q"
+		if any(marker in text for marker in (" facing right", " looking right", " turns right", " turned right")):
+			return "right_3q"
+		if total <= 1:
+			return "front"
+		return "left_3q" if index == 0 else "right_3q" if index == total - 1 else "front"
+
+	def _character_slot(self, index: int, total: int, focus_subject: str) -> str:
+		if total <= 1:
+			return "center" if focus_subject in {"character", "pair"} else "center_left"
+		if total == 2:
+			return "left" if index == 0 else "right"
+		return ("left", "center", "right")[min(index, 2)]
+
+	def _character_scale_hint(self, shot: str) -> str:
+		return {
+			"far": "small",
+			"mid": "medium",
+			"close": "large",
+		}.get(str(shot or "").strip().lower(), "medium")
+
+	def _collect_prop_candidates(
+		self,
+		page_text: str,
+		page_plan: Dict[str, Any],
+		required_characters: Sequence[str],
+	) -> List[str]:
+		combined = " ".join(
+			[
+				str(page_text or ""),
+				str(page_plan.get("scene_core") or ""),
+				str(page_plan.get("scene_layout") or ""),
+				" ".join(str(value or "") for value in (page_plan.get("continuity_keys") or {}).values()),
+			]
+		).casefold()
+		props: List[str] = []
+		for record in self._story_character_records():
+			name = str(record.get("name") or "").strip()
+			if name not in required_characters:
+				continue
+			for raw_prop in record.get("props") or []:
+				label = re.sub(r"\s+", " ", str(raw_prop or "")).strip(" ,.")
+				if label and label.casefold() not in {item.casefold() for item in props}:
+					props.append(label)
+		vocabulary = (
+			"lantern",
+			"key",
+			"map",
+			"locket",
+			"book",
+			"letter",
+			"stone",
+			"gem",
+			"backpack",
+			"umbrella",
+			"flower",
+			"ticket",
+			"toy",
+			"boat",
+			"rope",
+			"star",
+		)
+		for term in vocabulary:
+			if re.search(rf"\b{re.escape(term)}s?\b", combined) and term not in {item.casefold() for item in props}:
+				props.append(term)
+		return props[:4]
+
+	def _collect_midground_objects(
+		self,
+		page_plan: Dict[str, Any],
+		page_text: str,
+		world_anchor: str,
+	) -> List[Dict[str, Any]]:
+		phrases: List[str] = []
+		for key in ("midground_subjects", "background_subjects"):
+			for item in page_plan.get(key) or []:
+				text = re.sub(r"\s+", " ", str(item or "")).strip(" ,.")
+				if text:
+					phrases.append(text)
+		if world_anchor:
+			phrases.append(world_anchor)
+		text = f" {page_text} {' '.join(phrases)} ".casefold()
+		keywords = (
+			"bridge",
+			"tree",
+			"door",
+			"window",
+			"bed",
+			"table",
+			"river",
+			"boat",
+			"tower",
+			"path",
+			"gate",
+			"garden",
+			"house",
+			"hill",
+			"arch",
+			"stone",
+			"forest",
+		)
+		objects: List[Dict[str, Any]] = []
+		for keyword in keywords:
+			if not re.search(rf"\b{re.escape(keyword)}s?\b", text):
+				continue
+			canonical_id = self._canonical_asset_id(keyword, "scene_object")
+			if any(item["canonical_id"] == canonical_id for item in objects):
+				continue
+			objects.append(
+				{
+					"canonical_id": canonical_id,
+					"label": keyword,
+					"prompt": f"{keyword} as a readable storybook midground object, isolated and reusable for Unity scene assembly",
+					"layer": "midground_objects",
+					"slot": "center",
+					"remove_bg": True,
+				}
+			)
+		if not objects and world_anchor:
+			objects.append(
+				{
+					"canonical_id": self._canonical_asset_id(world_anchor, "world_anchor"),
+					"label": world_anchor,
+					"prompt": f"{world_anchor}, readable storybook stage object for the main middle layer, isolated and reusable",
+					"layer": "midground_objects",
+					"slot": "center",
+					"remove_bg": True,
+				}
+			)
+		return objects[:3]
+
+	def _build_page_asset_plan(
+		self,
+		idx: int,
+		page_text: str,
+		page_plan: Dict[str, Any],
+		page_structure: Dict[str, Any],
+		state_snapshot: Dict[str, Any],
+	) -> Dict[str, Any]:
+		world_anchor = re.sub(r"\s+", " ", str(page_plan.get("world_anchor") or page_plan.get("location") or "")).strip(" ,.")
+		shot = str(page_plan.get("shot") or "mid").strip()
+		lighting = str(page_plan.get("lighting") or "bright").strip()
+		stage = str(page_plan.get("stage") or "action").strip()
+		required_characters = list(page_plan.get("required_characters") or [])
+		focus_subject = str(page_plan.get("focus_subject") or "character").strip()
+		pose_reference = str(page_plan.get("pose_reference") or "").strip()
+		scene_core = str(page_plan.get("scene_core") or page_plan.get("scene_goal") or page_text).strip()
+		atmosphere = str(page_plan.get("atmosphere") or page_plan.get("emotion_density") or "calm").strip()
+		characters: List[Dict[str, Any]] = []
+		for index, name in enumerate(required_characters):
+			characters.append(
+				{
+					"character_id": self._canonical_asset_id(name, "character"),
+					"label": name,
+					"pose_id": self._infer_pose_id(pose_reference, page_text, stage),
+					"facing": self._infer_facing(pose_reference, page_text, index, len(required_characters)),
+					"layer": "characters",
+					"slot": self._character_slot(index, len(required_characters), focus_subject),
+					"scale_hint": self._character_scale_hint(shot),
+					"remove_bg": True,
+				}
+			)
+		props: List[Dict[str, Any]] = []
+		for prop_label in self._collect_prop_candidates(page_text, page_plan, required_characters):
+			canonical_id = self._canonical_asset_id(prop_label, "prop")
+			props.append(
+				{
+					"canonical_id": canonical_id,
+					"label": prop_label,
+					"prompt": f"{prop_label}, isolated children's storybook prop sprite, readable shape, reusable across pages",
+					"interactive": False,
+					"layer": "props",
+					"slot": "center",
+					"remove_bg": True,
+				}
+			)
+		interactive_labels: List[str] = []
+		if bool(page_structure.get("branch_trigger")) or str(page_structure.get("page_function") or "").upper() == "INTERACTION":
+			if props:
+				interactive_labels.append(str(props[0].get("label") or ""))
+			else:
+				interactive_labels.append(world_anchor or scene_core)
+		interactives: List[Dict[str, Any]] = []
+		for label in interactive_labels[:2]:
+			canonical_id = self._canonical_asset_id(label, "interactive")
+			interactives.append(
+				{
+					"canonical_id": canonical_id,
+					"label": label,
+					"prompt": f"{label}, isolated interactive storybook object sprite with a clear outline for highlighting",
+					"interactive": True,
+					"layer": "props",
+					"slot": "center",
+					"remove_bg": True,
+				}
+			)
+		backdrop_prompt = ", ".join(
+			part
+			for part in [
+				f"{world_anchor} backdrop" if world_anchor else "storybook backdrop",
+				f"{lighting} {page_plan.get('time_of_day') or 'day'} lighting",
+				f"{atmosphere} mood",
+				"children's storybook environment plate",
+				"no characters",
+				"no hand-held props",
+				"leave open stage space for Unity character placement",
+			]
+			if part
+		)
+		foreground_overlay_prompt = ", ".join(
+			part
+			for part in [
+				str((page_plan.get("foreground_subjects") or ["soft foreground decor"])[0]).strip(),
+				"foreground overlay only",
+				"transparent-friendly isolated decorative layer",
+				"no characters",
+			]
+			if part
+		)
+		return {
+			"page_number": idx,
+			"branch_id": self.current_branch_id,
+			"world_anchor": world_anchor,
+			"shot": shot,
+			"lighting": lighting,
+			"stage": stage,
+			"story_readability_goal": str(page_plan.get("story_readability_goal") or "").strip(),
+			"backdrop_prompt": backdrop_prompt,
+			"foreground_overlay_prompt": foreground_overlay_prompt,
+			"midground_objects": self._collect_midground_objects(page_plan, page_text, world_anchor),
+			"characters": characters,
+			"props": props,
+			"interactives": interactives,
+			"assembly_order": [
+				"backdrop",
+				"midground_objects",
+				"characters",
+				"props",
+				"foreground_overlay",
+			],
+			"scene_core": scene_core,
+			"continuity_keys": dict(page_plan.get("continuity_keys") or {}),
+			"focus_subject": focus_subject,
+			"motion_level": str(page_plan.get("motion_level") or "light").strip(),
+			"emotion_density": str(page_plan.get("emotion_density") or "calm").strip(),
+		}
+
+	def _build_page_visual_plan(
+		self,
+		idx: int,
+		page_text: str,
+		scene_text: str,
+		pose_text: str,
+		page_structure: Dict[str, Any],
+		state_snapshot: Dict[str, Any],
+	) -> Dict[str, Any]:
+		visual_context = self._build_visual_prompt_context(idx, page_text, page_structure, state_snapshot)
+		required_characters = self._page_required_characters(page_text)
+		world_anchor = str(visual_context.get("world_anchor") or "").strip()
+		scene_core = self._derive_scene_core(scene_text, page_text)
+		foreground_phrase = self._extract_scene_layer_phrase(scene_text, "foreground") or "nearest prop or leading gesture"
+		midground_phrase = self._extract_scene_layer_phrase(scene_text, "midground") or scene_core
+		background_phrase = self._extract_scene_layer_phrase(scene_text, "background") or world_anchor
+		time_of_day = "night" if str(visual_context.get("scene_lighting") or "") == "dim" else "day"
+		emotion_density = str(visual_context.get("scene_emotion_density") or "calm")
+		world_constraint = str(state_snapshot.get("world_constraint") or "").strip()
+		atmosphere = emotion_density
+		if emotion_density == "wonder" and world_constraint:
+			atmosphere = "wonder with caution"
+		continuity_keys: Dict[str, str] = {}
+		for record in self._story_character_records():
+			name = str(record.get("name") or "").strip()
+			if name not in required_characters:
+				continue
+			safe_name = re.sub(r"[^a-z0-9]+", "_", name.casefold()).strip("_")
+			outfit = re.sub(r"\s+", " ", str(record.get("outfit") or "")).strip(" ,")
+			colors = ", ".join(self._extract_color_locks(record.get("appearance", ""), record.get("description", ""), outfit))
+			props = ", ".join(str(prop or "").strip() for prop in (record.get("props") or []) if str(prop or "").strip())
+			if outfit:
+				continuity_keys[f"{safe_name}_outfit"] = outfit
+			if colors:
+				continuity_keys[f"{safe_name}_colors"] = colors
+			if props:
+				continuity_keys[f"{safe_name}_props"] = props
+		forbidden_elements = ["text", "watermark", "logo", "photorealism", "3d render"]
+		if time_of_day == "night":
+			forbidden_elements.append("daylight")
+		if len(required_characters) <= 2:
+			forbidden_elements.append("extra characters")
+		return {
+			"page_id": idx,
+			"page_number": idx,
+			"branch_id": self.current_branch_id,
+			"scene_goal": str(state_snapshot.get("character_goal") or scene_core).strip(),
+			"scene_core": scene_core,
+			"scene_layout": f"foreground: {foreground_phrase}; midground: {midground_phrase}; background: {background_phrase}",
+			"shot": visual_context.get("scene_shot", "mid"),
+			"lighting": visual_context.get("scene_lighting", "bright"),
+			"stage": visual_context.get("scene_stage", "action"),
+			"focus_subject": visual_context.get("scene_focus_subject", "character"),
+			"motion_level": visual_context.get("scene_motion_level", "light"),
+			"emotion_density": emotion_density,
+			"composition_balance": visual_context.get("scene_composition_balance", "centered"),
+			"location": world_anchor,
+			"world_anchor": world_anchor,
+			"time_of_day": time_of_day,
+			"event_scene": str(state_snapshot.get("character_goal") or scene_core).strip(),
+			"atmosphere": atmosphere,
+			"foreground_subjects": [foreground_phrase],
+			"midground_subjects": [midground_phrase],
+			"background_subjects": [background_phrase],
+			"required_characters": required_characters,
+			"forbidden_elements": forbidden_elements,
+			"continuity_keys": continuity_keys,
+			"emotion_vector": [emotion_density] if atmosphere == emotion_density else [emotion_density, "caution"],
+			"pose_reference": re.sub(r"\s+", " ", str(pose_text or "")).strip(" ,"),
+			"story_readability_goal": visual_context.get("story_readability_goal", ""),
+		}
+
+	def _persist_branch_visual_plans(self, pages: Sequence[str], scenes: Sequence[str], poses: Sequence[str]) -> None:
+		resource_root = self.paths["resource"]
+		plans: List[Dict[str, Any]] = []
+		asset_plans: List[Dict[str, Any]] = []
+		for idx, page_text in enumerate(pages, start=1):
+			page_structure = self._read_page_structure(idx) or {}
+			state_snapshot = self._read_state_snapshot(idx)
+			scene_text = scenes[idx - 1] if idx - 1 < len(scenes) else ""
+			pose_text = poses[idx - 1] if idx - 1 < len(poses) else ""
+			plan = self._build_page_visual_plan(idx, page_text, scene_text, pose_text, page_structure, state_snapshot)
+			plans.append(plan)
+			write_json_or_raise(resource_root / f"page_{idx}_visual_plan.json", plan)
+			asset_plan = self._build_page_asset_plan(idx, page_text, plan, page_structure, state_snapshot)
+			asset_plans.append(asset_plan)
+			write_json_or_raise(resource_root / f"page_{idx}_asset_plan.json", asset_plan)
+		write_json_or_raise(resource_root / "visual_plans.json", {"pages": plans, "branch_id": self.current_branch_id})
+		write_json_or_raise(resource_root / "asset_plans.json", {"pages": asset_plans, "branch_id": self.current_branch_id})
 
 	def _compile_full_story(self, branch_dir: Path, total_pages: int) -> None:
 		"""Compiles Page 1..Total into full_story.txt in the branch dir."""
@@ -1280,6 +2252,7 @@ class StoryPipeline:
 			
 			self._log_major_step(f"pose ({bid})")
 			poses = self._run_page_derivation(branch_pages, "pose")
+			self._persist_branch_visual_plans(branch_pages, scenes, poses)
 			
 			# Validate (Log only, don't crash main pipeline for a branch error)
 			try:
@@ -1306,8 +2279,12 @@ class StoryPipeline:
 			outline=outline,
 			title=title,
 			age=self.inputs.age_group or self.profile.age_label,
-			character_descriptions=self._format_character_descriptions(),
+			character_descriptions=self._build_image_character_descriptions(),
 			cover_guidelines=self.effective_guidelines or "",
+			category=self.inputs.category or "",
+			theme=self.inputs.theme or "",
+			visual_style=self.image_style_lock,
+			cover_source_label=self.options.cover_source,
 		)
 		cover_prompt = self._run_single_step(
 			"cover",
@@ -1527,6 +2504,80 @@ class StoryPipeline:
 			self.logger.warning("Coref disambiguation pass failed: %s", exc)
 			return text
 
+	def _assess_generation_quality_risks(self, step: str, text: str) -> Dict[str, Any]:
+		if step not in {"story", "story_write"} or not text:
+			return {
+				"needs_coref_repair": False,
+				"needs_refinement": False,
+				"signals": {},
+			}
+
+		sentences = [chunk.strip() for chunk in re.split(r"(?<=[.!?。！？])\s*", text) if chunk.strip()]
+		normalized_sentences = [re.sub(r"\s+", " ", sentence).strip().lower() for sentence in sentences]
+		sentence_count = len(normalized_sentences)
+		duplicate_sentence_ratio = 0.0
+		if sentence_count > 0:
+			counts = Counter(normalized_sentences)
+			duplicate_sentence_ratio = sum(count - 1 for count in counts.values() if count > 1) / max(1, sentence_count)
+
+		word_lengths = [len(token) for token in re.findall(r"[A-Za-z']+|[\u4e00-\u9fff]", text)]
+		avg_word_length = (sum(word_lengths) / len(word_lengths)) if word_lengths else 0.0
+		avg_sentence_words = (
+			sum(len(re.findall(r"[A-Za-z']+|[\u4e00-\u9fff]", sentence)) for sentence in sentences) / max(1, sentence_count)
+		)
+		repeated_phrase = bool(re.search(r"\b([A-Za-z']+)(?:\s+\1){2,}\b", text, flags=re.IGNORECASE))
+		glitch = self._looks_like_text_glitch(text)
+		coref_score = self._coref_ambiguity_score(text)
+
+		signals = {
+			"duplicate_sentence_ratio": round(duplicate_sentence_ratio, 4),
+			"avg_sentence_words": round(avg_sentence_words, 2),
+			"avg_word_length": round(avg_word_length, 2),
+			"coref_ambiguity_score": coref_score,
+			"repeated_phrase": repeated_phrase,
+			"glitch": glitch,
+		}
+		return {
+			"needs_coref_repair": coref_score >= 2,
+			"needs_refinement": glitch or repeated_phrase or duplicate_sentence_ratio >= 0.22 or avg_sentence_words >= 24.0,
+			"signals": signals,
+		}
+
+	def _apply_targeted_quality_repair(
+		self,
+		step: str,
+		text: str,
+		extra_context: Optional[Dict[str, Any]] = None,
+		bad_words_ids: Optional[List[List[int]]] = None,
+	) -> str:
+		risk = self._assess_generation_quality_risks(step, text)
+		if not risk.get("needs_coref_repair") and not risk.get("needs_refinement"):
+			return text
+
+		self.logger.info("[Step %s] Targeted repair triggered with signals=%s", step, risk.get("signals", {}))
+		candidate = text
+		if risk.get("needs_coref_repair"):
+			candidate = self._repair_coref_ambiguity_with_llm(
+				candidate,
+				extra_context=extra_context,
+				bad_words_ids=bad_words_ids,
+			)
+		if risk.get("needs_refinement"):
+			candidate = self._refine_text_with_llm(
+				candidate,
+				extra_context=extra_context,
+				bad_words_ids=bad_words_ids,
+			)
+
+		candidate = self._sanitize_text(candidate)
+		if step in {"story", "story_write", "narration", "dialogue", "scene"}:
+			candidate = self._enforce_dynamic_consistency(candidate)
+		is_valid, _error_msg = self._validate_step_output(step, candidate, extra_context=extra_context)
+		if not is_valid:
+			self.logger.warning("[Step %s] Targeted repair produced invalid output; keeping original.", step)
+			return text
+		return candidate or text
+
 	def _run_page_derivation(
 		self,
 		pages: Sequence[str],
@@ -1537,6 +2588,8 @@ class StoryPipeline:
 		aggregate_lines: List[str] = []
 		for idx, page_text in enumerate(pages, start=1):
 			page_structure = self._read_page_structure(idx) or {}
+			state_snapshot = self._read_state_snapshot(idx)
+			visual_prompt_context = self._build_visual_prompt_context(idx, page_text, page_structure, state_snapshot)
 			context = {
 				"page_text": page_text,
 				"page_content": page_text,  # 同時提供兩種變數名以兼容模板
@@ -1548,6 +2601,8 @@ class StoryPipeline:
 				"page_function": page_structure.get("page_function", "NARRATIVE"),
 				"branch_id": page_structure.get("branch_id", ""),
 				"branch_trait": page_structure.get("branch_trait", ""),
+				"character_name": self._primary_character_for_page(page_text),
+				**visual_prompt_context,
 			}
 			# 為 narration 步驟添加額外的變數
 			if step == "narration":
@@ -1560,9 +2615,7 @@ class StoryPipeline:
 			
 			# [Phase 4] Inject Visual Style for Scene/Pose
 			if step in ["scene", "pose"]:
-				# Ensure visual_style is available (added to profile in Utils)
-				style = getattr(self.profile, "visual_style", "") or "children's book illustration"
-				context["image_style_lock"] = style
+				context["image_style_lock"] = self.image_style_lock
 			file_path = self._derivation_path(step, idx)
 			text = self._run_single_step(step, context, file_path)
 			outputs.append(text)
@@ -1674,15 +2727,351 @@ class StoryPipeline:
 			
 		return bad_words_ids if bad_words_ids else None
 
-	def _validate_step_output(self, step: str, text: str) -> Tuple[bool, Optional[str]]:
+	def _count_prompt_markers(self, text: str, markers: Sequence[str]) -> int:
+		lowered = (text or "").casefold()
+		count = 0
+		for marker in markers:
+			if marker and marker.casefold() in lowered:
+				count += 1
+		return count
+
+	def _scene_has_clear_spatial_staging(self, text: str, scene_stage: str, scene_shot: str) -> bool:
+		lowered = f" {(text or '').casefold()} "
+		depth_markers = (
+			" foreground", " midground", " background",
+			" in front of ", " behind ", " beyond ",
+		)
+		relation_markers = (
+			" beside ", " near ", " under ", " beneath ", " above ", " below ",
+			" around ", " through ", " across ", " along ", " between ",
+			" inside ", " outside ", " against ", " around the ", " by the ",
+			" left of ", " right of ", " at the doorway ", " on the path ",
+		)
+		depth_count = sum(1 for marker in depth_markers if marker in lowered)
+		relation_count = sum(1 for marker in relation_markers if marker in lowered)
+		if depth_count >= 2:
+			return True
+		if depth_count >= 1 and relation_count >= 1:
+			return True
+		if scene_shot in {"close", "mid"} and (depth_count + relation_count) >= 1:
+			return True
+		if scene_stage in {"setup", "result"} and (depth_count + relation_count) >= 1:
+			return True
+		return False
+
+	def _has_prompt_action(self, text: str) -> bool:
+		action_markers = (
+			" stand", " stands", " standing",
+			" sit", " sits", " sitting",
+			" walk", " walks", " walking",
+			" run", " runs", " running",
+			" hold", " holds", " holding",
+			" reach", " reaches", " reaching",
+			" look", " looks", " looking",
+			" smile", " smiles", " smiling",
+			" hug", " hugs", " hugging",
+			" peek", " peeks", " peeking",
+			" point", " points", " pointing",
+			" kneel", " kneels", " kneeling",
+			" glow", " glows", " glowing",
+			" float", " floats", " floating",
+			" open", " opens", " opening",
+			" listen", " listens", " listening",
+			" lean", " leans", " leaning",
+			" share", " shares", " sharing",
+			" hand", " hands", " handing",
+			" give", " gives", " giving",
+			" offer", " offers", " offering",
+			" laugh", " laughs", " laughing",
+			" play", " plays", " playing",
+			" gather", " gathers", " gathering",
+			" dance", " dances", " dancing",
+			" jump", " jumps", " jumping",
+			" climb", " climbs", " climbing",
+			" turn", " turns", " turning",
+			" sway", " sways", " swaying",
+			" spread", " spreads", " spreading",
+			" rise", " rises", " rising",
+			" shine", " shines", " shining",
+			" carry", " carries", " carrying",
+			" swing", " swings", " swinging",
+			" pull", " pulls", " pulling",
+			" push", " pushes", " pushing",
+			" wave", " waves", " waving",
+			" watch", " watches", " watching",
+			" move", " moves", " moving",
+			" guide", " guides", " guiding", " guided",
+			" lead", " leads", " leading", " led",
+			" follow", " follows", " following", " followed",
+			" drift", " drifts", " drifting", " drifted",
+			" glide", " glides", " gliding", " glided",
+			" form", " forms", " forming", " formed",
+			" swirl", " swirls", " swirling", " swirled",
+			" shimmer", " shimmers", " shimmering", " shimmered",
+			" twinkle", " twinkles", " twinkling", " twinkled",
+			" trail", " trails", " trailing", " trailed",
+			" arc", " arcs", " arcing", " arced",
+			" circle", " circles", " circling", " circled",
+			" sparkle", " sparkles", " sparkling", " sparkled",
+		)
+		lowered = f" {(text or '').casefold()} "
+		return any(marker in lowered for marker in action_markers)
+
+	def _has_prompt_pose_or_state(self, text: str) -> bool:
+		pose_markers = (
+			" seated", " sitting", " standing", " kneeling", " crouching", " leaning",
+			" waiting", " watching", " listening", " resting", " sleeping", " smiling",
+			" frowning", " face lit", " arms open", " hands on", " hands lifted",
+			" glowing", " sunlit", " moonlit", " gathered", " together", " still",
+		)
+		lowered = f" {(text or '').casefold()} "
+		return any(marker in lowered for marker in pose_markers)
+
+	def _current_image_family(self) -> str:
+		token = str(getattr(self.options, "sdxl_base", "") or "").strip().lower()
+		if not token:
+			return "unknown"
+		if "flux.1-schnell" in token or "flux-1-schnell" in token or "schnell" in token:
+			return "flux_schnell"
+		if "flux" in token:
+			return "flux"
+		if ("stable-diffusion-3.5" in token and "turbo" in token) or ("sd3" in token and "turbo" in token):
+			return "sd3_turbo"
+		if "stable-diffusion-3.5" in token or "sd3" in token:
+			return "sd3"
+		return "sdxl"
+
+	def _image_prompt_budget(self, step: str) -> Tuple[int, int, int]:
+		clip_cfg = self.system_config.get("validation", {}).get("clip_tokens", {})
+		family = self._current_image_family()
+		if family == "flux_schnell":
+			if step == "scene":
+				return (18, 72, 96)
+			if step == "pose":
+				return (10, 36, 60)
+			if step == "cover":
+				return (20, 72, 96)
+		if family in {"flux", "sd3_turbo", "sd3"}:
+			if step == "scene":
+				return (20, 92, 124)
+			if step == "pose":
+				return (10, 40, 68)
+			if step == "cover":
+				return (22, 92, 124)
+		if step == "scene":
+			return (
+				int(clip_cfg.get("scene_min", 20)),
+				int(clip_cfg.get("scene_max", 56)),
+				int(clip_cfg.get("scene_total_max", 78)),
+			)
+		if step == "pose":
+			return (
+				int(clip_cfg.get("pose_min", 10)),
+				int(clip_cfg.get("pose_max", 30)),
+				int(clip_cfg.get("pose_total_max", 54)),
+			)
+		if step == "cover":
+			return (
+				int(clip_cfg.get("cover_min", 22)),
+				int(clip_cfg.get("cover_max", 56)),
+				int(clip_cfg.get("cover_total_max", 78)),
+			)
+		default_max = int(clip_cfg.get("default_total_max", 80))
+		return (0, default_max, default_max)
+
+	def _trim_prompt_segment(self, segment: str, max_words: int) -> str:
+		cleaned = re.sub(r"\s+", " ", str(segment or "").strip()).strip(", ")
+		if not cleaned or max_words <= 0:
+			return ""
+		words = cleaned.split()
+		if len(words) <= max_words:
+			return cleaned
+
+		removable_tokens = {
+			"the", "a", "an", "very", "really", "gently", "softly", "quietly", "calmly",
+			"brightly", "warmly", "soft", "gentle", "cozy", "little", "small",
+		}
+		filtered = [word for word in words if re.sub(r"[^a-z]+", "", word.casefold()) not in removable_tokens]
+		if len(filtered) >= max_words:
+			words = filtered
+		return " ".join(words[:max_words]).strip(", ")
+
+	def _compress_image_prompt_to_budget(
+		self,
+		step: str,
+		text: str,
+		extra_context: Optional[Dict[str, Any]] = None,
+	) -> str:
+		cleaned = re.sub(r"\s+", " ", str(text or "").strip())
+		if not cleaned or step not in {"scene", "cover", "pose"}:
+			return cleaned
+
+		suffix_map = {
+			"scene": "children's picture-book scene illustration, layered depth, readable faces, coherent lighting, no text",
+			"pose": "children's picture-book character sheet, full body, clean silhouette, readable face, light plain background",
+			"cover": "children's picture-book cover illustration, readable thumbnail, clear focal subject, no text lettering",
+		}
+		clip_cfg = self.system_config.get("validation", {}).get("clip_tokens", {})
+		_, prompt_max, total_max = self._image_prompt_budget(step)
+
+		def _fits_budget(value: str) -> bool:
+			prompt_tokens = estimate_clip_tokens(value)
+			total_tokens = prompt_tokens + estimate_clip_tokens(suffix_map.get(step, "")) + 1
+			return prompt_tokens <= prompt_max and total_tokens <= total_max
+
+		if _fits_budget(cleaned):
+			return cleaned
+
+		original = cleaned
+		replacements = (
+			(r"\bin the foreground\b", "foreground"),
+			(r"\bin the midground\b", "midground"),
+			(r"\bin the background\b", "background"),
+			(r"\bat the foreground\b", "foreground"),
+			(r"\bat the midground\b", "midground"),
+			(r"\bat the background\b", "background"),
+			(r"\bwith a\b", "with"),
+			(r"\bwith an\b", "with"),
+			(r"\bthere is\b", ""),
+			(r"\bthere are\b", ""),
+			(r"\bcan be seen\b", "shows"),
+			(r"\bthat is\b", "that"),
+			(r"\bsoft morning\b", "morning"),
+			(r"\bwarm golden\b", "golden"),
+		)
+		for pattern, replacement in replacements:
+			cleaned = re.sub(pattern, replacement, cleaned, flags=re.IGNORECASE)
+		cleaned = re.sub(r"\s+,", ",", cleaned)
+		cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,")
+		if _fits_budget(cleaned):
+			if cleaned != original:
+				self.logger.info("[Step %s] Compressed image prompt to fit the estimated prompt budget.", step)
+			return cleaned
+
+		segments = [segment.strip() for segment in cleaned.split(",") if segment.strip()]
+		if step == "scene" and segments:
+			limits = [11, 6, 6, 6]
+			trimmed_segments = [
+				self._trim_prompt_segment(segment, limits[min(index, len(limits) - 1)])
+				for index, segment in enumerate(segments[:4])
+			]
+			cleaned = ", ".join([segment for segment in trimmed_segments if segment])
+		elif step == "cover" and segments:
+			limits = [12, 7, 6]
+			trimmed_segments = [
+				self._trim_prompt_segment(segment, limits[min(index, len(limits) - 1)])
+				for index, segment in enumerate(segments[:3])
+			]
+			cleaned = ", ".join([segment for segment in trimmed_segments if segment])
+		elif step == "pose" and segments:
+			cleaned = ", ".join(self._trim_prompt_segment(segment, 3) for segment in segments[:6] if segment)
+
+		cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,")
+		if _fits_budget(cleaned):
+			if cleaned != original:
+				self.logger.info("[Step %s] Compressed image prompt to fit the estimated prompt budget.", step)
+			return cleaned
+
+		words = cleaned.split()
+		hard_limit = max(8, prompt_max - 4)
+		if len(words) > hard_limit:
+			cleaned = " ".join(words[:hard_limit]).strip(" ,")
+		cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,")
+		if cleaned != original:
+			self.logger.info(
+				"[Step %s] Applied aggressive prompt compression (%d -> %d chars).",
+				step,
+				len(original),
+				len(cleaned),
+			)
+		return cleaned
+
+	def _validate_image_prompt_quality(
+		self,
+		step: str,
+		text: str,
+		extra_context: Optional[Dict[str, Any]] = None,
+	) -> Optional[str]:
+		cleaned = re.sub(r"\s+", " ", (text or "").strip())
+		if not cleaned:
+			return "Output is empty."
+
+		word_count = len(cleaned.split())
+		comma_segments = [segment.strip() for segment in cleaned.split(",") if segment.strip()]
+		spatial_markers = (
+			"foreground",
+			"midground",
+			"background",
+			"behind",
+			"beside",
+			"near",
+			"under",
+			"inside",
+			"outside",
+			"beneath",
+			"beyond",
+			"across",
+		)
+
+		if step == "scene":
+			scene_stage = str((extra_context or {}).get("scene_stage") or "").strip().casefold()
+			scene_shot = str((extra_context or {}).get("scene_shot") or "").strip().casefold()
+			has_action = self._has_prompt_action(cleaned)
+			has_pose = self._has_prompt_pose_or_state(cleaned)
+			if word_count < 14:
+				return "Constraint violation: Scene prompt is too terse. Use a fuller illustration sentence with clear staging."
+			if not has_action and not has_pose:
+				return "Constraint violation: Scene prompt needs a visible action or pose, not just objects."
+			if scene_stage not in {"setup", "result"} and not has_action:
+				return "Constraint violation: Scene prompt needs clearer visible action for this page."
+			if not self._scene_has_clear_spatial_staging(cleaned, scene_stage, scene_shot):
+				return "Constraint violation: Scene prompt needs clearer spatial staging across the scene."
+			if len(comma_segments) >= 3 and all(len(segment.split()) <= 4 for segment in comma_segments[:3]):
+				return "Constraint violation: Scene prompt reads like a bare placeholder list. Rewrite it as a natural illustration sentence."
+			return None
+
+		if step == "cover":
+			if word_count < 14:
+				return "Constraint violation: Cover prompt is too terse. Add a stronger focal scene, action, and setting."
+			if not (self._has_prompt_action(cleaned) or self._has_prompt_pose_or_state(cleaned)):
+				return "Constraint violation: Cover prompt needs a clear action or pose for the main subject."
+			if len(comma_segments) >= 3 and all(len(segment.split()) <= 4 for segment in comma_segments[:3]):
+				return "Constraint violation: Cover prompt is too telegraphic. Use one flowing sentence instead of stacked fragments."
+			return None
+
+		if step == "pose":
+			if any(punct in cleaned for punct in ".!?"):
+				return "Constraint violation: Pose prompt should be comma-separated phrases, not a sentence."
+			if len(comma_segments) < 4:
+				return "Constraint violation: Pose prompt needs more pose detail. Include stance, hands, face, gaze, and mood."
+			if len(comma_segments) > 8:
+				return "Constraint violation: Pose prompt has too many fragments. Keep it concise and focused."
+			if any(len(segment.split()) > 4 for segment in comma_segments):
+				return "Constraint violation: Pose prompt phrases are too long. Use compact illustrator-style fragments."
+			lowered = cleaned.casefold()
+			if any(name and name.casefold() in lowered for name in self.primary_characters):
+				return "Constraint violation: Pose prompt must not contain character names."
+			return None
+
+		return None
+
+	def _validate_step_output(
+		self,
+		step: str,
+		text: str,
+		extra_context: Optional[Dict[str, Any]] = None,
+	) -> Tuple[bool, Optional[str]]:
 		"""驗證步驟輸出是否符合硬性約束（CLIP tokens, 完整性等）。"""
 		# 對於圖像相關步驟，驗證提示詞長度
 		if step in {"scene", "pose", "cover"}:
+			quality_error = self._validate_image_prompt_quality(step, text, extra_context=extra_context)
+			if quality_error:
+				return False, quality_error
 			# 獲取對應的 suffix
 			suffix_map = {
-				"scene": "children's storybook art, full scene, detailed, soft lighting",
-				"pose": "children's book character, full body, white background, cute, expressive",
-				"cover": "children's book cover style, vibrant, detailed, whimsical",
+				"scene": "children's picture-book scene illustration, layered depth, readable faces, coherent lighting, no text",
+				"pose": "children's picture-book character sheet, full body, clean silhouette, readable face, light plain background",
+				"cover": "children's picture-book cover illustration, readable thumbnail, clear focal subject, no text lettering",
 			}
 			suffix = suffix_map.get(step, "")
 			
@@ -1692,44 +3081,33 @@ class StoryPipeline:
 			total_tokens = prompt_tokens + suffix_tokens + 1  # +1 for comma
 			
 			# 根據步驟檢查是否符合要求 (從 config 動態讀取)
-			clip_cfg = self.system_config.get("validation", {}).get("clip_tokens", {})
-			if step == "scene":
-				expected_range = (clip_cfg.get("scene_min", 10), clip_cfg.get("scene_max", 40))
-				max_total = clip_cfg.get("scene_total_max", 55)
-			elif step == "pose":
-				expected_range = (clip_cfg.get("pose_min", 5), clip_cfg.get("pose_max", 25))
-				max_total = clip_cfg.get("pose_total_max", 55)
-			elif step == "cover":
-				expected_range = (clip_cfg.get("cover_min", 15), clip_cfg.get("cover_max", 45))
-				max_total = clip_cfg.get("cover_total_max", 60)
-			else:
-				expected_range = (0, clip_cfg.get("default_total_max", 77))
-				max_total = clip_cfg.get("default_total_max", 77)
+			min_tokens, max_prompt_tokens, max_total = self._image_prompt_budget(step)
+			expected_range = (min_tokens, max_prompt_tokens)
 			
 			if prompt_tokens < expected_range[0]:
 				self.logger.error(
-					"[Step %s] Prompt token count (%d) is TOO SHORT (minimum %d CLIP tokens). "
+					"[Step %s] Prompt token estimate (%d) is TOO SHORT (minimum %d). "
 					"REJECTING output to ensure image quality.",
 					step, prompt_tokens, expected_range[0]
 				)
-				return False, f"Constraint violation: Prompt is too short ({prompt_tokens} < {expected_range[0]} CLIP tokens). Please provide more detailed descriptions."
+				return False, f"Constraint violation: Prompt is too short ({prompt_tokens} < {expected_range[0]} estimated tokens). Please provide more detailed visual descriptions."
 				
 			if prompt_tokens > expected_range[1]:
 				self.logger.warning(
-					"[Step %s] Prompt token count (%d) exceeds optimal target (%d CLIP tokens) but is under max total limit. "
+					"[Step %s] Prompt token estimate (%d) exceeds the target (%d) but is under the max total budget. "
 					"Continuing anyway.",
 					step, prompt_tokens, expected_range[1]
 				)
 			
 			if total_tokens > max_total:
 				self.logger.error(
-					"[Step %s] Total prompt exceeds limit: %d CLIP tokens (max %d). "
+					"[Step %s] Total prompt exceeds budget: %d estimated tokens (max %d). "
 					"Main prompt: %d tokens, Suffix: %d tokens. "
 					"This will cause truncation and poor image quality. "
 					"Prompt: %s...",
 					step, total_tokens, max_total, prompt_tokens, suffix_tokens, text[:80]
 				)
-				return False, f"Constraint violation: Prompt is too long ({total_tokens} > {max_total} CLIP tokens). Shorten it to under {expected_range[1]} tokens."
+				return False, f"Constraint violation: Prompt is too long ({total_tokens} > {max_total} estimated tokens). Shorten it to under {expected_range[1]} tokens."
 			else:
 				self.logger.debug(
 					"[Step %s] Prompt token count: %d (main) + %d (suffix) = %d total (max %d) ✓",
@@ -1758,6 +3136,47 @@ class StoryPipeline:
 				return False, "Constraint violation: The text seems truncated or incomplete. Ensure it ends with proper punctuation."
 				
 		return True, None
+
+	def _build_step_retry_instruction(
+		self,
+		step: str,
+		extra_context: Optional[Dict[str, Any]],
+		error_msg: str,
+	) -> str:
+		context = extra_context or {}
+		if step == "scene":
+			if "too long" in (error_msg or "").casefold():
+				return (
+					f"Retry guidance: rewrite as one tighter natural sentence for Shot={context.get('scene_shot', '')}, "
+					f"Lighting={context.get('scene_lighting', '')}, Stage={context.get('scene_stage', '')}. "
+					"Keep only the main subject, one visible action or pose, three depth cues, and one concrete anchor. "
+					"Cut extra modifiers so the sentence stays compact."
+				)
+			if "action or pose" in (error_msg or "").casefold():
+				return (
+					f"Retry guidance: rewrite as one natural sentence for Shot={context.get('scene_shot', '')}, "
+					f"Lighting={context.get('scene_lighting', '')}, Stage={context.get('scene_stage', '')}. "
+					"Use a concrete visible verb such as walking, guiding, following, reaching, floating, or leaning, "
+					"or describe a readable pose. Include at least one clear depth cue and 1-2 concrete visual anchors."
+				)
+			return (
+				f"Retry guidance: rewrite as one natural sentence for Shot={context.get('scene_shot', '')}, "
+				f"Lighting={context.get('scene_lighting', '')}, Stage={context.get('scene_stage', '')}. "
+				"Use exact character names when needed, show a visible action or a readable pose, "
+				"include at least one clear depth cue or spatial relation, and add 1-2 concrete visual anchors. "
+				"Do not return a keyword list or a static object inventory."
+			)
+		if step == "cover":
+			return (
+				"Retry guidance: choose one iconic focal moment, keep the subject group readable at thumbnail size, "
+				"show a clear action or pose, mention one memorable prop or light cue, and avoid listing multiple events."
+			)
+		if step == "pose":
+			return (
+				"Retry guidance: return only 4-7 short comma-separated phrases covering stance, hands, face, gaze, and energy. "
+				"No full sentences and no character names."
+			)
+		return f"Retry guidance: {error_msg}"
 
 	def _run_single_step(
 		self,
@@ -1855,11 +3274,29 @@ class StoryPipeline:
 			# Apply dynamic consistency (name and pronoun alias resolution)
 			if step in {"story", "story_write", "narration", "dialogue", "scene"}:
 				text = self._enforce_dynamic_consistency(text)
+
+			if step in {"scene", "pose", "cover"}:
+				text = self._compress_image_prompt_to_budget(step, text, extra_context=extra_context)
 			
 			# Validation
-			is_valid, error_msg = self._validate_step_output(step, text)
+			is_valid, error_msg = self._validate_step_output(step, text, extra_context=extra_context)
 			
 			if is_valid:
+				if step in {"story", "story_write"}:
+					original_text = text
+					repaired_text = self._apply_targeted_quality_repair(
+						step,
+						text,
+						extra_context=extra_context,
+					)
+					if repaired_text != text:
+						text = repaired_text
+						is_valid, error_msg = self._validate_step_output(step, text, extra_context=extra_context)
+						if not is_valid:
+							self.logger.warning("[Step %s] Repaired output failed validation; restoring original draft.", step)
+							text = original_text
+							is_valid = True
+
 				if step == "title":
 					parsed_title = self._extract_title_candidate(text)
 					if parsed_title:
@@ -1892,10 +3329,19 @@ class StoryPipeline:
 			current_try += 1
 			last_error = error_msg
 			self.logger.warning("[Step %s] Validation failed (Try %d): %s", step, current_try, error_msg)
+			rejected_preview = " ".join((text or "").split())
+			if rejected_preview:
+				if len(rejected_preview) > 220:
+					rejected_preview = f"{rejected_preview[:220]}..."
+				self.logger.warning("[Step %s] Rejected output preview: %s", step, rejected_preview)
 			
 			if current_try <= max_retries:
 				# Append error instruction to prompt for next try
-				current_user_prompt = f"{user_prompt}\n\nprevious_output: {text}\n\nSYSTEM_FEEDBACK: {error_msg}\nPlease retry and fix the issue."
+				retry_guidance = self._build_step_retry_instruction(step, extra_context, error_msg or "")
+				current_user_prompt = (
+					f"{user_prompt}\n\nprevious_output: {text}\n\nSYSTEM_FEEDBACK: {error_msg}\n"
+					f"{retry_guidance}\nPlease retry and fix the issue."
+				)
 		
 		# If all retries failed, raise error instead of saving garbage
 		self.logger.error("[Step %s] Failed all %d retries. Aborting generation. Error: %s", step, max_retries, last_error)
@@ -1955,6 +3401,39 @@ class StoryPipeline:
 		# 簡單格式：列出角色名稱
 		return ", ".join(characters)
 
+	def _build_image_character_descriptions(self) -> str:
+		"""Build concise character descriptors for cover and illustration prompts."""
+		payload = (self.inputs.kg_payload or {}).get("characters") or []
+		descriptors: List[str] = []
+		seen: Set[str] = set()
+		for item in payload:
+			label = ""
+			role = ""
+			description = ""
+			if isinstance(item, str):
+				label = re.sub(r"\s+", " ", item).strip()
+			elif isinstance(item, dict):
+				label = str(item.get("label") or item.get("name") or "").strip()
+				role = str(item.get("role") or item.get("type") or "").strip()
+				description = str(item.get("description") or item.get("appearance") or "").strip()
+			if not label:
+				continue
+			parts = [label]
+			extra_bits = [bit for bit in [role, description] if bit]
+			if extra_bits:
+				parts.append(f"({'; '.join(extra_bits[:2])})")
+			entry = " ".join(parts).strip()
+			key = entry.casefold()
+			if key in seen:
+				continue
+			seen.add(key)
+			descriptors.append(entry)
+			if len(descriptors) >= 4:
+				break
+		if descriptors:
+			return ", ".join(descriptors)
+		return ", ".join(self.primary_characters)
+
 	def _target_word_bounds(self, page_num: Optional[int] = None) -> Tuple[int, int]:
 		"""Return word bounds based on page type and age group from KG."""
 		age_value = self.profile.age_value if self.profile else 5
@@ -1994,6 +3473,46 @@ class StoryPipeline:
 		return max(1, int(self.options.pages_expected or 1))
 
 	def _image_style_lock(self) -> str:
+		visual = (self.age_policy.get("visual_style") or "").strip()
+		age_label = (self.inputs.age_group or self.profile.age_label or "").strip()
+		category = (self.inputs.category or self.profile.category_label or "storybook").strip().lower()
+		age_anchor = {
+			"2-3": "simple shapes, large readable faces, minimal clutter",
+			"4-5": "warm gouache watercolor texture, cozy palette, clear expressions",
+			"6-8": "richer environmental detail, luminous atmosphere, readable action",
+		}.get(age_label, "warm storybook rendering, readable faces, gentle painterly texture")
+		category_anchor = {
+			"adventure": "sense of discovery, luminous paths, clear focal landmarks",
+			"educational": "grounded props, warm domestic or outdoor realism, gentle clarity",
+			"fun": "playful poses, brighter accents, energetic but readable staging",
+			"cultural": "grounded setting detail, respectful motifs, warm ceremonial color cues",
+		}.get(category, "clear picture-book staging and cohesive palettes")
+		style_parts: List[str] = []
+		if visual:
+			style_parts.append(visual)
+		style_parts.extend(
+			[
+				"warm storybook gouache illustration",
+				age_anchor,
+				category_anchor,
+				"clean silhouettes, readable faces and hands, layered foreground midground background, child-safe mood",
+			]
+		)
+		seen: Set[str] = set()
+		deduped: List[str] = []
+		for part in style_parts:
+			text = re.sub(r"\s+", " ", part).strip(" ,.")
+			if not text:
+				continue
+			key = text.casefold()
+			if key in seen:
+				continue
+			seen.add(key)
+			deduped.append(text)
+		result = ", ".join(deduped)
+		if len(result) > 220:
+			result = result[:217].rstrip(",;:.") + "..."
+		return result
 		"""構建圖像風格鎖定描述，確保簡潔且無重複。"""
 		visual = (self.age_policy.get("visual_style") or "").strip()
 		# prompt_guidelines now contains text-based rules and KG summary, not suitable for image style.
@@ -2282,6 +3801,7 @@ class StoryPipeline:
 				"ending_end": self.base_context.get("ending_end"),
 				# "bridge_instruction": bridge_instruction, # [REMOVED] Legacy variable
 			}
+			base_context.update(self._build_visual_prompt_context(idx, event, page_structure))
 			
 			# Final page rule: no new plot elements, resolve existing threads
 			is_final_page = idx == strict_total or page_structure.get("page_function") == "REFLECTION"
@@ -2392,6 +3912,7 @@ class StoryPipeline:
 				"page_structure": json.dumps(page_structure, ensure_ascii=False),
 				"branch_context": f"Branch: {self.current_branch_id}" if self.current_branch_id else "Linear Path",
 			}
+			write_context.update(self._build_visual_prompt_context(idx, event, page_structure, state_snapshot))
 			# [DEBUG LOG] Track if system_announcement reaches write context
 			if write_context.get("system_announcement"):
 				self.logger.info(f"[Page {idx}] Write context includes announcement: {write_context['system_announcement'][:60]}...")
@@ -2399,14 +3920,65 @@ class StoryPipeline:
 			# Anti-Looping Retry Logic
 			max_dedup_retries = 2
 			page_text = ""
+			key_page_candidate_count = (
+				max(1, int(getattr(self.options, "key_page_candidates", 1) or 1))
+				if self._is_key_story_page(idx, page_structure)
+				else 1
+			)
 			
 			for dedup_try in range(max_dedup_retries):
-				page_text = self._run_single_step(
-					"story_write", 
-					write_context, 
-					self._page_file(idx),
-					banned_phrases=["Page", "Page:", "Page-"]
-				)
+				if key_page_candidate_count > 1:
+					candidate_entries: List[Dict[str, Any]] = []
+					for candidate_idx in range(key_page_candidate_count):
+						candidate_path = self._page_file(idx).with_name(
+							f"{self._page_file(idx).stem}__r{dedup_try + 1}_candidate_{candidate_idx + 1}{self._page_file(idx).suffix}"
+						)
+						candidate_text = self._run_single_step(
+							"story_write",
+							write_context,
+							candidate_path,
+							banned_phrases=["Page", "Page:", "Page-"],
+						)
+						scorecard = self._score_story_page_candidate(
+							candidate_text,
+							idx=idx,
+							page_structure=page_structure,
+							history=pages,
+						)
+						candidate_entries.append(
+							{
+								"path": candidate_path,
+								"text": candidate_text,
+								"scorecard": scorecard,
+							}
+						)
+						self.logger.info(
+							"[Page %d] candidate %d/%d score=%.2f issues=%s",
+							idx,
+							candidate_idx + 1,
+							key_page_candidate_count,
+							float(scorecard.get("score", 0.0)),
+							scorecard.get("issues", []),
+						)
+					selected = max(candidate_entries, key=lambda item: float(item["scorecard"].get("score", 0.0)))
+					page_text = str(selected["text"])
+					self.step_history.append(
+						{
+							"step": "story_write_selection",
+							"page_number": idx,
+							"candidate_count": key_page_candidate_count,
+							"selected_source": Path(str(selected["path"])).name,
+							"selected_score": float(selected["scorecard"].get("score", 0.0)),
+							"issues": list(selected["scorecard"].get("issues", [])),
+						}
+					)
+				else:
+					page_text = self._run_single_step(
+						"story_write", 
+						write_context, 
+						self._page_file(idx),
+						banned_phrases=["Page", "Page:", "Page-"]
+					)
 
 				# Ensure no explicit option lists appear on interaction/branch-trigger pages
 				if page_structure.get("branch_trigger"):

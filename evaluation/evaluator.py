@@ -31,12 +31,7 @@ from statistics import mean
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from collections import Counter
 from dataclasses import dataclass
-from .completeness import CompletenessChecker
-from .coherence import CoherenceChecker  
-from .readability import ReadabilityChecker
-from .factual import FactualityChecker
-from .emotion import EmotionalImpactChecker
-from .consistency import AdvancedStoryChecker  # 實體一致性
+from .multimodal_alignment import MultimodalAlignmentChecker
 from .genre import GenreDetector
 from .shared.score_governance import build_score_governance
 from .shared.score_policy import apply_cross_dimension_constraints, compute_consensus_adjustment
@@ -370,6 +365,7 @@ class MultiAspectEvaluator:
             # 4個模型的維度（較重量，現在使用 GLiNER）
             'completeness': {'ai_model', 'gliner_model', 'semantic_model', 'kg'},      # 4個模型
             'entity_consistency': {'ai_model', 'gliner_model', 'semantic_model', 'kg'}, # 4個模型
+            'multimodal_alignment': set(),
         }
         
         # 計算最佳處理順序（減少重複載入模型）
@@ -544,6 +540,7 @@ class MultiAspectEvaluator:
         
         # 創建檢測器
         if dimension == 'completeness':
+            from .completeness import CompletenessChecker
             checker = CompletenessChecker(self.kg_path, self.model_path, self.use_multiple_ai_prompts,
                                          ai=self.loaded_models.get('ai_model'),
                                          kg=self.loaded_models.get('kg'),
@@ -551,6 +548,7 @@ class MultiAspectEvaluator:
                                          semantic_model=self.loaded_models.get('semantic_model'),
                                          eager_load_semantic=False)
         elif dimension == 'coherence':
+            from .coherence import CoherenceChecker
             checker = CoherenceChecker(self.kg_path, self.model_path, self.use_multiple_ai_prompts,
                                        ai=self.loaded_models.get('ai_model'),
                                        kg=self.loaded_models.get('kg'),
@@ -558,11 +556,13 @@ class MultiAspectEvaluator:
                                        semantic_model=self.loaded_models.get('semantic_model'),
                                        eager_load_semantic=False)
         elif dimension == 'readability':
+            from .readability import ReadabilityChecker
             checker = ReadabilityChecker(self.kg_path, self.model_path, self.target_age_group, self.use_multiple_ai_prompts,
                                          ai=self.loaded_models.get('ai_model'),
                                          kg=self.loaded_models.get('kg'),
                                          nlp=self.loaded_models.get('spacy_model'))
         elif dimension == 'entity_consistency':
+            from .consistency import AdvancedStoryChecker
             checker = AdvancedStoryChecker(
                 self.kg_path,
                 self.model_path,
@@ -574,16 +574,20 @@ class MultiAspectEvaluator:
                 preloaded_gliner=self.loaded_models.get('gliner_model')
             )
         elif dimension == 'factuality':
+            from .factual import FactualityChecker
             checker = FactualityChecker(self.kg_path, self.model_path, self.use_multiple_ai_prompts, self.enable_web_search,
                                         ai=self.loaded_models.get('ai_model'),
                                         kg=self.loaded_models.get('kg'),
                                         nlp=self.loaded_models.get('spacy_model'))
         elif dimension == 'emotional_impact':
+            from .emotion import EmotionalImpactChecker
             checker = EmotionalImpactChecker(self.kg_path, self.model_path, self.use_multiple_ai_prompts,
                                            ai=self.loaded_models.get('ai_model'),
                                            kg=self.loaded_models.get('kg'),
                                            nlp=self.loaded_models.get('spacy_model'),
                                            goemotion_model=self.loaded_models.get('goemotion_model'))
+        elif dimension == 'multimodal_alignment':
+            checker = MultimodalAlignmentChecker()
         else:
             raise ValueError(f"未知維度: {dimension}")
         
@@ -886,6 +890,7 @@ class MultiAspectEvaluator:
                       enabled_dimensions: Optional[List[str]] = None,
                       image_paths: Optional[List[str]] = None,
                       *,
+                      image_context: Optional[Dict[str, Any]] = None,
                       branch_id: str = "canonical",
                       source_document: Optional[str] = None,
                       evaluation_scope: str = "canonical") -> MultiAspectReport:
@@ -895,7 +900,8 @@ class MultiAspectEvaluator:
             document_paths: 文檔類型對應的檔案路徑或路徑列表。
             story_title:   故事標題，影響報告與提示內容。
             enabled_dimensions: 指定要執行的維度，None 代表全部。
-            image_paths:   保留多模態擴充用，目前未使用。
+            image_paths:   評估時可用的圖片路徑列表。
+            image_context: 圖片、prompt 與生成紀錄等補充資訊。
 
         回傳:
             MultiAspectReport 物件，包含各維度分數、建議、降級報告等。
@@ -956,7 +962,7 @@ class MultiAspectEvaluator:
             logger.info("%s", "=" * 60)
             
             # 載入當前維度檢測器
-            result = self._evaluate_dimension(dimension, document_paths, story_title, image_paths)
+            result = self._evaluate_dimension(dimension, document_paths, story_title, image_paths, image_context)
             dimension_results.append(result)
             
             logger.info("✅ %s 完成 - 分數: %.1f/100 (耗時: %.2fs)", dimension, result.score, result.processing_time)
@@ -1145,7 +1151,8 @@ class MultiAspectEvaluator:
         }
     
     def _evaluate_dimension(self, dimension: str, document_paths: Dict[str, Union[str, List[str]]], 
-                          story_title: str, image_paths: Optional[List[str]] = None) -> DimensionResult:
+                          story_title: str, image_paths: Optional[List[str]] = None,
+                          image_context: Optional[Dict[str, Any]] = None) -> DimensionResult:
         """執行單一維度評估並封裝結果。"""
         start_time = datetime.now()
         
@@ -1200,7 +1207,8 @@ class MultiAspectEvaluator:
                 document_contents,
                 sources,
                 story_title,
-                image_paths
+                image_paths,
+                image_context=image_context,
             )
             if not isinstance(result, dict):
                 fallback_score = get_dimension_fallback_score(dimension)
@@ -1294,7 +1302,8 @@ class MultiAspectEvaluator:
     
     def _call_dimension_checker(self, dimension: str, checker, document_contents: Dict[str, str],
                               source_weights: Dict[str, float], story_title: str,
-                              image_paths: Optional[List[str]] = None) -> Dict:
+                              image_paths: Optional[List[str]] = None,
+                              *, image_context: Optional[Dict[str, Any]] = None) -> Dict:
         """呼叫具體維度檢測器並回傳原始結果字典。"""
         selected_documents = self._select_documents_for_dimension(dimension, checker, document_contents)
         if not selected_documents:
@@ -1330,6 +1339,9 @@ class MultiAspectEvaluator:
         
         elif dimension == 'emotional_impact':
             return checker.check(main_text, story_title)
+
+        elif dimension == 'multimodal_alignment':
+            return checker.check(main_text, story_title, image_paths=image_paths, image_context=image_context)
         
         else:
             raise ValueError(f"未知維度: {dimension}")
@@ -1774,12 +1786,13 @@ class MultiAspectEvaluator:
         """
         # 1) 內建預設（偏向讀者體驗＋敘事穩定度）
         default_weights = {
-            'readability': 0.28,
-            'coherence': 0.22,
-            'emotional_impact': 0.25,
-            'entity_consistency': 0.13,
+            'readability': 0.25,
+            'coherence': 0.20,
+            'emotional_impact': 0.20,
+            'entity_consistency': 0.12,
             'completeness': 0.10,
-            'factuality': 0.02
+            'factuality': 0.03,
+            'multimodal_alignment': 0.10,
         }
         dims_all = list(default_weights.keys())
         available_dims = set(scores.keys()) if scores else set(dims_all)

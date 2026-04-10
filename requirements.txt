@@ -15,12 +15,13 @@ torchcodec==0.7.0
 # - NameError: QuantizeConfig is not defined
 # - ImportError: auto_gptq not found
 accelerate==1.12.0
-diffusers==0.30.0
+diffusers==0.35.1
 transformers==4.46.1
 tokenizers==0.20.3
 safetensors==0.4.3
 bitsandbytes>=0.43.0
 optimum==1.23.3
+optimum-quanto==0.2.7
 auto-gptq==0.7.1
 exllamav2==0.3.2
 peft==0.18.1
@@ -47,6 +48,8 @@ rembg==2.0.56
 
 # --- NLP / Tokenizer ---
 sentencepiece==0.1.99
+# Keep protobuf on 3.20.x for sentencepiece tokenizer conversion used by FLUX / SD3.5 pipelines.
+protobuf==3.20.3
 spacy==3.4.4
 spacy-experimental==0.6.4
 en-core-web-sm==3.4.0
@@ -60,6 +63,7 @@ pyyaml==6.0.3
 
 # --- 音訊 / 語音 ---
 soundfile==0.12.1
+ftfy==6.3.1
 TTS==0.22.0
 
 # --- 進度列 / 視覺化 / 圖結構 ---

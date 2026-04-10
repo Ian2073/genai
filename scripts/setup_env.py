@@ -70,11 +70,12 @@ TORCH_PROFILES = {
 
 CORE_REQUIREMENTS = [
     "accelerate==1.12.0",
-    "diffusers==0.30.0",
+    "diffusers==0.35.1",
     "transformers==4.46.1",
     "tokenizers==0.20.3",
     "safetensors==0.4.3",
     "optimum==1.23.3",
+    "optimum-quanto==0.2.7",
     "auto-gptq==0.7.1",
     "exllamav2==0.3.2",
     "peft==0.18.1",
@@ -84,6 +85,8 @@ CORE_REQUIREMENTS = [
     "plotly==5.20.0",
     "networkx==2.8.8",
     "sentencepiece==0.1.99",
+    "protobuf==3.20.3",
+    "ftfy==6.3.1",
     "tqdm==4.66.5",
 ]
 
@@ -105,7 +108,9 @@ SPECIAL_REQUIREMENT_SPECS = {
 
 SPECIAL_NO_DEPS_REQUIREMENTS = {}
 
-KNOWN_PIP_CHECK_WARNINGS = ()
+KNOWN_PIP_CHECK_WARNINGS = (
+    "spacy-transformers 1.1.8 has requirement transformers<4.22.0,>=3.4.0",
+)
 
 BOOTSTRAP_PACKAGES = (
     "pip==26.0.1",

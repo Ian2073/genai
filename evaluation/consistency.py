@@ -476,11 +476,19 @@ class AIAnalyzer:
         self.logger = logger_override or logging.getLogger(f"{__name__}.AIAnalyzer")
         self.debug_logs = debug_logs if debug_logs is not None else get_bool_env('CONSISTENCY_DEBUG', False)
         
-        # 支援的模型列表（按優先順序）
-        self.supported_models = [
+        # 支援的模型列表（按優先順序；僅保留現行 Qwen 系列，避免舊版 Phi fallback）
+        self.supported_models: List[str] = []
+        fallback_candidates = [
             get_default_model_path("Qwen2.5-14B"),
-            get_default_model_path("phi-3.5-mini")  # 備用模型
+            resolve_model_path("Qwen3.5-9B"),
+            resolve_model_path("Qwen3-8B"),
         ]
+        for candidate in fallback_candidates:
+            candidate_path = str(candidate).strip()
+            if not candidate_path or candidate_path in self.supported_models:
+                continue
+            if os.path.isdir(candidate_path):
+                self.supported_models.append(candidate_path)
         
         self._load_model()
 
@@ -595,9 +603,14 @@ class AIAnalyzer:
                 self._warn(f"環境變數模型載入失敗 {env_model_path}: {e}")
         
         # 嘗試載入指定模型，失敗時自動嘗試其他支援的模型
-        for model_path in [self.model_path] + self.supported_models:
-            if model_path == self.model_path:
-                continue  # 跳過已嘗試的
+        candidate_paths: List[str] = []
+        for candidate in [self.model_path] + self.supported_models:
+            candidate_path = str(candidate).strip()
+            if not candidate_path or candidate_path in candidate_paths:
+                continue
+            candidate_paths.append(candidate_path)
+
+        for model_path in candidate_paths:
                 
             try:
                 self._info("正在載入模型: %s", model_path)
@@ -607,7 +620,7 @@ class AIAnalyzer:
                 if self.tokenizer.pad_token is None:
                     self.tokenizer.pad_token = self.tokenizer.eos_token
                 
-                # 針對 Phi-3.5 + AMD 9900X 混合優化載入方式
+                # 針對本地 LLM + AMD 9900X 混合優化載入方式
                 gpu_memory_limit = get_int_env('EVAL_GPU_MEMORY_LIMIT', 10)  # 平衡 GPU 與 CPU 使用
                 if self.device == 'cuda':
                     # 檢查是否啟用 4-bit 量化
@@ -768,6 +781,7 @@ class AIAnalyzer:
             
             fallback_analysis = self._get_ai_analysis(unique_entities, entity_counts) if unique_entities else "未提供可識別實體，採用客觀規則評分。"
             analysis_text = grounded.get("analysis") or fallback_analysis
+            model_label = os.path.basename(str(self.model_path).rstrip('/\\')) or str(self.model_path)
             
             return {
                 "analysis": analysis_text,
@@ -778,7 +792,7 @@ class AIAnalyzer:
                 "matches": grounded.get("matches", []),
                 "mismatches": grounded.get("mismatches", []),
                 "unsupported": grounded.get("unsupported", []),
-                "model_used": "Phi-3.5-mini"
+                "model_used": model_label
             }
             
         except Exception as e:
@@ -5564,7 +5578,7 @@ class AIEnhancedEntityChecker:
         """初始化"""
         self.use_ai = use_ai
         self.processor = AutoStoryProcessor(
-            model_path=model_path or get_default_model_path("phi-3.5-mini")
+            model_path=model_path or get_default_model_path("Qwen2.5-14B")
         )
         self.model_loaded = self.processor.checker.ai.model_available
     
@@ -5615,11 +5629,11 @@ if __name__ == "__main__":
 from consistency import AutoStoryProcessor
 
 # 初始化（標準模式 - 單一prompt）
-processor = AutoStoryProcessor("output", "kg", "models/phi-3.5-mini", 
+processor = AutoStoryProcessor("output", "kg", "models/Qwen2.5-14B-Instruct-GPTQ-Int4", 
                               use_multiple_ai_prompts=False)
 
 # 初始化（進階模式 - 多重prompt平均）
-processor_advanced = AutoStoryProcessor("stories", "kg", "models/phi-3.5-mini", 
+processor_advanced = AutoStoryProcessor("stories", "kg", "models/Qwen2.5-14B-Instruct-GPTQ-Int4", 
                                        use_multiple_ai_prompts=True)
 
 # 檢測單個故事（完整分析）
@@ -5680,7 +5694,7 @@ result = {
         'objective_score': 72.0,       # 客觀評分
         'confidence': 78.5,            # 混合置信度
         'score_difference': 13.0,      # 分數差異
-        'model_used': 'Phi-3.5-mini'
+        'model_used': 'Qwen2.5-14B-Instruct-GPTQ-Int4'
     },
     'recommendations': {
         'critical': [...],

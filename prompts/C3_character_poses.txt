@@ -1,32 +1,35 @@
 ###SYSTEM
-Describe character poses for illustrators.
+Describe character poses for children's book illustrators.
 
 [SYSTEM CORE ASSUMPTIONS]
 {system_core_assumptions}
 
 YOUR TASK:
-Write a concise pose description for one character, following the visual style guidelines.
+Write a concise pose description for one character that helps an image model keep the character readable and consistent.
+This pose should support a child-readable story moment, not a glamour pose.
 
 VISUAL STYLE:
 {image_style_lock}
 
 REQUIREMENTS:
-- Format: comma-separated keywords (e.g., "standing, arms raised, smiling, looking up, energetic, happy")
-- TOKEN LIMIT: Your output must be exactly 15-25 CLIP tokens (strictly within this range)
-- IMPORTANT: This prompt will be appended with a suffix (~10-12 tokens), so your output + suffix must total ≤ 52 tokens (well below CLIP's 77 token limit, leaving safety margin)
+- Format: comma-separated short phrases such as "standing tall, one hand raised, smiling, looking up, eager"
+- Keep the pose compact, roughly 10-22 words before the style suffix is added
+- Keep the total prompt compact because a style suffix is appended later
 - Character: {character_name} only
-- Include: body pose, facial expression, hand/arm activity, gaze direction, energy, mood
-- Use descriptive nouns and adjectives separated by commas
-- NO full sentences, NO verbs, NO character names in output
+- Match the current page action and emotion
+- Align with Motion Level={scene_motion_level} and Emotion Density={scene_emotion_density}
+- Include: body pose, facial expression, hand or arm activity, gaze direction, and energy or mood
+- Participles are allowed when useful, such as "holding", "reaching", "smiling", or "looking left"
+- Prefer 4-7 short phrases
+- NO full sentences and NO character names in output
+- Favor silhouette-readable poses over vague mood words
 - Keep directions crisp so image models stay consistent
-- Count tokens carefully: each word is typically 1-2 tokens, commas and spaces also count
-- Constraint: Do NOT output "Page X:" or any meta-talk.
 
 OUTPUT FORMAT:
-- Output only comma-separated keywords inside <pose> tags.
-- Example: <pose>standing, arms raised, smiling, looking forward, energetic</pose>
+- Output only comma-separated phrases inside <pose> tags
+- Example: <pose>standing tall, one hand raised, smiling, looking forward, bright energy</pose>
 - No labels, character names in output, or explanations
-- NO conversational fillers (e.g., "Okay", "Sure", "Here is")
+- NO conversational fillers such as "Okay", "Sure", or "Here is"
 
 ###USER
 Current Page Content:
@@ -35,25 +38,25 @@ Current Page Content:
 [PAGE STRUCTURE]
 {page_structure}
 
+[STATE SNAPSHOT JSON]
+{state_snapshot}
+
 Task: Describe the pose for {character_name}.
 Output:
 
-CRITICAL: Output ONLY comma-separated keywords. NO thinking process, NO explanations, NO conversational fillers. Start directly with the first keyword.
+CRITICAL: Output ONLY comma-separated short phrases. NO thinking process, NO explanations, NO conversational fillers. Start directly with the first phrase.
 
-Write comma-separated keywords describing {character_name}'s pose and action following the visual style above. Your output must be exactly 15-25 CLIP tokens (not words, but tokens). Format: "keyword1, keyword2, keyword3, ..." Use only descriptive nouns and adjectives, NO sentences, NO character names. Example: "standing, arms raised, smiling, looking forward, energetic, happy". Count tokens carefully - your output must be exactly 15-25 CLIP tokens, nothing more, nothing less. This will be combined with a style suffix (~10-12 tokens), keeping total well below the 77 token limit.
-
-OUTPUT FORMAT: Start immediately with the first keyword. Example: "standing, arms raised, smiling, looking forward, energetic, happy"
+Write comma-separated short phrases describing {character_name}'s pose and action following the visual style above. Format: "phrase1, phrase2, phrase3, ..." Use concise pose language, NO sentences, NO character names. Example: "standing tall, arms raised, smiling, looking forward, playful energy". Keep the result tight and readable after the style suffix is added.
 
 FORBIDDEN: Do NOT include any of these:
 - "Okay", "Sure", "Here is", "Let me", "First", "I need", "The user", "Based on"
 - Page numbers or labels
 - Character names in the output
 - Explanations or meta-commentary
-- Full sentences or verbs
+- Full sentences
 - Thinking process or reasoning
 
-Output only the keywords.
+Output only the phrases.
 Constraint: Write ONLY in English.
 Constraint: Do NOT output internal thought process.
 Constraint: Start directly with keywords. Do NOT say "Okay" or "Here is".
-

@@ -41,6 +41,7 @@ DEFAULT_ASPECTS: List[str] = [
     "readability",        # 可讀性：評估語言適讀性
     "emotional_impact",   # 情感影響力：分析情感表達的感染力
     "factuality",         # 事實正確性：驗證事實陳述的準確性
+    "multimodal_alignment",  # 文圖一致性：檢查提示詞、圖片品質與圖文對位
 ]
 
 

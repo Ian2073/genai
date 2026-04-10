@@ -18,6 +18,10 @@ from importlib import metadata
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+if str(WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORKSPACE_ROOT))
+
 
 @dataclass
 class CheckResult:
@@ -280,22 +284,23 @@ def check_qwen3_transformers_compat(workspace_root: Path) -> Optional[CheckResul
 
 
 def check_model_dirs(workspace_root: Path) -> CheckResult:
-    base_model_ok = (
-        (workspace_root / "models" / "stable-diffusion-xl-base-1.0").exists()
-        or (workspace_root / "models" / "dreamshaperXL_lightningDPMSDE.safetensors").exists()
+    preferred_flux_schnell = workspace_root / "models" / "FLUX.1-schnell"
+    preferred_flux_dev = workspace_root / "models" / "FLUX.1-dev"
+    sdxl_image_model = workspace_root / "models" / "stable-diffusion-xl-base-1.0"
+    legacy_image_model = workspace_root / "models" / "dreamshaperXL_lightningDPMSDE.safetensors"
+    base_model_ok = any(
+        path.exists()
+        for path in (preferred_flux_schnell, preferred_flux_dev, sdxl_image_model, legacy_image_model)
     )
     preferred_text_model = workspace_root / "models" / "Qwen2.5-14B-Instruct-GPTQ-Int4"
     fallback_text_model = workspace_root / "models" / "Qwen3-8B"
     required_dirs = [
         workspace_root / "models" / "nllb-200-3.3B",
-        workspace_root / "models" / "stable-diffusion-xl-refiner-1.0",
         workspace_root / "models" / "XTTS-v2",
     ]
     missing = [str(p.relative_to(workspace_root)) for p in required_dirs if not p.exists()]
     if not base_model_ok:
-        missing.append(
-            "models/stable-diffusion-xl-base-1.0 or models/dreamshaperXL_lightningDPMSDE.safetensors"
-        )
+        missing.append("models/FLUX.1-schnell or models/FLUX.1-dev or models/stable-diffusion-xl-base-1.0")
     if not preferred_text_model.exists() and not fallback_text_model.exists():
         missing.append(
             "models/Qwen2.5-14B-Instruct-GPTQ-Int4 or models/Qwen3-8B"
@@ -304,11 +309,43 @@ def check_model_dirs(workspace_root: Path) -> CheckResult:
         return CheckResult("WARN", "Model directories", "Missing: " + ", ".join(missing))
 
     detail = "All required model directories exist."
+    if preferred_flux_schnell.exists():
+        detail += " Preferred image model found: models/FLUX.1-schnell."
+    elif preferred_flux_dev.exists():
+        detail += " Preferred image model found: models/FLUX.1-dev."
+    elif sdxl_image_model.exists():
+        detail += " FLUX.1 checkpoint missing, but SDXL base exists as an image fallback."
+    if legacy_image_model.exists() and not sdxl_image_model.exists():
+        detail += " Legacy DreamShaper Lightning is present, but it is no longer the recommended default image checkpoint."
     if preferred_text_model.exists():
         detail += " Preferred text model found: models/Qwen2.5-14B-Instruct-GPTQ-Int4."
     elif fallback_text_model.exists():
         detail += " Preferred GPTQ model missing, but fallback text model exists: models/Qwen3-8B."
     return CheckResult("PASS", "Model directories", detail)
+
+
+def check_recommended_model_plan(workspace_root: Path) -> Optional[CheckResult]:
+    try:
+        from pipeline.model_plan import resolve_model_plan
+        from pipeline.options import DEFAULT_CHIEF_OPTIONS
+        from utils import ProjectPaths
+
+        resolved = resolve_model_plan(DEFAULT_CHIEF_OPTIONS, ProjectPaths.discover(workspace_root))
+    except Exception as exc:
+        return CheckResult("WARN", "Recommended model plan", f"Failed to resolve runtime model plan: {exc}")
+
+    if resolved is None:
+        return CheckResult("WARN", "Recommended model plan", "Automatic model plan resolution is disabled.")
+
+    detail = (
+        f"Selected '{resolved.selected_plan}' from requested '{resolved.requested_plan}'. "
+        f"Story model: {resolved.story_model or '<unchanged>'} "
+        f"(quantization={resolved.story_quantization or 'none'}). "
+        f"Hardware: {resolved.hardware.summary()}."
+    )
+    if resolved.notes:
+        detail += " Notes: " + " | ".join(resolved.notes)
+    return CheckResult("PASS", "Recommended model plan", detail)
 
 
 def _detect_model_quant_method(model_dir: Path) -> Optional[str]:
@@ -458,6 +495,9 @@ def collect_results(workspace_root: Path, expect_cuda_mode: str) -> List[CheckRe
         results.append(qwen3_compat)
     results.extend(check_gptq_runtime(workspace_root=workspace_root, expect_cuda=expect_cuda, gpu_names=gpu_names))
     results.append(check_model_dirs(workspace_root))
+    plan_result = check_recommended_model_plan(workspace_root)
+    if plan_result is not None:
+        results.append(plan_result)
     return results
 
 

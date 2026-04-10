@@ -6,7 +6,6 @@ import json
 from dataclasses import replace
 from typing import Any, Optional
 
-from .chief_runner import ChiefRunner
 from .options import DEFAULT_CHIEF_OPTIONS, ChiefOptions, build_arg_parser
 
 
@@ -46,6 +45,7 @@ def resolve_options_from_args(args: Any) -> ChiefOptions:
         "count": count,
         "resume": getattr(args, 'resume', None),
         "mode": mode,
+        "model_plan": getattr(args, "model_plan", "auto"),
         "age_group": args.age,
         "main_category": args.category,
         "story_input_mode": getattr(args, "story_input_mode", None) or DEFAULT_CHIEF_OPTIONS.story_input_mode,
@@ -54,6 +54,7 @@ def resolve_options_from_args(args: Any) -> ChiefOptions:
         "story_pages_expected": args.pages,
         "seed": args.seed,
         "pre_eval_policy": getattr(args, "pre_eval_policy", "stop"),
+        "pre_eval_profile": getattr(args, "pre_eval_profile", "balanced"),
         "pre_eval_threshold": getattr(args, "pre_eval_threshold", 65.0),
     }
     if args.story_prompt is not None:
@@ -66,6 +67,12 @@ def resolve_options_from_args(args: Any) -> ChiefOptions:
         option_updates["story_dtype"] = args.story_dtype
     if args.story_quantization is not None:
         option_updates["story_quantization"] = None if args.story_quantization == "none" else args.story_quantization
+    if getattr(args, "outline_candidates", None) is not None:
+        option_updates["story_outline_candidates"] = max(1, int(args.outline_candidates))
+    if getattr(args, "title_candidates", None) is not None:
+        option_updates["story_title_candidates"] = max(1, int(args.title_candidates))
+    if getattr(args, "key_page_candidates", None) is not None:
+        option_updates["story_key_page_candidates"] = max(1, int(args.key_page_candidates))
     if args.low_vram is not None:
         option_updates["low_vram"] = args.low_vram
     if args.max_retries is not None:
@@ -107,6 +114,8 @@ def main(options: Optional[ChiefOptions] = None) -> int:
         selected_options = resolve_options_from_args(args)
     else:
         selected_options = resolve_options(options)
+    from .chief_runner import ChiefRunner
+
     runner = ChiefRunner(selected_options)
     summary = runner.run()
     print(json.dumps(summary, ensure_ascii=False, indent=2))

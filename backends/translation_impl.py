@@ -102,88 +102,134 @@ class TransformersNLLBBackend(BaseTranslationBackend):
             **load_kwargs,
         )
         self.device = self.model.device
-        self.glossary = {}
-
-    def _apply_glossary(self, text: str, target_lang: str) -> str:
-        is_chinese = "zh" in target_lang.lower()
-        is_simplified = "zh-cn" in target_lang.lower() or "hans" in target_lang.lower()
-        if not is_chinese:
-            return text
-
-        replacements = {
-            "姆爷爷": "湯姆爺爺",
-            "姆祖父": "湯姆爺爺",
-            "姆大叔": "湯姆爺爺",
-            "Tom爷爷": "湯姆爺爺",
-            "爷爷汤姆": "湯姆爺爺",
-            "亚历克斯大叔": "艾力克斯",
-            "阿力克斯": "艾力克斯",
-            "艾玛": "艾瑪",
+        self.glossary = dict(getattr(config, "glossary", {}) or {})
+        configured_entities = list(getattr(config, "entity_lock_names", ()) or [])
+        default_entities = [
+            "Grandpa Tom",
+            "Grandpa",
+            "Alex",
+            "Emma",
+            "Cardamom",
+            "Locket",
+            "Star Bridge",
+            "Rainbow Bridge",
+            "Cinnamon",
+            "Shovel",
+            "Bottle",
+            "Patch",
+            "Mid-Autumn",
+            "Diwali",
+        ]
+        self.entity_lock_names = self._dedupe_entities(configured_entities + default_entities)
+        self.entity_placeholder_map = {
+            name: f"ENTITYTOKEN{index:02d}"
+            for index, name in enumerate(self.entity_lock_names)
         }
-        for bad, good in replacements.items():
-            text = text.replace(bad, good)
+        self.placeholder_restore_map = {
+            placeholder: name for name, placeholder in self.entity_placeholder_map.items()
+        }
 
-        if is_simplified:
-            simp_map = {
-                "湯姆爺爺": "汤姆爷爷",
-                "爺爺": "爷爷",
-                "艾力克斯": "艾力克斯",
-                "艾瑪": "艾玛",
-                "豆蔻": "豆蔻",
-                "掛墜盒": "挂坠盒",
-                "星之橋": "星之桥",
-                "彩虹橋": "彩虹桥",
-                "為": "为",
-                "裡": "里",
-                "後": "后",
-            }
-            for trad, simp in simp_map.items():
-                text = text.replace(trad, simp)
-        return text
+    @staticmethod
+    def _dedupe_entities(items: Sequence[str]) -> List[str]:
+        deduped: List[str] = []
+        seen = set()
+        for raw in items:
+            name = re.sub(r"\s+", " ", str(raw or "").strip())
+            if not name:
+                continue
+            key = name.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(name)
+        deduped.sort(key=len, reverse=True)
+        return deduped
 
     def _build_lang_code_map(self) -> Dict[str, int]:
         mapping = getattr(self.tokenizer, "lang_code_to_id", None)
         if isinstance(mapping, dict) and mapping:
-            return mapping
+            return {str(key): int(value) for key, value in mapping.items()}
 
-        lang_tokens: Sequence[str] = []
-        if getattr(self.tokenizer, "additional_special_tokens", None):
-            lang_tokens = list(self.tokenizer.additional_special_tokens)
+        lang_tokens: Sequence[str] = ()
+        additional_tokens = getattr(self.tokenizer, "additional_special_tokens", None)
+        if isinstance(additional_tokens, (list, tuple)) and additional_tokens:
+            lang_tokens = [str(token) for token in additional_tokens]
         if not lang_tokens:
-            special_map = getattr(self.tokenizer, "special_tokens_map_extended", {}) or getattr(
-                self.tokenizer, "special_tokens_map", {}
+            special_map = (
+                getattr(self.tokenizer, "special_tokens_map_extended", None)
+                or getattr(self.tokenizer, "special_tokens_map", None)
+                or {}
             )
-            lang_tokens = special_map.get("additional_special_tokens", [])
+            candidate_tokens = special_map.get("additional_special_tokens", [])
+            if isinstance(candidate_tokens, (list, tuple)):
+                lang_tokens = [str(token) for token in candidate_tokens]
 
-        temp_map: Dict[str, int] = {}
+        fallback_mapping: Dict[str, int] = {}
         for token in lang_tokens:
             try:
                 token_id = self.tokenizer.convert_tokens_to_ids(token)
             except Exception:
                 continue
-            if token_id is None or token_id == self.tokenizer.unk_token_id:
+            if token_id is None:
                 continue
-            temp_map[str(token)] = int(token_id)
+            unk_token_id = getattr(self.tokenizer, "unk_token_id", None)
+            if unk_token_id is not None and token_id == unk_token_id:
+                continue
+            fallback_mapping[str(token)] = int(token_id)
 
-        if not temp_map:
-            raise RuntimeError("無法從 NLLB tokenizer 推導語言代碼 mapping，請確認模型檔案完整。")
-        return temp_map
+        if fallback_mapping:
+            return fallback_mapping
+
+        raise RuntimeError(
+            "Failed to build NLLB language token mapping from tokenizer metadata."
+        )
 
     def _resolve_target_lang_code(self, target_lang: str) -> tuple[str, int]:
-        target_code = SAMPLE_LANGUAGE_MAP.get(target_lang.lower(), target_lang)
+        normalized_target = str(target_lang or "").strip().lower()
+        target_code = SAMPLE_LANGUAGE_MAP.get(normalized_target, normalized_target)
         if target_code not in self.lang_code_to_id:
-            if "zh" in target_lang.lower():
-                target_code = "zho_Hant" if target_lang.lower() in ["zh", "zh-tw"] else "zho_Hans"
+            if normalized_target in {"zh", "zh-tw"}:
+                target_code = "zho_Hant"
+            elif normalized_target == "zh-cn":
+                target_code = "zho_Hans"
             else:
-                raise ValueError(f"Target language {target_lang} ({target_code}) unsupported by tokenizer")
+                raise ValueError(
+                    f"Target language '{target_lang}' ({target_code}) is unsupported by the tokenizer."
+                )
 
         forced_bos = self.lang_code_to_id.get(target_code)
-        if forced_bos is None:
-            logging.warning("Could not find token ID for %s, trying zho_Hant default", target_code)
+        if forced_bos is None and target_code != "zho_Hant":
             forced_bos = self.lang_code_to_id.get("zho_Hant")
-            if forced_bos is None:
-                raise RuntimeError(f"Failed to resolve forced_bos for {target_lang}")
-        return target_code, forced_bos
+        if forced_bos is None:
+            raise RuntimeError(f"Failed to resolve forced BOS token for target language '{target_lang}'.")
+
+        return target_code, int(forced_bos)
+
+    def _apply_glossary(self, text: str, target_lang: str) -> str:
+        normalized = str(text or "")
+        lang = target_lang.lower()
+        for source, replacement in self.glossary.items():
+            if not source:
+                continue
+            target_value = replacement
+            if isinstance(replacement, dict):
+                target_value = (
+                    replacement.get(lang)
+                    or replacement.get(lang.replace("-", "_"))
+                    or replacement.get("default")
+                    or source
+                )
+            if not isinstance(target_value, str) or not target_value:
+                continue
+            normalized = normalized.replace(str(source), target_value)
+
+        normalized = re.sub(r"[ \t]+([,.;!?])", r"\1", normalized)
+        normalized = re.sub(r"\n{3,}", "\n\n", normalized).strip()
+        if any(token in lang for token in ("zh", "ja", "ko")):
+            normalized = re.sub(r"\s+([\u3001\u3002\uff01\uff1f\uff1b\uff1a])", r"\1", normalized)
+            normalized = re.sub(r"([\uff08\u300c\u300e\u300a])\s+", r"\1", normalized)
+            normalized = re.sub(r"\s+([\uff09\u300d\u300f\u300b])", r"\1", normalized)
+        return normalized
 
     def _estimate_max_new_tokens(self, inputs: Dict[str, torch.Tensor], target_lang: str) -> int:
         max_output = max(32, int(getattr(self.config, "max_output", 256)))
@@ -298,6 +344,7 @@ class TransformersNLLBBackend(BaseTranslationBackend):
             translated_parts = [translated_segments[idx] for idx in indices]
             full_text = "\n\n".join(translated_parts)
             full_text = self._scrub_translation(full_text)
+            full_text = self._restore_entities(full_text)
             full_text = self._apply_glossary(full_text, target_lang)
             final_results.append(full_text)
         return final_results
@@ -407,61 +454,34 @@ class TransformersNLLBBackend(BaseTranslationBackend):
 
         final_text = "\n\n".join(translated_results).strip()
         final_text = self._scrub_translation(final_text)
+        final_text = self._restore_entities(final_text)
         return self._apply_glossary(final_text, target_lang)
 
     def _inject_entities(self, text: str, target_lang: str) -> str:
-        replacements = {
-            r"Grandpa Tom": "湯姆爺爺",
-            r"Uncle Tom": "湯姆爺爺",
-            r"Grandpa": "爺爺",
-            r"Alex": "艾力克斯",
-            r"Emma": "艾瑪",
-            r"Cinnamon": "肉桂",
-            r"Locket": "掛墜盒",
-            r"Shovel": "鏟子",
-            r"Bottle": "瓶子",
-            r"Patch": "補丁",
-            r"Mid-Autumn": "中秋節",
-            r"Diwali": "排燈節",
-        }
-
-        is_simplified = "zh-cn" in target_lang.lower() or "hans" in target_lang.lower()
-        if is_simplified:
-            simp_map = {
-                "湯姆爺爺": "汤姆爷爷",
-                "爺爺": "爷爷",
-                "艾力克斯": "艾力克斯",
-                "艾瑪": "艾玛",
-                "肉桂": "肉桂",
-                "掛墜盒": "挂坠盒",
-                "鏟子": "铲子",
-                "瓶子": "瓶子",
-                "補丁": "补丁",
-                "中秋節": "中秋节",
-                "排燈節": "排灯节",
-            }
-            replacements = {k: simp_map.get(v, v) for k, v in replacements.items()}
-
-        masked_text = text
-        for pattern, target in replacements.items():
-            real_pattern = r"\b" + pattern + r"(?=[^a-zA-Z]|$)" if pattern in ["Alex", "Emma", "Tom"] else pattern
-            masked_text = re.sub(real_pattern, target, masked_text, flags=re.IGNORECASE)
+        masked_text = str(text or "")
+        for entity_name in self.entity_lock_names:
+            placeholder = self.entity_placeholder_map.get(entity_name)
+            if not placeholder:
+                continue
+            pattern = re.compile(rf"(?<!\w){re.escape(entity_name)}(?!\w)", flags=re.IGNORECASE)
+            masked_text = pattern.sub(placeholder, masked_text)
         return masked_text
 
+    def _restore_entities(self, text: str) -> str:
+        restored = str(text or "")
+        for placeholder, entity_name in self.placeholder_restore_map.items():
+            restored = restored.replace(placeholder, entity_name)
+        return restored
+
     def _scrub_translation(self, text: str) -> str:
-        banned = [
-            "低聲地低聲",
-            "地便地",
-            "摸摸地圖",
-            "姆老公",
-            "姆大叔",
-            "米老公",
-        ]
-        for ban in banned:
-            if ban in text:
-                text = text.replace(ban, "湯姆爺爺" if "姆" in ban else "")
-        text = re.sub(r"\b(The|And|But|So)\b", "", text, flags=re.IGNORECASE)
-        return text
+        cleaned = str(text or "")
+        cleaned = cleaned.replace("\u0000", "")
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^(translation|translated text|assistant)\s*:\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"[ \t]+", " ", cleaned)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        return cleaned.strip()
 
     def _translate_single(self, text: str, forced_bos: int, target_lang: str) -> str:
         if not text.strip():
@@ -505,7 +525,8 @@ class TransformersNLLBBackend(BaseTranslationBackend):
             decoded = self.tokenizer.batch_decode(generated_filtered, skip_special_tokens=True)
             result = decoded[0].strip()
             result = self._scrub_translation(result)
-            return result
+            result = self._restore_entities(result)
+            return self._apply_glossary(result, target_lang)
         except Exception:
             return text
 

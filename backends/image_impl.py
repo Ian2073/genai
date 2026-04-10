@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import os
 import torch
 import warnings
 from pathlib import Path
@@ -14,6 +15,31 @@ from diffusers import DPMSolverMultistepScheduler
 
 from backends.common import resolve_torch_runtime
 from utils import cleanup_torch
+
+
+def _enable_sentencepiece_protobuf_python_fallback() -> None:
+    """Work around protobuf 4.x incompatibilities in sentencepiece tokenizer conversion.
+
+    FLUX / SD3 pipelines may load T5-style tokenizers that import sentencepiece protobuf
+    descriptors generated against older protoc versions. Setting this environment variable
+    before tokenizer construction forces the pure-Python protobuf runtime, which is slower
+    during tokenizer load but avoids the hard crash.
+    """
+    if os.environ.get("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"):
+        return
+    os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
+
+def _normalize_flux_quantization_mode(value: Any) -> str:
+    token = str(value or "").strip().lower()
+    if token in {"", "none", "off", "false", "0"}:
+        return "none"
+    if token in {"fp8", "float8", "qfloat8"}:
+        return "float8"
+    if token in {"fp4", "int4", "4bit", "qint4"}:
+        # Quanto supports int4 weights, not a native fp4 mode.
+        return "int4"
+    return token
 
 
 class BaseImageBackend:
@@ -390,6 +416,324 @@ class DiffusersSDXLBackend(BaseImageBackend):
         self._current_model = None
 
 
+class _SingleStageDiffusersBackend(BaseImageBackend):
+    """Base class for single-stage diffusers image pipelines such as FLUX and SD3."""
+
+    pipeline_cls_name: str = ""
+    pipeline_module: str = "diffusers"
+    max_sequence_length: Optional[int] = None
+
+    def __init__(self, config: Any) -> None:
+        self.config = config
+        self.config.device, self.config.dtype = resolve_torch_runtime(
+            self.config.device,
+            self.config.dtype,
+            module_name="Image pipeline",
+        )
+        self.pipeline = None
+        self.applied_quantization_mode = "none"
+
+    def _load_pipeline_class(self):
+        module = __import__(self.pipeline_module, fromlist=[self.pipeline_cls_name])
+        pipeline_cls = getattr(module, self.pipeline_cls_name, None)
+        if pipeline_cls is None:
+            raise RuntimeError(f"{self.pipeline_cls_name} is not available from {self.pipeline_module}")
+        return pipeline_cls
+
+    def _create_pipeline(self):
+        pipeline_cls = self._load_pipeline_class()
+        model_dir = getattr(self.config, "base_model_dir", None)
+        if model_dir is None:
+            raise RuntimeError("base_model_dir is required for image generation")
+        family = str(getattr(self.config, "model_family", "") or "").lower()
+        if family.startswith("flux") or family.startswith("sd3"):
+            _enable_sentencepiece_protobuf_python_fallback()
+        return pipeline_cls.from_pretrained(
+            str(model_dir),
+            torch_dtype=self.config.dtype,
+            use_safetensors=True,
+        )
+
+    def _prepare_pipeline(self, pipeline: Any) -> Any:
+        if hasattr(pipeline, "set_progress_bar_config"):
+            try:
+                pipeline.set_progress_bar_config(disable=True)
+            except Exception:
+                pass
+        if hasattr(pipeline, "enable_vae_slicing"):
+            try:
+                pipeline.enable_vae_slicing()
+            except Exception:
+                pass
+        if hasattr(pipeline, "enable_vae_tiling"):
+            try:
+                pipeline.enable_vae_tiling()
+            except Exception:
+                pass
+
+        target_device = str(self.config.device or "cpu")
+        if target_device.startswith("cuda") and getattr(self.config, "low_vram", False) and hasattr(pipeline, "enable_model_cpu_offload"):
+            pipeline.enable_model_cpu_offload()
+        else:
+            pipeline.to(target_device)
+        return pipeline
+
+    def _ensure_pipeline_loaded(self) -> None:
+        if self.pipeline is not None:
+            return
+        logging.info("Loading %s model from %s...", self.pipeline_cls_name, self.config.base_model_dir)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            self.pipeline = self._prepare_pipeline(self._create_pipeline())
+        logging.info("%s loaded successfully", self.pipeline_cls_name)
+
+    def _pipeline_call_kwargs(
+        self,
+        prompt: str,
+        seed: int,
+        width: int,
+        height: int,
+        steps: int,
+        guidance: float,
+        negative_prompt: str,
+    ) -> Dict[str, Any]:
+        from utils import ResourceManager
+
+        generator = ResourceManager.setup_torch_generator(self.config.device, seed)
+        kwargs: Dict[str, Any] = {
+            "prompt": prompt,
+            "width": width,
+            "height": height,
+            "generator": generator,
+            "num_inference_steps": steps,
+            "guidance_scale": guidance,
+        }
+        if negative_prompt:
+            kwargs["negative_prompt"] = negative_prompt
+        if self.max_sequence_length is not None:
+            kwargs["max_sequence_length"] = int(self.max_sequence_length)
+        return kwargs
+
+    def load_base(self) -> None:
+        self._ensure_pipeline_loaded()
+
+    def load_refiner(self) -> None:
+        return None
+
+    def run_base_step(
+        self,
+        prompt: str,
+        seed: int,
+        width: int,
+        height: int,
+        steps: int,
+        guidance: float,
+        negative_prompt: str,
+        output_latents: bool = True,
+    ) -> Any:
+        self._ensure_pipeline_loaded()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            output = self.pipeline(**self._pipeline_call_kwargs(prompt, seed, width, height, steps, guidance, negative_prompt))
+        return output.images[0]
+
+    def run_refiner_step(
+        self,
+        latents: Any,
+        prompt: str,
+        seed: int,
+        steps: int,
+        guidance: float,
+        negative_prompt: str,
+    ) -> Image.Image:
+        if isinstance(latents, Image.Image):
+            return latents
+        raise RuntimeError(f"{self.pipeline_cls_name} does not support a separate refiner stage")
+
+    def offload_model(self, target: str = "cpu") -> None:
+        if self.pipeline is not None and hasattr(self.pipeline, "to"):
+            try:
+                self.pipeline.to(target)
+            except Exception:
+                pass
+            torch.cuda.empty_cache()
+
+    def generate_image(
+        self,
+        prompt: str,
+        seed: int,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        num_inference_steps: Optional[int] = None,
+        guidance_scale: Optional[float] = None,
+        negative_prompt: Optional[str] = None,
+        skip_refiner: Optional[bool] = None,
+        refiner_steps: Optional[int] = None,
+    ) -> Image.Image:
+        del skip_refiner, refiner_steps
+        return self.run_base_step(
+            prompt=prompt,
+            seed=seed,
+            width=width or self.config.width,
+            height=height or self.config.height,
+            steps=num_inference_steps or self.config.steps,
+            guidance=guidance_scale if guidance_scale is not None else self.config.guidance,
+            negative_prompt=negative_prompt if negative_prompt is not None else self.config.negative_prompt,
+            output_latents=False,
+        )
+
+    def cleanup(self) -> None:
+        from utils import ResourceManager
+
+        if self.pipeline is not None:
+            ResourceManager.cleanup_model(self.pipeline, aggressive=True)
+            self.pipeline = None
+
+
+class DiffusersFluxBackend(_SingleStageDiffusersBackend):
+    pipeline_cls_name = "FluxPipeline"
+    max_sequence_length = 512
+
+    def _create_pipeline(self):
+        pipeline_cls = self._load_pipeline_class()
+        model_dir = getattr(self.config, "base_model_dir", None)
+        if model_dir is None:
+            raise RuntimeError("base_model_dir is required for image generation")
+        _enable_sentencepiece_protobuf_python_fallback()
+
+        quant_mode = _normalize_flux_quantization_mode(getattr(self.config, "quantization_mode", None))
+        if quant_mode == "none":
+            self.applied_quantization_mode = "none"
+            return pipeline_cls.from_pretrained(
+                str(model_dir),
+                torch_dtype=self.config.dtype,
+                use_safetensors=True,
+            )
+
+        from diffusers import FluxTransformer2DModel, QuantoConfig
+
+        logging.info("Loading quantized FLUX transformer from %s with Quanto %s...", model_dir, quant_mode)
+        quant_config = QuantoConfig(weights_dtype=quant_mode)
+        transformer = FluxTransformer2DModel.from_pretrained(
+            str(model_dir),
+            subfolder="transformer",
+            quantization_config=quant_config,
+            torch_dtype=self.config.dtype,
+            use_safetensors=True,
+        )
+        self.applied_quantization_mode = quant_mode
+        return pipeline_cls.from_pretrained(
+            str(model_dir),
+            transformer=transformer,
+            torch_dtype=self.config.dtype,
+            use_safetensors=True,
+        )
+
+    def _pipeline_call_kwargs(
+        self,
+        prompt: str,
+        seed: int,
+        width: int,
+        height: int,
+        steps: int,
+        guidance: float,
+        negative_prompt: str,
+    ) -> Dict[str, Any]:
+        kwargs = super()._pipeline_call_kwargs(prompt, seed, width, height, steps, guidance, negative_prompt)
+        kwargs.pop("negative_prompt", None)
+        family = str(getattr(self.config, "model_family", "") or "").lower()
+        if family == "flux_schnell":
+            kwargs["guidance_scale"] = 0.0
+            kwargs["num_inference_steps"] = min(max(int(steps), 1), 4)
+            kwargs["max_sequence_length"] = 256
+        else:
+            kwargs["guidance_scale"] = max(3.5, float(kwargs.get("guidance_scale", guidance)))
+            kwargs["num_inference_steps"] = max(int(kwargs.get("num_inference_steps", steps)), 28)
+            kwargs["max_sequence_length"] = 512
+        return kwargs
+
+
+class DiffusersSD3Backend(_SingleStageDiffusersBackend):
+    pipeline_cls_name = "StableDiffusion3Pipeline"
+    max_sequence_length = 256
+
+    def _pipeline_call_kwargs(
+        self,
+        prompt: str,
+        seed: int,
+        width: int,
+        height: int,
+        steps: int,
+        guidance: float,
+        negative_prompt: str,
+    ) -> Dict[str, Any]:
+        kwargs = super()._pipeline_call_kwargs(prompt, seed, width, height, steps, guidance, negative_prompt)
+        family = str(getattr(self.config, "model_family", "") or "").lower()
+        if family == "sd3_turbo":
+            kwargs["guidance_scale"] = min(max(float(guidance), 0.0), 2.0)
+            kwargs["num_inference_steps"] = min(max(int(steps), 4), 10)
+            kwargs["max_sequence_length"] = 256
+        else:
+            kwargs["guidance_scale"] = max(3.0, float(kwargs.get("guidance_scale", guidance)))
+            kwargs["num_inference_steps"] = max(int(kwargs.get("num_inference_steps", steps)), 20)
+        return kwargs
+
+
+class DiffusersPixArtBackend(_SingleStageDiffusersBackend):
+    pipeline_cls_name = "PixArtSigmaPipeline"
+    max_sequence_length = 300
+
+    def _load_pipeline_class(self):
+        from diffusers import PixArtSigmaPipeline
+
+        return PixArtSigmaPipeline
+
+    def _pipeline_call_kwargs(
+        self,
+        prompt: str,
+        seed: int,
+        width: int,
+        height: int,
+        steps: int,
+        guidance: float,
+        negative_prompt: str,
+    ) -> Dict[str, Any]:
+        kwargs = super()._pipeline_call_kwargs(prompt, seed, width, height, steps, guidance, negative_prompt)
+        kwargs["guidance_scale"] = max(3.0, float(kwargs.get("guidance_scale", guidance)))
+        kwargs["num_inference_steps"] = max(int(kwargs.get("num_inference_steps", steps)), 14)
+        kwargs["use_resolution_binning"] = True
+        kwargs["clean_caption"] = True
+        return kwargs
+
+
+class DiffusersSanaBackend(_SingleStageDiffusersBackend):
+    pipeline_cls_name = "SanaPipeline"
+    max_sequence_length = 300
+
+    def _load_pipeline_class(self):
+        from diffusers import SanaPipeline
+
+        return SanaPipeline
+
+    def _pipeline_call_kwargs(
+        self,
+        prompt: str,
+        seed: int,
+        width: int,
+        height: int,
+        steps: int,
+        guidance: float,
+        negative_prompt: str,
+    ) -> Dict[str, Any]:
+        kwargs = super()._pipeline_call_kwargs(prompt, seed, width, height, steps, guidance, negative_prompt)
+        family = str(getattr(self.config, "model_family", "") or "").lower()
+        kwargs["guidance_scale"] = max(4.0, float(kwargs.get("guidance_scale", guidance)))
+        kwargs["num_inference_steps"] = max(int(kwargs.get("num_inference_steps", steps)), 16 if family == "sana_600m" else 18)
+        kwargs["use_resolution_binning"] = True
+        kwargs["clean_caption"] = False
+        return kwargs
+
+
 ImageBackendBuilder = Callable[[Any], BaseImageBackend]
 
 _IMAGE_BACKEND_BUILDERS: Dict[str, ImageBackendBuilder] = {}
@@ -429,6 +773,30 @@ register_image_provider(
     "diffusers_sdxl",
     DiffusersSDXLBackend,
     aliases=("sdxl", "diffusers"),
+)
+
+register_image_provider(
+    "diffusers_flux",
+    DiffusersFluxBackend,
+    aliases=("flux",),
+)
+
+register_image_provider(
+    "diffusers_sd3",
+    DiffusersSD3Backend,
+    aliases=("sd3", "stable-diffusion-3"),
+)
+
+register_image_provider(
+    "diffusers_pixart",
+    DiffusersPixArtBackend,
+    aliases=("pixart", "pixart_sigma"),
+)
+
+register_image_provider(
+    "diffusers_sana",
+    DiffusersSanaBackend,
+    aliases=("sana",),
 )
 
 

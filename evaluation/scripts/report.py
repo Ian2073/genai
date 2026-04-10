@@ -249,7 +249,8 @@ def print_terminal_analysis(reports):
         'completeness': ('Compl', 'Completeness'),
         'entity_consistency': ('Entity', 'Entity Consistency'),
         'factuality': ('Fact', 'Factuality'),
-        'emotional_impact': ('Emot', 'Emotional Impact')
+        'emotional_impact': ('Emot', 'Emotional Impact'),
+        'multimodal_alignment': ('MM', 'Multimodal Alignment'),
     }
 
     logger.info('=== All Story Assessment Results (with User Rating Comparison) ===')
@@ -407,7 +408,8 @@ def create_excel_report(reports, report_dir="reports"):
         ('completeness', 'Completeness'),
         ('entity_consistency', 'Entity Consistency'),
         ('factuality', 'Factuality'),
-        ('emotional_impact', 'Emotional Impact')
+        ('emotional_impact', 'Emotional Impact'),
+        ('multimodal_alignment', 'Multimodal Alignment'),
     ]
 
     def format_score(value):

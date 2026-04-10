@@ -27,6 +27,7 @@ EXPECTED_DIMENSIONS = (
     "entity_consistency",
     "completeness",
     "factuality",
+    "multimodal_alignment",
 )
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -171,6 +172,7 @@ def build_score_governance(
     completeness = _safe_float(dimension_scores.get("completeness"), -1.0)
     entity_consistency = _safe_float(dimension_scores.get("entity_consistency"), -1.0)
     emotional = _safe_float(dimension_scores.get("emotional_impact"), -1.0)
+    multimodal = _safe_float(dimension_scores.get("multimodal_alignment"), -1.0)
 
     if (
         coherence >= 0
@@ -191,6 +193,8 @@ def build_score_governance(
         and coherence < _safe_float(thresholds.get("emotional_gap_coherence_min"), 60.0)
     ):
         flags.append(_flag("medium", "emotion_structure_gap", "情感分過高但結構分偏低，可能存在偏置"))
+    if multimodal >= 0 and multimodal < 58.0:
+        flags.append(_flag("medium", "multimodal_alignment_low", "圖片品質或圖文對位偏弱，建議人工覆核圖片輸出"))
 
     # 退化報告
     if degradation_report:

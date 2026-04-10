@@ -11,6 +11,7 @@ DIMENSION_FALLBACK_SCORES = {
     "entity_consistency": 50.0,
     "completeness": 55.0,
     "factuality": 60.0,
+    "multimodal_alignment": 58.0,
 }
 
 

@@ -25,6 +25,14 @@ def _safe_load_json(file_path: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _read_text(file_path: Union[str, Path]) -> str:
+    path = Path(file_path)
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").strip()
+    except Exception:
+        return ""
+
+
 def load_json_dict(file_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
     """公開版 JSON 讀取：接受字串或 Path，失敗回傳 None。"""
     return _safe_load_json(Path(file_path))
@@ -407,3 +415,137 @@ def load_story_records(
         )
 
     return records
+
+
+def _dedupe_paths(paths: Sequence[Path]) -> List[Path]:
+    deduped: List[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = os.fspath(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(path)
+    return deduped
+
+
+def _extract_visual_page_number(path: Path) -> int:
+    match = re.search(r"page_(\d+)", path.stem)
+    return int(match.group(1)) if match else 0
+
+
+def collect_story_visual_assets(
+    story_dir: Union[str, Path],
+    *,
+    branch_id: str = "canonical",
+    source_document: Optional[Union[str, Path]] = None,
+) -> Dict[str, Any]:
+    """Collect story-level image assets, paired prompts, and lightweight generation traces."""
+    root = Path(story_dir)
+    branch_token = str(branch_id or "canonical").strip()
+
+    candidate_dirs: List[Path] = []
+    if source_document:
+        source_dir = Path(source_document).parent
+        candidate_dirs.append(source_dir)
+        if source_dir.name.lower() == "en":
+            candidate_dirs.append(source_dir / "branches" / "option_1")
+    if branch_token and branch_token.lower() not in {"canonical", "auto"}:
+        candidate_dirs.extend(sorted(root.glob(f"**/branches/{branch_token}")))
+    else:
+        candidate_dirs.extend(sorted(root.glob("**/branches/option_1")))
+        candidate_dirs.extend([root / "en", root])
+    candidate_dirs = _dedupe_paths([directory for directory in candidate_dirs if directory and directory.exists()])
+
+    selected_dir: Optional[Path] = None
+    resource_dir: Optional[Path] = None
+    image_dir: Optional[Path] = None
+
+    for directory in candidate_dirs:
+        local_resource = directory / "resource"
+        local_image = directory / "image" / "main"
+        if local_resource.exists() or local_image.exists():
+            selected_dir = directory
+            resource_dir = local_resource if local_resource.exists() else None
+            image_dir = local_image if local_image.exists() else None
+            if local_image.exists():
+                break
+
+    image_paths: List[Path] = []
+    pairs: List[Dict[str, Any]] = []
+    photo_log_text = ""
+    story_meta: Dict[str, Any] = {}
+
+    if image_dir and image_dir.exists():
+        cover_path = image_dir / "book_cover.png"
+        if cover_path.exists():
+            image_paths.append(cover_path)
+        image_paths.extend(sorted(image_dir.glob("page_*_scene.png"), key=_extract_visual_page_number))
+
+    if resource_dir and resource_dir.exists():
+        if not story_meta:
+            story_meta = _safe_load_json(resource_dir / "story_meta.json") or {}
+
+        prompt_map: Dict[str, Path] = {}
+        for prompt_path in sorted(resource_dir.glob("*_prompt.txt")):
+            prompt_map[prompt_path.stem.lower()] = prompt_path
+
+        page_text_map: Dict[int, Path] = {}
+        if selected_dir and selected_dir.exists():
+            for page_path in sorted(selected_dir.glob("page_*.txt"), key=_extract_page_number):
+                name = page_path.name.lower()
+                if "_dialogue" in name or "_narration" in name or "_plan" in name or "_state" in name:
+                    continue
+                page_text_map[_extract_page_number(page_path)] = page_path
+
+        if image_paths:
+            for image_path in image_paths:
+                stem = image_path.stem.lower()
+                kind = "cover" if stem == "book_cover" else "page"
+                page_number = _extract_visual_page_number(image_path) if kind == "page" else None
+                prompt_path = prompt_map.get(f"page_{page_number}_prompt") if kind == "page" else prompt_map.get("book_cover_prompt")
+                page_text_path = page_text_map.get(page_number) if kind == "page" else None
+                pairs.append(
+                    {
+                        "kind": kind,
+                        "page": page_number,
+                        "image_path": os.fspath(image_path),
+                        "prompt_path": os.fspath(prompt_path) if prompt_path else None,
+                        "prompt_text": _read_text(os.fspath(prompt_path)) if prompt_path else "",
+                        "page_text_path": os.fspath(page_text_path) if page_text_path else None,
+                        "page_text": _read_text(os.fspath(page_text_path)) if page_text_path else "",
+                    }
+                )
+
+    log_candidates = [
+        root / "logs" / "photo.log",
+    ]
+    if selected_dir:
+        log_candidates.append(selected_dir / "logs" / "generation.log")
+    for candidate in _dedupe_paths(log_candidates):
+        if not candidate.exists():
+            continue
+        try:
+            text = candidate.read_text(encoding="utf-8", errors="replace").strip()
+        except Exception:
+            continue
+        if text:
+            photo_log_text = text
+            break
+
+    if not story_meta:
+        story_meta = find_metadata_for_story(
+            {"full_story.txt": os.fspath(source_document)} if source_document else {},
+            root.name,
+            fallback_roots=(os.fspath(root.parent), "output", "evaluated", "pending"),
+        )
+
+    return {
+        "selected_dir": os.fspath(selected_dir) if selected_dir else None,
+        "resource_dir": os.fspath(resource_dir) if resource_dir else None,
+        "image_dir": os.fspath(image_dir) if image_dir else None,
+        "image_paths": [os.fspath(path) for path in image_paths],
+        "pairs": pairs,
+        "photo_log": photo_log_text,
+        "story_meta": story_meta,
+    }

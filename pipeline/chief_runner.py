@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import gc
+import importlib
 import json
 import shutil
 import multiprocessing as mp
 import os
+import queue as queue_module
 import random
 import re
 import time
@@ -20,7 +22,13 @@ import torch
 
 from observability import Session as ObsSession
 from image import Config as ImageConfig, generate_photos_for_story
-from evaluation.main import evaluate_story_directory, _create_evaluator, EvaluatorConfig
+from evaluation.main import (
+	build_pre_evaluation_plan,
+	evaluate_story_directory,
+	_create_evaluator,
+	EvaluatorConfig,
+	normalize_pre_eval_profile,
+)
 from story import (
 	GenerationParams,
 	PipelineOptions,
@@ -69,10 +77,58 @@ from .chief_runtime import (
 	summarize_batch_results,
 	update_workload_summary,
 )
-from .options import PUNCTUATION_PATTERN, STYLE_KEYWORDS, CATEGORY_CHOICES, AGE_CHOICES, ChiefOptions, parse_dtype
+from .model_plan import apply_model_plan, classify_image_model, classify_image_provider
+from .options import (
+	AGE_CHOICES,
+	CATEGORY_CHOICES,
+	DEFAULT_CHIEF_OPTIONS,
+	PUNCTUATION_PATTERN,
+	STYLE_KEYWORDS,
+	ChiefOptions,
+	parse_dtype,
+)
 
 class _PipelineEarlyExit(Exception):
 	"""用於提前結束單本書流程的內部例外狀況 (例如發生不可挽回的錯誤)。"""
+
+def _await_process_queue_result(
+	process: mp.Process,
+	result_queue: mp.Queue,
+	*,
+	poll_interval_sec: float = 0.2,
+	join_grace_sec: float = 5.0,
+) -> tuple[Any, Optional[int]]:
+	"""Read worker payload before join() to avoid Queue flush deadlocks on Windows spawn."""
+	item: Any = None
+	while True:
+		try:
+			item = result_queue.get(timeout=poll_interval_sec)
+			break
+		except queue_module.Empty:
+			if not process.is_alive():
+				break
+		except (EOFError, OSError):
+			if not process.is_alive():
+				break
+	process.join(timeout=join_grace_sec)
+	exit_code = process.exitcode
+	if process.is_alive():
+		try:
+			process.terminate()
+		except Exception:
+			pass
+		process.join(timeout=2.0)
+		exit_code = process.exitcode
+	try:
+		result_queue.close()
+	except Exception:
+		pass
+	try:
+		result_queue.join_thread()
+	except Exception:
+		pass
+	return item, exit_code
+
 
 def _story_worker_process(
 	profile: StoryProfile,
@@ -146,6 +202,9 @@ def _story_worker_process(
 			kg_enabled=True,
 			kg_version=profile.kg_version,
 			step_generations=step_generations,
+			outline_candidates=max(1, int(getattr(options, "story_outline_candidates", 1) or 1)),
+			title_candidates=max(1, int(getattr(options, "story_title_candidates", 1) or 1)),
+			key_page_candidates=max(1, int(getattr(options, "story_key_page_candidates", 1) or 1)),
 			aggressive_memory_cleanup=options.low_vram,
 		)
 		llm = build_llm(
@@ -201,16 +260,18 @@ class ChiefRunner:
 		self.run_dir = self.paths.runs_dir
 		self.logger = setup_logging("chief", self.paths.logs_dir / "chief.log", console=True)
 		self.options = self._normalize_language_options(self.options)
+		self.options, self.model_plan = apply_model_plan(self.options, self.paths, logger=self.logger)
 		self.voice_languages = self._planned_voice_languages()
 		self._voice_languages_used: List[str] = []
+		self._image_progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
 		self.total_books = max(1, self.options.count)
 		self._active_requests = 0
-		seed = options.seed or int(time.time())
+		seed = self.options.seed or int(time.time())
 		self.seed = seed
 		self.random = random.Random(seed)
 		self.logger.info("Chief initialized with seed %s", seed)
 		self.observability: Optional[ObsSession] = None
-		self.status_json_path: Optional[Path] = options.status_json_path
+		self.status_json_path: Optional[Path] = self.options.status_json_path
 		self._status_state: Dict[str, Any] = {
 			"state": "idle",
 			"total_books": self.total_books,
@@ -223,6 +284,9 @@ class ChiefRunner:
 			"last_story_root": None,
 			"last_error": None,
 			"pre_evaluation": None,
+			"stage_progress": None,
+			"stage_detail": None,
+			"model_plan": self.model_plan.selected_plan if self.model_plan else getattr(self.options, "model_plan", "off"),
 			"updated_at": datetime.now(timezone.utc).isoformat(),
 		}
 		if self.status_json_path:
@@ -231,47 +295,54 @@ class ChiefRunner:
 			except Exception:
 				self.status_json_path = None
 		self.photo_config = ImageConfig(
-			base_model_dir=options.sdxl_base,
-			refiner_model_dir=options.sdxl_refiner,
-			device=options.photo_device,
-			dtype=parse_dtype(options.photo_dtype),
-			width=options.photo_width,
-			height=options.photo_height,
-			steps=options.photo_steps,
-			guidance=options.photo_guidance,
-			refiner_steps=options.photo_refiner_steps,
-			skip_refiner=options.photo_skip_refiner,
-			negative_prompt=options.photo_negative_prompt,
-			cover_prompt_suffix=options.photo_cover_suffix,
-			character_prompt_suffix=options.photo_character_suffix,
-			scene_prompt_suffix=options.photo_scene_suffix,
-			seed=options.photo_seed,
-			remove_bg=not options.photo_no_remove_bg,
-			low_vram=options.low_vram,
+			provider=classify_image_provider(self.options.sdxl_base),
+			model_family=classify_image_model(self.options.sdxl_base),
+			base_model_dir=self.options.sdxl_base,
+			refiner_model_dir=self.options.sdxl_refiner,
+			device=self.options.photo_device,
+			dtype=parse_dtype(self.options.photo_dtype),
+			quantization_mode=getattr(self.options, "photo_quantization", "fp8"),
+			output_mode=getattr(self.options, "photo_output_mode", "dual"),
+			asset_granularity=getattr(self.options, "photo_asset_granularity", "page_bundle"),
+			bg_removal_policy=getattr(self.options, "photo_bg_removal_policy", "characters_props"),
+			reuse_strategy=getattr(self.options, "photo_reuse_strategy", "page_bundle_first"),
+			width=self.options.photo_width,
+			height=self.options.photo_height,
+			steps=self.options.photo_steps,
+			guidance=self.options.photo_guidance,
+			refiner_steps=self.options.photo_refiner_steps,
+			skip_refiner=self.options.photo_skip_refiner,
+			negative_prompt=self.options.photo_negative_prompt,
+			cover_prompt_suffix=self.options.photo_cover_suffix,
+			character_prompt_suffix=self.options.photo_character_suffix,
+			scene_prompt_suffix=self.options.photo_scene_suffix,
+			seed=self.options.photo_seed,
+			remove_bg=not self.options.photo_no_remove_bg,
+			low_vram=self.options.low_vram,
 		)
 		self.voice_config = VoiceConfig(
 			model_dir=self.paths.models_dir / "XTTS-v2",
-			device=options.voice_device,
+			device=self.options.voice_device,
 			language=self.options.voice_language,
-			speaker_wav=options.speaker_wav,
-			speaker_dir=options.speaker_dir,
-			page_start=options.voice_page_start,
-			page_end=options.voice_page_end,
-			gain=options.voice_volume_gain,
-			concat=not options.voice_no_concat,
-			keep_raw=not options.voice_drop_raw,
+			speaker_wav=self.options.speaker_wav,
+			speaker_dir=self.options.speaker_dir,
+			page_start=self.options.voice_page_start,
+			page_end=self.options.voice_page_end,
+			gain=self.options.voice_volume_gain,
+			concat=not self.options.voice_no_concat,
+			keep_raw=not self.options.voice_drop_raw,
 		)
 		self.translation_base = TransConfig(
-			model_dir=options.translation_model,
-			device=options.translation_device,
-			dtype=parse_dtype(options.translation_dtype),
-			source_lang=options.translation_source_lang,
-			source_folder=options.story_language,
+			model_dir=self.options.translation_model,
+			device=self.options.translation_device,
+			dtype=parse_dtype(self.options.translation_dtype),
+			source_lang=self.options.translation_source_lang,
+			source_folder=self.options.story_language,
 			target_langs=self.options.languages,
 			sample_dir=self.paths.models_dir / "XTTS-v2" / "samples",
 			output_dir_name="",
-			beam_size=options.translation_beam_size,
-			length_penalty=options.translation_length_penalty,
+			beam_size=self.options.translation_beam_size,
+			length_penalty=self.options.translation_length_penalty,
 		)
 		self._write_status_snapshot(state="idle")
 
@@ -603,7 +674,11 @@ class ChiefRunner:
 				capture_gpu=True,
 				trace_id=trace_id,
 			):
-				photo_ok = self._run_photo(story_root)
+				self._image_progress_callback = lambda payload: self._handle_image_progress(index, profile, payload)
+				try:
+					photo_ok = self._run_photo(story_root)
+				finally:
+					self._image_progress_callback = None
 			
 			if not photo_ok:
 				result["errors"].append("photo")
@@ -878,7 +953,14 @@ class ChiefRunner:
 		self._log_stage(index, profile, "EVAL", "start")
 		stage_start = time.perf_counter()
 
-		threshold_default = float(getattr(self.options, "pre_eval_threshold", 50.0) or 50.0)
+		threshold_default = float(
+			getattr(
+				self.options,
+				"pre_eval_threshold",
+				float(getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_threshold", 65.0) or 65.0),
+			)
+			or float(getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_threshold", 65.0) or 65.0)
+		)
 		try:
 			final_eval_threshold = float(getattr(self.options, "final_eval_threshold", threshold_default))
 		except (TypeError, ValueError):
@@ -905,10 +987,12 @@ class ChiefRunner:
 					args=(str(story_root), None, final_eval_branch, True, eval_q)
 				)
 				eval_p.start()
-				eval_p.join()
-				if eval_p.exitcode != 0:
+				evaluation_payload, eval_exit_code = _await_process_queue_result(eval_p, eval_q)
+				if eval_exit_code != 0:
 					raise RuntimeError("Final eval subprocess crashed.")
-				evaluation_result, err_trace = eval_q.get()
+				if not isinstance(evaluation_payload, tuple) or len(evaluation_payload) != 2:
+					raise RuntimeError("Final evaluation subprocess returned malformed payload")
+				evaluation_result, err_trace = evaluation_payload
 				if err_trace is not None:
 					raise RuntimeError(err_trace)
 				if not isinstance(evaluation_result, dict):
@@ -1082,67 +1166,190 @@ class ChiefRunner:
 		# Stage 1.5: Pre-eval (Lightweight check for Coherence and Consistency)
 		self.logger.info("Running stage 1.5: Pre-evaluation (Lightweight)")
 		pre_eval_stage_start = time.perf_counter()
-		pre_eval_policy = str(getattr(self.options, "pre_eval_policy", "warn") or "warn").strip().lower()
+		pre_eval_policy = str(
+			getattr(self.options, "pre_eval_policy", getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_policy", "stop"))
+			or getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_policy", "stop")
+		).strip().lower()
 		if pre_eval_policy not in {"warn", "stop"}:
-			pre_eval_policy = "warn"
+			pre_eval_policy = str(getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_policy", "stop") or "stop").strip().lower()
 		try:
-			pre_eval_threshold = float(getattr(self.options, "pre_eval_threshold", 50.0))
+			pre_eval_threshold = float(
+				getattr(
+					self.options,
+					"pre_eval_threshold",
+					float(getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_threshold", 65.0) or 65.0),
+				)
+			)
 		except (TypeError, ValueError):
-			pre_eval_threshold = 50.0
+			pre_eval_threshold = float(getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_threshold", 65.0) or 65.0)
 		if pre_eval_threshold < 0:
 			pre_eval_threshold = 0.0
 		elif pre_eval_threshold > 100:
 			pre_eval_threshold = 100.0
-		pre_eval_evaluator = None
+		pre_eval_profile = normalize_pre_eval_profile(
+			getattr(self.options, "pre_eval_profile", getattr(DEFAULT_CHIEF_OPTIONS, "pre_eval_profile", "balanced"))
+		)
 		try:
-			pre_eval_aspects = ["coherence", "entity_consistency"]
 			pre_eval_branch = "canonical"
+			pre_eval_plan = build_pre_evaluation_plan(
+				str(story_root),
+				threshold=pre_eval_threshold,
+				profile=pre_eval_profile,
+				branch=pre_eval_branch,
+			)
+			pre_eval_aspects = list(pre_eval_plan.get("aspects") or ["coherence", "entity_consistency"])
+			heuristic_summary = dict(pre_eval_plan.get("heuristics") or {})
+			heuristic_metrics = dict(heuristic_summary.get("metrics") or {})
+			heuristic_score = float(heuristic_summary.get("overall_score") or 0.0)
+			pre_eval_action = str(pre_eval_plan.get("action") or "model_eval")
 			self._write_status_snapshot(
 				current_stage="PRE_EVAL:start",
 				pre_evaluation={
 					"state": "running",
 					"policy": pre_eval_policy,
 					"threshold": pre_eval_threshold,
+					"profile": pre_eval_profile,
 					"branch": pre_eval_branch,
 					"aspects": pre_eval_aspects,
+					"heuristic_score": heuristic_score,
+					"action": pre_eval_action,
 				},
 			)
-			import multiprocessing as mp
-			ctx = mp.get_context("spawn")
-			eval_q = ctx.Queue()
-			from pipeline._eval_worker import _eval_worker_process
-			eval_p = ctx.Process(
-				target=_eval_worker_process,
-				args=(str(story_root), pre_eval_aspects, pre_eval_branch, False, eval_q)
-			)
-			eval_p.start()
-			eval_p.join()
-			if eval_p.exitcode != 0:
-				raise RuntimeError("Pre-eval subprocess crashed.")
-			pre_eval_result, err_trace = eval_q.get()
-			if err_trace is not None:
-				raise RuntimeError(err_trace)
-			if pre_eval_result.get("error"):
-				raise RuntimeError(str(pre_eval_result.get("error")))
-			overall_score = float(pre_eval_result.get("overall_score") or 0.0)
-			fail_fast_triggered = overall_score < pre_eval_threshold
+			model_eval_summary: Optional[Dict[str, Any]] = None
+			if pre_eval_action == "heuristic_block":
+				overall_score = heuristic_score
+				fail_fast_triggered = True
+				pre_eval_summary = {
+					"state": "completed",
+					"overall_score": overall_score,
+					"metrics": {
+						**heuristic_metrics,
+						"heuristic_overall": heuristic_score,
+					},
+					"fail_fast_triggered": True,
+					"policy": pre_eval_policy,
+					"profile": pre_eval_profile,
+					"threshold": pre_eval_threshold,
+					"blocked": False,
+					"branch": str(pre_eval_plan.get("branch") or pre_eval_branch),
+					"action": pre_eval_action,
+					"selected_aspects": pre_eval_aspects,
+					"heuristics": heuristic_summary,
+					"evaluation_skipped": True,
+					"model_eval": None,
+					"source_document": pre_eval_plan.get("source_document"),
+				}
+			elif pre_eval_action == "skip_model_eval":
+				overall_score = heuristic_score
+				fail_fast_triggered = overall_score < pre_eval_threshold
+				pre_eval_summary = {
+					"state": "completed",
+					"overall_score": overall_score,
+					"metrics": {
+						**heuristic_metrics,
+						"heuristic_overall": heuristic_score,
+					},
+					"fail_fast_triggered": fail_fast_triggered,
+					"policy": pre_eval_policy,
+					"profile": pre_eval_profile,
+					"threshold": pre_eval_threshold,
+					"blocked": False,
+					"branch": str(pre_eval_plan.get("branch") or pre_eval_branch),
+					"action": pre_eval_action,
+					"selected_aspects": pre_eval_aspects,
+					"heuristics": heuristic_summary,
+					"evaluation_skipped": True,
+					"model_eval": None,
+					"source_document": pre_eval_plan.get("source_document"),
+				}
+			else:
+				import multiprocessing as mp
+				ctx = mp.get_context("spawn")
+				eval_q = ctx.Queue()
+				from pipeline._eval_worker import _eval_worker_process
+				eval_p = ctx.Process(
+					target=_eval_worker_process,
+					args=(str(story_root), pre_eval_aspects, pre_eval_branch, False, eval_q)
+				)
+				eval_p.start()
+				pre_eval_payload, eval_exit_code = _await_process_queue_result(eval_p, eval_q)
+				if eval_exit_code != 0:
+					raise RuntimeError("Pre-eval subprocess crashed.")
+				if not isinstance(pre_eval_payload, tuple) or len(pre_eval_payload) != 2:
+					raise RuntimeError("Pre-eval subprocess returned malformed payload")
+				pre_eval_result, err_trace = pre_eval_payload
+				if err_trace is not None:
+					raise RuntimeError(err_trace)
+				if pre_eval_result.get("error"):
+					raise RuntimeError(str(pre_eval_result.get("error")))
+				model_score = float(pre_eval_result.get("overall_score") or 0.0)
+				blend_weights = dict(pre_eval_plan.get("blend_weights") or {"heuristic": 0.35, "model": 0.65})
+				heuristic_weight = float(blend_weights.get("heuristic", 0.35) or 0.35)
+				model_weight = float(blend_weights.get("model", 0.65) or 0.65)
+				total_weight = heuristic_weight + model_weight
+				if total_weight <= 0:
+					heuristic_weight, model_weight, total_weight = 0.35, 0.65, 1.0
+				heuristic_weight /= total_weight
+				model_weight /= total_weight
+				overall_score = round((heuristic_score * heuristic_weight) + (model_score * model_weight), 2)
+				weakest_guard = min(heuristic_metrics.values()) if heuristic_metrics else 100.0
+				if weakest_guard < 50.0:
+					overall_score = min(overall_score, 72.0)
+				elif weakest_guard < 58.0:
+					overall_score = min(overall_score, 78.0)
+				fail_fast_triggered = overall_score < pre_eval_threshold
+				model_eval_summary = {
+					"overall_score": model_score,
+					"dimension_scores": pre_eval_result.get("dimension_scores", {}),
+					"dimension_summaries": pre_eval_result.get("dimension_summaries", {}),
+					"recommendations": pre_eval_result.get("recommendations", []),
+					"processing_time": pre_eval_result.get("processing_time"),
+				}
+				merged_metrics = dict(pre_eval_result.get("dimension_scores", {}))
+				merged_metrics.update({f"heuristic_{key}": value for key, value in heuristic_metrics.items()})
+				merged_metrics["heuristic_overall"] = heuristic_score
+				merged_metrics["model_overall"] = model_score
+				self.logger.info(
+					"Pre-evaluation blended score %.2f (heuristic %.2f, model %.2f, profile=%s)",
+					overall_score,
+					heuristic_score,
+					model_score,
+					pre_eval_profile,
+				)
+				pre_eval_summary = {
+					"state": "completed",
+					"overall_score": overall_score,
+					"metrics": merged_metrics,
+					"fail_fast_triggered": fail_fast_triggered,
+					"policy": pre_eval_policy,
+					"profile": pre_eval_profile,
+					"threshold": pre_eval_threshold,
+					"blocked": False,
+					"branch": str(pre_eval_plan.get("branch") or pre_eval_branch),
+					"action": pre_eval_action,
+					"selected_aspects": pre_eval_aspects,
+					"blend_weights": {
+						"heuristic": round(heuristic_weight, 3),
+						"model": round(model_weight, 3),
+					},
+					"heuristics": heuristic_summary,
+					"evaluation_skipped": False,
+					"model_eval": model_eval_summary,
+					"source_document": pre_eval_plan.get("source_document"),
+				}
 			self.logger.info(f"Pre-evaluation completed with overall partial score: {overall_score}")
-			pre_eval_summary = {
-				"state": "completed",
-				"overall_score": overall_score,
-				"metrics": pre_eval_result.get("dimension_scores", {}),
-				"fail_fast_triggered": fail_fast_triggered,
-				"policy": pre_eval_policy,
-				"threshold": pre_eval_threshold,
-				"blocked": False,
-				"branch": pre_eval_branch,
-			}
 			result["pre_evaluation"] = dict(pre_eval_summary)
 			if fail_fast_triggered:
-				gate_msg = (
-					f"Pre-evaluation score {overall_score} below threshold "
-					f"{pre_eval_threshold}."
-				)
+				if str(pre_eval_summary.get("action") or "") == "heuristic_block" and overall_score >= pre_eval_threshold:
+					gate_msg = (
+						f"Pre-evaluation flagged high-risk heuristic issues "
+						f"at score {overall_score:.2f}."
+					)
+				else:
+					gate_msg = (
+						f"Pre-evaluation score {overall_score} below threshold "
+						f"{pre_eval_threshold}."
+					)
 				if pre_eval_policy == "stop":
 					stop_msg = f"{gate_msg} Hard-stop policy enabled, aborting remaining stages."
 					self.logger.error(stop_msg)
@@ -1208,6 +1415,7 @@ class ChiefRunner:
 				"state": "error",
 				"error": str(exc),
 				"policy": pre_eval_policy,
+				"profile": pre_eval_profile,
 				"threshold": pre_eval_threshold,
 			}
 			self._write_status_snapshot(
@@ -1232,8 +1440,15 @@ class ChiefRunner:
 			# 確保 VRAM 在 SDXL 階段前完全釋放
 
 			try:
-				from evaluation.main import cleanup_evaluation_models
-				cleanup_evaluation_models()
+				evaluation_module = importlib.import_module(evaluate_story_directory.__module__)
+				cleanup_fn = getattr(evaluation_module, "cleanup_evaluation_models", None)
+				if callable(cleanup_fn):
+					cleanup_fn()
+				else:
+					self.logger.debug(
+						"cleanup_evaluation_models not exposed by %s; skipping eval model cleanup.",
+						evaluation_module.__name__,
+					)
 			except Exception as cleanup_exc:
 				self.logger.warning('Failed to cleanup eval models: %s', cleanup_exc)
 			force_cleanup_models()
@@ -1327,6 +1542,8 @@ class ChiefRunner:
 			last_story_root=None,
 			last_error=None,
 			pre_evaluation=None,
+			stage_progress=None,
+			stage_detail=None,
 		)
 		if self.total_books == 1:
 			result = self._run_single_with_retries(1)
@@ -1338,12 +1555,16 @@ class ChiefRunner:
 				failed_books=0 if result.get("success") else 1,
 				current_stage="done",
 				last_error=self._extract_error_summary(result),
+				stage_progress=None,
+				stage_detail=None,
 			)
 			return summary
 		summary = self._run_batch()
 		self._write_status_snapshot(
 			state="completed" if summary.get("total", 0) == summary.get("success", 0) else "failed",
 			current_stage="done",
+			stage_progress=None,
+			stage_detail=None,
 		)
 		return summary
 
@@ -1364,6 +1585,8 @@ class ChiefRunner:
 				current_attempt=attempt,
 				current_stage="book_start",
 				pre_evaluation=None,
+				stage_progress=None,
+				stage_detail=None,
 			)
 			result = self._run_single_isolated(index, attempt=attempt)
 			result["attempt"] = attempt
@@ -1382,6 +1605,8 @@ class ChiefRunner:
 				self._write_status_snapshot(
 					last_error=self._extract_error_summary(result),
 					current_stage="retrying",
+					stage_progress=None,
+					stage_detail=None,
 				)
 				cleanup_torch()
 				gc.collect()
@@ -1441,6 +1666,8 @@ class ChiefRunner:
 			current_stage="init",
 			last_story_root=None,
 			pre_evaluation=None,
+			stage_progress=None,
+			stage_detail=None,
 		)
 
 		# 3. 初始化 Observability
@@ -1452,6 +1679,12 @@ class ChiefRunner:
 		try:
 			return self._run_single(index)
 		finally:
+			observability = self.observability
+			try:
+				if observability:
+					observability.close()
+			except Exception as exc:
+				self.logger.warning("Failed to close observability session cleanly: %s", exc)
 
 				# 4. 生成該本書的專屬報表與進階分析
 				try:
@@ -1474,6 +1707,27 @@ class ChiefRunner:
 					self.logger.warning("Failed to generate observability reports or analysis: %s", exc)
 				finally:
 					self.observability = None # 保證清理參照
+					gc.collect()
+
+			if self.observability is observability:
+				try:
+					self._generate_observability_reports(report_source)
+					self.logger.info("Running automatic observability analysis...")
+					import sys
+
+					root_dir = Path(__file__).parent.parent
+					if str(root_dir) not in sys.path:
+						sys.path.insert(0, str(root_dir))
+
+					from scripts.analyze_observability import ObservabilityAnalyzer
+					if report_source and Path(report_source).exists():
+						analyzer = ObservabilityAnalyzer()
+						analyzer.analyze(Path(report_source), run_observability_dir)
+						self.logger.info("Observability analysis completed.")
+				except Exception as exc:
+					self.logger.warning("Failed to generate observability reports or analysis: %s", exc)
+				finally:
+					self.observability = None
 					gc.collect()
 
 	def _run_single(self, index: int) -> Dict[str, object]:
@@ -1522,6 +1776,16 @@ class ChiefRunner:
 		self.observability.memory.snapshot(label="book_start", metadata=book_context)
 		self._voice_languages_used = []
 		result = build_initial_result(index, profile, trace_id)
+		if self.model_plan is not None:
+			result["model_plan"] = {
+				"requested": self.model_plan.requested_plan,
+				"selected": self.model_plan.selected_plan,
+				"description": self.model_plan.description,
+				"hardware": self.model_plan.hardware.summary(),
+				"story_model": str(self.model_plan.story_model) if self.model_plan.story_model else "",
+				"story_quantization": self.model_plan.story_quantization,
+				"notes": list(self.model_plan.notes),
+			}
 		workload_summary: Dict[str, Any] = {"trace_id": trace_id, "request_index": index}
 		workload_complexity: Dict[str, Any] = {}
 		self._log_book_header(index, profile)
@@ -1704,15 +1968,14 @@ class ChiefRunner:
 			args=(profile, self.options, seed, queue)
 		)
 		p.start()
-		p.join()
+		q_item, exit_code = _await_process_queue_result(p, queue, join_grace_sec=10.0)
 		
-		if p.exitcode != 0:
-			self.logger.error("Story generation subprocess failed with exit code %s", p.exitcode)
+		if exit_code != 0:
+			self.logger.error("Story generation subprocess failed with exit code %s", exit_code)
 			return None, None, []
 			
-		if not queue.empty():
+		if q_item is not None:
                         try:
-                                q_item = queue.get()
                                 if not isinstance(q_item, tuple) or len(q_item) != 4:
                                         self.logger.error(f"Story generation subprocess returned malformed data: {q_item}")
                                         return None, None, []
@@ -1728,6 +1991,64 @@ class ChiefRunner:
                                 return None, None, []
 		self.logger.error("Story generation subprocess returned no result.")
 		return None, None, []
+
+	def _handle_image_progress(self, index: int, profile: StoryProfile, payload: Dict[str, Any]) -> None:
+		prefix = book_prefix(index, self.total_books, profile)
+		phase = str(payload.get("phase") or "").strip().lower() or "image"
+		event = str(payload.get("event") or "").strip().lower() or "update"
+		task_label = str(payload.get("task_label") or "").strip()
+		task_type = str(payload.get("task_type") or "").strip()
+		stage_progress = {
+			"stage": "IMAGE",
+			"phase": phase,
+			"event": event,
+			"completed": int(payload.get("completed_units") or 0),
+			"total": int(payload.get("total_units") or 0),
+			"task_index": int(payload.get("task_index") or 0),
+			"task_total": int(payload.get("task_total") or 0),
+			"task_id": str(payload.get("task_id") or "").strip() or None,
+			"task_type": task_type or None,
+			"task_label": task_label or None,
+			"page_number": payload.get("page_number"),
+			"updated_at": payload.get("updated_at"),
+		}
+		detail_parts: List[str] = []
+		if stage_progress["task_total"]:
+			detail_parts.append(f"{stage_progress['task_index']}/{stage_progress['task_total']}")
+		if task_label:
+			detail_parts.append(task_label)
+		detail_text = " | ".join(detail_parts) if detail_parts else None
+		self._write_status_snapshot(
+			current_book=index,
+			current_stage=f"IMAGE:{phase}",
+			stage_progress=stage_progress,
+			stage_detail=detail_text,
+		)
+		if event == "planned":
+			self.logger.info(
+				"%s | Stage IMAGE | QUEUED %d work units across %d tasks",
+				prefix,
+				stage_progress["total"],
+				stage_progress["task_total"],
+			)
+		elif event == "phase_start":
+			self.logger.info("%s | Stage IMAGE | %s -> START", prefix, phase.upper())
+		elif event == "task_start":
+			self.logger.info(
+				"%s | Stage IMAGE | %s %d/%d | %s",
+				prefix,
+				phase.upper(),
+				stage_progress["task_index"],
+				stage_progress["task_total"],
+				task_label or task_type or "task",
+			)
+		elif event == "complete":
+			self.logger.info(
+				"%s | Stage IMAGE | DONE | %d/%d work units",
+				prefix,
+				stage_progress["completed"],
+				stage_progress["total"],
+			)
 
 	def _run_photo(self, story_root: Path) -> bool:
 		"""觸發 Image 模組為指定故事產生插圖。
@@ -1747,6 +2068,7 @@ class ChiefRunner:
 				progress_label="圖像生成",
 				console=False,
 				kernel_recorder=self.observability.kernel,
+				progress_callback=getattr(self, "_image_progress_callback", None),
 			),
 		)
 
@@ -1859,6 +2181,8 @@ class ChiefRunner:
 		self._write_status_snapshot(
 			current_book=index,
 			current_stage=f"{stage}:{status.lower()}",
+			stage_progress=None,
+			stage_detail=None,
 		)
 
 	def _log_batch_progress(self, completed: int, results: List[Dict[str, object]]) -> None:

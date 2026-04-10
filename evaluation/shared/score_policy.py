@@ -40,12 +40,33 @@ DEFAULT_POLICY: Dict[str, Any] = {
                 "cap": 76.0,
             },
             {
+                "name": "low_readability_cap",
+                "if": {
+                    "readability_lt": 58.0,
+                },
+                "cap": 78.0,
+            },
+            {
+                "name": "low_completeness_cap",
+                "if": {
+                    "completeness_lt": 48.0,
+                },
+                "cap": 75.0,
+            },
+            {
                 "name": "emotion_dominance_cap",
                 "if": {
                     "emotional_impact_gt": 90.0,
                     "coherence_lt": 58.0,
                 },
                 "cap": 80.0,
+            },
+            {
+                "name": "low_multimodal_cap",
+                "if": {
+                    "multimodal_alignment_lt": 52.0,
+                },
+                "cap": 82.0,
             },
         ],
     },

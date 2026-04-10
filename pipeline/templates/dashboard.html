@@ -40,7 +40,7 @@
         <div>
           <label for="lang_select" style="color:#aaa;font-size:11px;margin-bottom:4px" id="label_language">Language</label>
           <select id="lang_select">
-            <option value="zh-TW">繁體中文</option>
+            <option value="zh-TW">Traditional Chinese</option>
             <option value="en">English</option>
           </select>
         </div>
@@ -60,22 +60,31 @@
     </aside>
 
     <main class="main-content">
+      <div class="main-shell">
       <header class="main-header">
-        <div>
-          <h2 style="margin:0;font-size:24px;font-weight:700">Dashboard</h2>
-          <p class="subtle" id="hero_sub" style="margin-top:4px">Operate runs, inspect alerts, manage queue priority, and audit production history from one dashboard.</p>
-        </div>
-        <div class="hero-kpis">
-          <div class="hero-kpi"><b id="kpi_label_system_state">System State</b><span id="kpi_system_state">idle</span></div>
-          <div class="hero-kpi"><b id="kpi_label_queue_depth">Queue Depth</b><span id="kpi_queue_depth">0</span></div>
-          <div class="hero-kpi"><b id="kpi_label_success_rate">Success Rate</b><span id="kpi_success_rate">0%</span></div>
-          <div class="hero-kpi"><b id="kpi_label_avg_duration">Avg Duration</b><span id="kpi_avg_duration">-</span></div>
-          <div class="hero-kpi"><b id="kpi_label_gpu_cost">Est. GPU Cost</b><span id="kpi_gpu_cost">.00</span></div>
+        <div class="main-header-copy">
+          <h2 id="page_title" style="margin:0;font-size:24px;font-weight:700">Generate</h2>
+          <p class="subtle" id="page_subtitle" style="margin-top:4px">Compose story runs, monitor execution health, and control the main pipeline from one screen.</p>
         </div>
       </header>
+      <section class="health-banner" aria-live="polite">
+        <div class="health-banner-main">
+          <span class="pill" id="global_health_level">stable</span>
+          <div class="health-banner-copy">
+            <strong id="global_health_summary">Waiting for system telemetry...</strong>
+            <span id="global_health_context">Dashboard is collecting system and run health signals.</span>
+          </div>
+        </div>
+        <div class="health-banner-meta">
+          <span id="global_health_plan">Plan: Auto</span>
+          <span id="global_health_run">Run: idle</span>
+          <span id="global_health_pressure">Pressure: -</span>
+        </div>
+      </section>
+      <div class="message subtle" id="background_message"></div>
     <section class="tab-panel" id="tab_gallery">
     <div class="overview-grid">
-    <div class="row-split">
+    <div class="row-split layout-gallery">
     <section class="card section">
     <div class="actions" style="justify-content:space-between;margin-top:0">
     <div>
@@ -85,23 +94,42 @@
     <button class="btn ghost" id="btn_gallery_refresh" type="button">Refresh Gallery</button>
     </div>
     <div class="gallery-grid" id="gallery_container">
-    <div class="list-item">No images found.</div>
+    <div class="empty-state">
+    <strong class="empty-state-title" id="gallery_empty_title">No stories to preview yet.</strong>
+    <span class="empty-state-copy" id="gallery_empty_copy">Generated covers and story cards will appear here after the first successful run.</span>
+    </div>
     </div>
     </section>
-    <section class="card section">
-    <h2 class="section-title" id="gallery_status_title">System Snapshot</h2>
-    <div class="system-chip" id="sys-status">RAM: - | GPU: -</div>
-    <p class="subtle" id="gallery_status_hint">Live resource usage helps avoid running heavy stages under memory pressure.</p>
+    <section class="card section gallery-side-card">
+    <h2 class="section-title" id="gallery_status_title">Gallery Snapshot</h2>
+    <p class="subtle" id="gallery_status_hint">Use this summary to spot freshness gaps and missing covers without leaving the gallery.</p>
+    <div class="mini-grid gallery-snapshot-grid">
+    <div class="mini"><span id="gallery_label_total">Stories</span><strong id="gallery_stat_total">0</strong></div>
+    <div class="mini"><span id="gallery_label_covers">Covers</span><strong id="gallery_stat_covers">0/0</strong></div>
+    <div class="mini"><span id="gallery_label_categories">Categories</span><strong id="gallery_stat_categories">0</strong></div>
+    <div class="mini"><span id="gallery_label_latest">Latest Update</span><strong id="gallery_stat_latest">-</strong></div>
+    </div>
+    <h3 class="section-title" id="gallery_highlights_title" style="font-size:14px;margin-top:4px">Highlights</h3>
+    <div class="block-list compact" id="gallery_highlights">
+    <div class="list-item advisory-info">Load the gallery to see freshness and cover coverage.</div>
+    </div>
     </section>
     </div>
     </div>
     </section>
 <section class="tab-panel active" id="tab_overview">
 <div class="overview-grid">
-<div class="row-split">
-<section class="card section">
+<div class="row-split layout-overview">
+<section class="card section overview-composer-card">
+<div class="overview-composer-head">
 <h2 class="section-title" id="overview_composer_title">Run Composer</h2>
 <p class="subtle" id="overview_composer_sub">Product mode supports queueing with priority and versioned run profiles.</p>
+</div>
+<section class="composer-group composer-group-core">
+<div class="composer-group-head">
+<span class="composer-group-step">Step 1</span>
+<h3 class="composer-group-title">Run Scope</h3>
+</div>
 <div class="grid-3">
 <div>
 <label for="count">Book Count</label>
@@ -163,18 +191,18 @@
 </select>
 </div>
 </div>
-<div class="grid-2">
+</section>
+<section class="composer-group composer-group-story">
+<div class="composer-group-head">
+<span class="composer-group-step">Step 2</span>
+<h3 class="composer-group-title">Story Brief</h3>
+</div>
 <div>
 <label for="story_input_mode">Story Input Mode</label>
 <select id="story_input_mode">
 <option selected="" value="preset">preset (use KG defaults)</option>
 <option value="custom">custom (convert user input)</option>
 </select>
-</div>
-<div>
-<label for="speaker_wav">Speaker WAV (optional)</label>
-<input id="speaker_wav" placeholder="ex: models/XTTS-v2/samples/my_parent.wav" type="text"/>
-</div>
 </div>
 <div class="grid-2" id="custom_meta_group" style="display:none">
 <div>
@@ -217,43 +245,111 @@ old tree
 rainy night"></textarea>
 </div>
 </div>
-<div class="grid-2">
-<div>
-<label for="speaker_dir">Speaker Samples Dir (optional)</label>
-<input id="speaker_dir" placeholder="ex: models/XTTS-v2/samples/custom" type="text"/>
+</section>
+<section class="composer-group composer-group-voice">
+<div class="composer-group-head">
+<span class="composer-group-step">Step 3</span>
+<h3 class="composer-group-title">Voice Setup</h3>
 </div>
-<div>
+<input id="speaker_wav" type="hidden"/>
+<input id="speaker_source_mode" type="hidden" value="preset"/>
+<div class="speaker-source-switch" id="speaker_source_switch">
+<button class="btn ghost mini speaker-source-btn active" data-source-mode="preset" id="btn_speaker_mode_preset" type="button">預設 samples</button>
+<button class="btn ghost mini speaker-source-btn" data-source-mode="custom" id="btn_speaker_mode_custom" type="button">我的聲音</button>
+</div>
+<section class="speaker-library-panel" id="speaker_preset_panel">
+<label for="speaker_preset_auto_choice" id="speaker_preset_auto_label">Preset sample (auto)</label>
+<label for="speaker_preset_select">預設樣本</label>
+<div class="speaker-library-row">
+<div class="speaker-auto-choice" id="speaker_preset_auto_choice">
+<strong id="speaker_preset_auto_title">Auto-match enabled</strong>
+<span id="speaker_preset_auto_meta">Preset voices will be matched by language at runtime.</span>
+</div>
+<button class="btn ghost mini" id="btn_refresh_preset_speakers" type="button">重新整理</button>
+</div>
+<div class="speaker-auto-tags" id="speaker_preset_auto_tags"></div>
+<div class="hint" id="speaker_preset_auto_hint">Preset voices are chosen automatically for each language at runtime.</div>
+<div class="hint speaker-library-root" id="speaker_preset_root_hint">models/XTTS-v2/samples</div>
+</section>
+<section class="speaker-library-panel" hidden="" id="speaker_custom_panel">
+<label for="speaker_dir">自訂聲音資料夾</label>
+<div class="speaker-library-row">
+<select id="speaker_dir"></select>
+<button class="btn ghost mini" id="btn_refresh_custom_speakers" type="button">重新整理</button>
+</div>
+<div class="hint speaker-library-root" id="speaker_custom_root_hint">runs/voice_samples</div>
+<label for="speaker_custom_wav_select">已存錄音</label>
+<select id="speaker_custom_wav_select"></select>
+<div class="hint" id="speaker_custom_save_hint">新錄音會直接存到目前選到的自訂資料夾。</div>
+<div class="voice-record-box overview-voice-box">
 <label for="voice_script">Recording Script (recommended)</label>
-<textarea id="voice_script" placeholder="嗨，寶貝，今天我們要去神奇森林探險。\n先深呼吸，慢慢走，一起聽風和樹葉的聲音。\n遇到困難也不怕，爸爸媽媽會陪你一起想辦法。\n最後我們會找到答案，也會平安回家。\n晚安，做個勇敢又溫暖的好夢。"></textarea>
-</div>
-</div>
-<div class="actions" style="margin-top:4px">
+<textarea id="voice_script" placeholder="請用自然、穩定的語氣錄 3 到 5 句，包含旁白、一句對話和一次明顯停頓。&#10;例如：今晚的森林很安靜。小狐狸看見樹梢上方有一顆明亮的星星。&#10;如果你也看見了，就和我一起出發吧。"></textarea>
+<div class="actions overview-voice-actions" style="margin-top:4px">
 <button class="btn ghost mini" id="btn_record_start" type="button">Start Recording</button>
 <button class="btn ghost mini" disabled="" id="btn_record_stop" type="button">Stop Recording</button>
-<button class="btn ghost mini" disabled="" id="btn_record_save" type="button">Save As Speaker WAV</button>
+<button class="btn ghost mini" disabled="" id="btn_record_save" type="button">Save To Selected Folder</button>
 </div>
 <audio controls="" id="record_preview" style="width:100%;margin-top:6px"></audio>
+</div>
+</section>
+</section>
+<section class="composer-group composer-group-strategy">
+<div class="composer-group-head">
+<span class="composer-group-step">Step 4</span>
+<h3 class="composer-group-title">Pipeline Strategy</h3>
+</div>
 <div class="toggles">
 <label class="chip-check"><input checked="" id="photo_enabled" type="checkbox"/>Photo</label>
 <label class="chip-check"><input checked="" id="translation_enabled" type="checkbox"/>Translation</label>
 <label class="chip-check"><input checked="" id="voice_enabled" type="checkbox"/>Voice</label>
 <label class="chip-check"><input checked="" id="verify_enabled" type="checkbox"/>Verify</label>
 <label class="chip-check"><input checked="" id="low_vram" type="checkbox"/>Low VRAM</label>
-<label class="chip-check"><input checked="" id="strict_translation" type="checkbox"/>Strict translation</label>
-<label class="chip-check"><input checked="" id="strict_voice" type="checkbox"/>Strict voice</label>
+<label class="chip-check" id="strict_translation_chip"><input checked="" id="strict_translation" type="checkbox"/>Translation required</label>
+<label class="chip-check" id="strict_voice_chip"><input checked="" id="strict_voice" type="checkbox"/>Voice required</label>
 </div>
+<div class="hint" id="strict_modes_hint">If required, that stage must succeed or the book is marked failed. Turn it off to allow degraded output.</div>
+<div class="composer-strategy-grid">
+<section class="composer-strategy-card">
+<label id="quick_profile_label">Workflow Preset</label>
 <div class="actions" style="margin-top:4px">
 <button class="btn ghost mini" data-preset="balanced" type="button">Balanced</button>
 <button class="btn ghost mini" data-preset="speed" type="button">Speed</button>
 <button class="btn ghost mini" data-preset="quality" type="button">Quality</button>
 </div>
-<div class="actions">
+<div class="hint" id="quick_profile_hint">Workflow presets change model plan plus retries, stage toggles, and required-stage behavior.</div>
+</section>
+<section class="composer-strategy-card composer-model-plan-card">
+<label for="model_plan">Model Plan</label>
+<select id="model_plan">
+<option selected="" value="auto">Auto</option>
+<option value="balanced">Balanced</option>
+<option value="portable">Portable</option>
+<option value="quality">Quality</option>
+<option value="cpu">CPU Safe</option>
+</select>
+<p class="hint" id="model_plan_hint" style="margin-top:10px">Auto chooses a model profile from the current hardware. Workflow presets also update this field.</p>
+<div class="hint" id="model_plan_scope_hint" style="margin-top:8px">Use this only when you want to change model/hardware strategy without changing the rest of the workflow.</div>
+<div class="hint" id="model_plan_status" style="margin-top:10px">
+<div id="model_plan_selected">Selected: Auto</div>
+<div id="model_plan_recommended">Auto recommends: Balanced</div>
+<div id="model_plan_hardware">CPU | VRAM 0 GB | RAM 0 GB</div>
+<div id="model_plan_description"></div>
+</div>
+</section>
+</div>
+</section>
+<section class="composer-group composer-group-actions">
+<div class="composer-group-head">
+<span class="composer-group-step">Step 5</span>
+<h3 class="composer-group-title">Launch</h3>
+</div>
+<div class="actions composer-action-bar">
 <button class="btn primary" id="btn_start" type="button">Start / Queue</button>
 <button class="btn danger" id="btn_stop" type="button">Stop Active</button>
 <button class="btn ghost" id="btn_save_local" type="button">Save Local</button>
 <button class="btn ghost" id="btn_load_local" type="button">Load Local</button>
 </div>
-<div class="grid-2" style="margin-top:12px">
+<div class="grid-2 composer-version-grid" style="margin-top:12px">
 <div>
 <label for="version_name">Config Version Name</label>
 <input id="version_name" placeholder="example: quality-v3" type="text"/>
@@ -263,32 +359,71 @@ rainy night"></textarea>
 <input id="version_note" placeholder="what changed and why" type="text"/>
 </div>
 </div>
-<div class="actions" style="margin-top:2px">
+<div class="actions composer-version-actions" style="margin-top:2px">
 <button class="btn ghost" id="btn_save_version" type="button">Save Config Version</button>
 </div>
 <div class="message" id="message"></div>
 </section>
-<section class="card section">
+</section>
+<section class="card section overview-monitor-card" id="overview_monitor_card">
+<div class="overview-monitor-head">
 <h2 class="section-title" id="overview_telemetry_title">Live Telemetry</h2>
-<div class="actions" style="justify-content:flex-end;margin-bottom:8px">
 <button class="btn ghost mini" id="btn_overview_clear_view" type="button">Clear View</button>
 </div>
-<div class="status-strip">
-<span class="pill" id="pill_state">idle</span>
+<section class="overview-monitor-summary" id="overview_monitor_summary">
+<div class="overview-monitor-summary-main">
+<div class="overview-monitor-summary-head">
+<span class="pill info" id="pill_state">idle</span>
+<div class="overview-monitor-summary-copy">
+<div class="overview-monitor-summary-title" id="overview_monitor_summary_title">Ready for the next run</div>
+<div class="hint" id="overview_monitor_summary_copy">Adjust the composer on the left, then start or queue a run.</div>
+</div>
+</div>
+<div class="status-strip overview-monitor-strip">
 <span class="pill" id="pill_book">book: -</span>
 <span class="pill" id="pill_stage">stage: -</span>
 </div>
+</div>
+<div class="overview-monitor-summary-side">
+<div class="monitor-side-kpi">
+<span id="overview_monitor_side_label_primary">Queue</span>
+<strong id="overview_monitor_side_primary">0</strong>
+</div>
+<div class="monitor-side-kpi">
+<span id="overview_monitor_side_label_secondary">Pressure</span>
+<strong id="overview_monitor_side_secondary">-</strong>
+</div>
+</div>
+</section>
+<div class="telemetry-panels">
+<section class="telemetry-panel">
+<div class="telemetry-panel-head">
+<h3 class="telemetry-panel-title" id="overview_system_panel_title">System Resources</h3>
+<span class="hint" id="overview_resource_detail">Waiting for system telemetry...</span>
+</div>
+<div class="mini-grid">
+<div class="mini"><span id="overview_resource_label_cpu">CPU</span><strong id="overview_resource_cpu">-</strong></div>
+<div class="mini"><span id="overview_resource_label_ram">RAM</span><strong id="overview_resource_ram">-</strong></div>
+<div class="mini"><span id="overview_resource_label_gpu">GPU</span><strong id="overview_resource_gpu">-</strong></div>
+<div class="mini"><span id="overview_resource_label_vram">VRAM</span><strong id="overview_resource_vram">-</strong></div>
+</div>
+</section>
+</div>
+<section class="telemetry-panel advisory-panel" id="overview_advisory_panel" hidden="">
+<div class="telemetry-panel-head">
+<h3 class="telemetry-panel-title" id="overview_advisory_title">Run Readiness</h3>
+<span class="pill" id="overview_health_level">stable</span>
+</div>
+<div class="health-summary" id="overview_health_summary">Waiting for system telemetry...</div>
+<div class="block-list compact" id="overview_advisory_list">
+<div class="list-item">Telemetry advisories will appear here.</div>
+</div>
+</section>
+<section class="overview-monitor-section overview-monitor-live" hidden="" id="overview_monitor_live">
 <div class="progress-wrap"><div class="progress-bar" id="progress_fill"></div></div>
 <div class="progress-meta">
 <span id="progress_label">0.0%</span>
 <span id="progress_detail">0/0 completed</span>
-<span id="updated_label">updated: -</span>
-</div>
-<div class="progress-badges">
-<span class="progress-badge" id="progress_badge_books">Books 0/0</span>
-<span class="progress-badge" id="progress_badge_remaining">Remaining 0</span>
-<span class="progress-badge" id="progress_badge_success">Success 0.0%</span>
-<span class="progress-badge" id="progress_badge_stage">Stage -</span>
 </div>
 <div class="pre-eval-panel" id="pre_eval_panel">
 <div class="pre-eval-head">
@@ -304,19 +439,44 @@ rainy night"></textarea>
 <div class="hint" id="pre_eval_gate">Waiting for pre-evaluation...</div>
 </div>
 <div class="stats">
-<div class="stat"><b id="overview_metric_total">Total</b><span id="metric_total">0</span></div>
-<div class="stat"><b id="overview_metric_completed">Completed</b><span id="metric_completed">0</span></div>
 <div class="stat"><b id="overview_metric_success">Success</b><span id="metric_success">0</span></div>
 <div class="stat"><b id="overview_metric_failed">Failed</b><span id="metric_failed">0</span></div>
-<div class="stat"><b id="overview_metric_elapsed">Elapsed</b><span id="metric_elapsed">-</span></div>
 <div class="stat"><b id="overview_metric_eta">ETA</b><span id="metric_eta">-</span></div>
 </div>
 <div class="mini-grid">
 <div class="mini"><span id="overview_meta_run_id">Run ID</span><strong id="meta_run_id">-</strong></div>
-<div class="mini"><span id="overview_meta_pid">PID</span><strong id="meta_pid">-</strong></div>
 <div class="mini"><span id="overview_meta_exit_code">Exit Code</span><strong id="meta_exit_code">-</strong></div>
-<div class="mini"><span id="overview_meta_queue_depth">Queue Depth</span><strong id="meta_queue_depth">0</strong></div>
 </div>
+</section>
+<section class="overview-monitor-section overview-monitor-idle" id="overview_monitor_idle">
+<div class="overview-monitor-idle-grid">
+<section class="telemetry-panel">
+<div class="telemetry-panel-head">
+<h3 class="telemetry-panel-title" id="overview_last_run_title">Latest Run</h3>
+<span class="pill info" id="overview_last_run_state">idle</span>
+</div>
+<div class="mini-grid">
+<div class="mini"><span id="overview_last_run_label_id">Run ID</span><strong id="overview_last_run_id">-</strong></div>
+<div class="mini"><span id="overview_last_run_label_result">Result</span><strong id="overview_last_run_result">Ready</strong></div>
+<div class="mini"><span id="overview_last_run_label_books">Books</span><strong id="overview_last_run_books">-</strong></div>
+<div class="mini"><span id="overview_last_run_label_elapsed">Elapsed</span><strong id="overview_last_run_elapsed">-</strong></div>
+</div>
+<div class="hint" id="overview_last_run_hint">No recent run summary yet.</div>
+</section>
+<section class="telemetry-panel">
+<div class="telemetry-panel-head">
+<h3 class="telemetry-panel-title" id="overview_next_step_title">Next Step</h3>
+</div>
+<div class="health-summary" id="overview_next_step_summary">Configure the next run from the composer on the left.</div>
+<div class="block-list compact" id="overview_next_step_list">
+<div class="list-item advisory-info">Queue depth and resource guidance will appear here.</div>
+</div>
+</section>
+</div>
+</section>
+</section>
+</div>
+<section class="card section overview-logs-card">
 <div class="telemetry-log-head">
 <h3 class="section-title" id="overview_live_logs_title" style="font-size:14px;margin:0">Live Logs (Now)</h3>
 <span class="hint" id="overview_live_logs_hint">Latest lines from the active run. Full logs are in Run Detail.</span>
@@ -328,11 +488,10 @@ rainy night"></textarea>
 </details>
 </section>
 </div>
-</div>
 </section>
 <section class="tab-panel" id="tab_ops">
 <div class="overview-grid">
-<div class="row-split">
+<div class="row-split layout-ops-primary">
 <section class="card section">
 <h2 class="section-title" id="ops_queue_title">Queue and Priority</h2>
 <div class="table-wrap">
@@ -359,19 +518,19 @@ rainy night"></textarea>
 <div class="block-list" id="alert_list">
 <div class="list-item">No alerts.</div>
 </div>
-<div class="hint">Alerts include queue pressure, repeated failures, and run-stop incidents.</div>
+<div class="hint" id="ops_alert_hint">Alerts include queue pressure, repeated failures, and run-stop incidents.</div>
 </section>
 </div>
-<div class="row-split">
+<div class="row-split layout-ops-secondary">
 <section class="card section">
 <h2 class="section-title" id="ops_capacity_title">Capacity and Cost</h2>
 <div class="stats">
-<div class="stat"><b id="cap_label_runs">Window Runs</b><span id="cap_runs">0</span></div>
-<div class="stat"><b id="cap_label_success_rate">Success Rate</b><span id="cap_success_rate">0%</span></div>
-<div class="stat"><b id="cap_label_throughput">Books / Hour</b><span id="cap_throughput">0</span></div>
-<div class="stat"><b id="cap_label_queue_delay">Avg Queue Delay</b><span id="cap_queue_delay">0s</span></div>
-<div class="stat"><b id="cap_label_gpu_hours">GPU Hours</b><span id="cap_gpu_hours">0.00</span></div>
-<div class="stat"><b id="cap_label_gpu_cost">GPU Cost</b><span id="cap_gpu_cost">$0.00</span></div>
+<div class="stat"><b id="cap_label_runs">Window Runs</b><span id="cap_runs">-</span></div>
+<div class="stat"><b id="cap_label_success_rate">Success Rate</b><span id="cap_success_rate">-</span></div>
+<div class="stat"><b id="cap_label_throughput">Books / Hour</b><span id="cap_throughput">-</span></div>
+<div class="stat"><b id="cap_label_queue_delay">Avg Queue Delay</b><span id="cap_queue_delay">-</span></div>
+<div class="stat"><b id="cap_label_gpu_hours">GPU Hours</b><span id="cap_gpu_hours">-</span></div>
+<div class="stat"><b id="cap_label_gpu_cost">GPU Cost</b><span id="cap_gpu_cost">-</span></div>
 </div>
 <div class="block-list" id="capacity_trend">
 <div class="list-item">No trend data yet.</div>
@@ -459,6 +618,12 @@ rainy night"></textarea>
 <div class="mini"><span id="detail_meta_started_at">Started At</span><strong id="detail_started">-</strong></div>
 <div class="mini"><span id="detail_meta_finished_at">Finished At</span><strong id="detail_finished">-</strong></div>
 </div>
+<div class="mini-grid">
+<div class="mini"><span id="detail_artifact_label_story_root">Story Root</span><strong id="detail_artifact_story_root">-</strong></div>
+<div class="mini"><span id="detail_artifact_label_book">Selected Book</span><strong id="detail_artifact_book">-</strong></div>
+<div class="mini"><span id="detail_artifact_label_stage">Last Stage</span><strong id="detail_artifact_stage">-</strong></div>
+<div class="mini"><span id="detail_artifact_label_eval">Evaluation</span><strong id="detail_artifact_eval">-</strong></div>
+</div>
 <details>
 <summary>Detail JSON</summary>
 <pre class="console" id="detail_json">{}</pre>
@@ -466,6 +631,7 @@ rainy night"></textarea>
 </section>
 <section class="card section">
 <h2 class="section-title" id="detail_timeline_title">Timeline and Alerts</h2>
+<p class="subtle" id="detail_timeline_sub">Run-level events and alerts for the whole batch.</p>
 <div class="detail-events" id="detail_events">
 <div class="event-item">No events.</div>
 </div>
@@ -477,6 +643,7 @@ rainy night"></textarea>
 </div>
 <section class="card section">
 <h2 class="section-title" id="detail_logs_title">Run Logs</h2>
+<p class="subtle" id="detail_logs_sub">Select a book to inspect its captured terminal log.</p>
 <pre class="console" id="detail_logs"></pre>
 </section>
 </div>
@@ -511,12 +678,18 @@ rainy night"></textarea>
 <label for="evaluation_story_root" id="label_evaluation_story_root">Story Root</label>
 <input id="evaluation_story_root" placeholder="output/.../story_name" type="text"/>
 </div>
-<div>
+<div class="eval-actions">
+<button class="btn ghost" id="btn_eval_refresh" type="button">Refresh Evaluation</button>
+</div>
+</div>
+<div class="eval-advanced-toolbar">
+<button aria-controls="eval_advanced_panel" aria-expanded="false" class="btn ghost mini" id="btn_eval_advanced" type="button">Advanced</button>
+</div>
+<div class="eval-advanced-panel" hidden id="eval_advanced_panel">
+<div class="eval-advanced-field">
 <label for="evaluation_branch" id="label_evaluation_branch">Branch</label>
 <input id="evaluation_branch" placeholder="canonical" type="text" value="canonical"/>
-</div>
-<div>
-<button class="btn ghost" id="btn_eval_refresh" style="margin-top:22px" type="button">Refresh Evaluation</button>
+<div class="hint" id="evaluation_branch_hint">Use the report variant name. In most cases, keep `canonical`.</div>
 </div>
 </div>
 <div class="message subtle" id="eval_status"></div>
@@ -533,23 +706,36 @@ rainy night"></textarea>
 <div class="mini"><span id="eval_meta_story_root_label">Story Root</span><strong id="eval_story_root_used">-</strong></div>
 </div>
 </section>
-<div class="row-split eval-layout">
+<div class="row-split layout-evaluation-primary eval-layout">
 <section class="card section eval-chart-card">
 <h3 class="section-title" id="evaluation_chart_title" style="font-size:16px">Dimension Radar</h3>
 <div class="eval-chart-wrap">
+<div class="empty-state compact eval-empty-state" id="eval_chart_empty">
+<strong class="empty-state-title" id="eval_chart_empty_title">No evaluation chart yet.</strong>
+<span class="empty-state-copy" id="eval_chart_empty_copy">Load a story report to compare dimension scores on the radar chart.</span>
+</div>
 <canvas id="evalRadarChart"></canvas>
-        </div>
+</div>
 </section>
+<section class="card section">
+<h3 class="section-title" id="eval_insight_title" style="font-size:16px">Evaluation Insights</h3>
+<div class="mini-grid" id="eval_dimension_summary">
+<div class="mini">No evaluation loaded.</div>
+</div>
+<div class="block-list compact" id="eval_findings_list">
+<div class="list-item">Key findings will appear here.</div>
+</div>
+</section>
+</div>
 <section class="card section">
 <h3 class="section-title" id="evaluation_log_title" style="font-size:16px">Assessment JSON</h3>
 <pre class="console eval-log-box" id="eval_logs">No evaluation loaded.</pre>
 </section>
 </div>
-</div>
 </section>
 <section class="tab-panel" id="tab_modules">
 <div class="detail-grid">
-<div class="row-split">
+<div class="row-split layout-modules-primary">
 <section class="card section">
 <h2 class="section-title" id="module_jobs_title">Module Jobs</h2>
 <div class="actions" style="margin-bottom:8px">
@@ -591,7 +777,7 @@ rainy night"></textarea>
 <section class="card section">
 <h2 class="section-title" id="module_workbenches_title">Module Workbenches</h2>
 <p class="subtle" id="module_workbenches_sub">Run text, image, translation, and voice independently without executing the full pipeline.</p>
-<div class="tabs" style="padding:0">
+<div class="tabs module-tab-strip">
 <button class="tab-btn module-tab-btn active" data-module-tab="story" id="module_tab_story" type="button">Text Studio</button>
 <button class="tab-btn module-tab-btn" data-module-tab="image" id="module_tab_image" type="button">Image Studio</button>
 <button class="tab-btn module-tab-btn" data-module-tab="translation" id="module_tab_translation" type="button">Translation Studio</button>
@@ -599,6 +785,10 @@ rainy night"></textarea>
 <button class="tab-btn module-tab-btn" data-module-tab="general" id="module_tab_general" type="button">General Studio</button>
 </div>
 <div class="module-studio active" id="studio_story">
+<div class="studio-head">
+<h3 class="section-title" id="studio_story_title">Text Studio</h3>
+<p class="subtle" id="studio_story_sub">Generate standalone story drafts and queue text-only runs without touching images or voice.</p>
+</div>
 <div class="grid-3">
 <div>
 <label for="module_story_count">Book Count</label>
@@ -704,6 +894,10 @@ rainy night"></textarea>
 <div class="message" id="module_story_message"></div>
 </div>
 <div class="module-studio" id="studio_image">
+<div class="studio-head">
+<h3 class="section-title" id="studio_image_title">Image Studio</h3>
+<p class="subtle" id="studio_image_sub">Inspect existing image tasks, tweak prompts, and rerun only the visual layer for a story.</p>
+</div>
 <h3 class="section-title" id="image_live_preview_title" style="font-size:15px;margin-top:4px">Live Image Preview</h3>
 <div class="actions" style="margin-bottom:8px">
 <input id="image_story_root" placeholder="story root (optional), ex: output/Cultural/4-5/The_Mysterious_Map_and_Magic_Tree" style="min-width:420px;max-width:100%" type="text"/>
@@ -725,7 +919,10 @@ rainy night"></textarea>
 <div class="grid-2" style="align-items:start">
 <div>
 <div class="image-grid" id="image_gallery">
-<div class="list-item">No generated images yet.</div>
+<div class="empty-state">
+<strong class="empty-state-title">No generated images yet.</strong>
+<span class="empty-state-copy">Load a story root or wait for image generation to populate this grid.</span>
+</div>
 </div>
 </div>
 <div>
@@ -768,11 +965,14 @@ rainy night"></textarea>
 <button class="btn ghost mini" id="btn_image_regen_detail" type="button">Regenerate This (With Edits)</button>
 </div>
 <div class="message" id="image_message"></div>
-<div class="message subtle" id="background_message"></div>
 </div>
 </div>
 </div>
 <div class="module-studio" id="studio_translation">
+<div class="studio-head">
+<h3 class="section-title" id="studio_translation_title">Translation Studio</h3>
+<p class="subtle" id="studio_translation_sub">Translate existing story outputs, choose target languages, and rerun translation independently.</p>
+</div>
 <div class="story-picker-row">
 <div>
 <label for="module_trans_story_select" id="label_module_trans_story_select">Story Book (auto detected)</label>
@@ -855,6 +1055,11 @@ rainy night"></textarea>
 </div>
 </div>
 <label id="label_module_trans_target_list">Target Languages (multi-select)</label>
+<div class="actions" style="margin-top:0;margin-bottom:8px">
+<button class="btn ghost mini" id="btn_module_trans_target_recommended" type="button">Recommended</button>
+<button class="btn ghost mini" id="btn_module_trans_target_all" type="button">Select All</button>
+<button class="btn ghost mini" id="btn_module_trans_target_none" type="button">Clear</button>
+</div>
 <div class="lang-checklist" id="module_trans_target_list">
 <label class="chip-check"><input checked="" data-lang="zh" type="checkbox"/>中文 (zh)</label>
 <label class="chip-check"><input checked="" data-lang="ja" type="checkbox"/>日文 (ja)</label>
@@ -871,6 +1076,11 @@ rainy night"></textarea>
 <div class="message" id="module_translation_message"></div>
 </div>
 <div class="module-studio" id="studio_voice">
+<div class="studio-head">
+<h3 class="section-title" id="studio_voice_title">Voice Studio</h3>
+<p class="subtle" id="studio_voice_sub">Generate narration from an existing story root, with direct control over speaker samples and page ranges.</p>
+</div>
+
 <div class="grid-2">
 <div>
 <label for="module_voice_story_root">Story Root (optional)</label>
@@ -948,8 +1158,10 @@ rainy night"></textarea>
 <div class="message" id="module_voice_message"></div>
 </div>
 <div class="module-studio" id="studio_general">
-<h3 class="section-title" id="general_tools_title" style="font-size:15px;margin-top:4px">General AI Toolkit</h3>
+<div class="studio-head">
+<h3 class="section-title" id="general_tools_title">General AI Toolkit</h3>
 <p class="subtle" id="general_tools_sub">Use direct non-story tools for text QA, image generation, translation, and TTS preview.</p>
+</div>
 <div class="general-grid">
 <section class="general-card">
 <h3 class="section-title" id="general_section_text_title">General Text</h3>
@@ -1109,9 +1321,9 @@ rainy night"></textarea>
 </div>
 </section>
 </div>
-<script src="/static/js/dashboard.js"></script>
-  </div>
-  </div>
+      </div>
+    </main>
+    <script src="/static/js/dashboard.js"></script>
   </div>
 </body>
 </html>

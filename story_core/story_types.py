@@ -59,5 +59,8 @@ class PipelineOptions:
     kg_enabled: bool
     kg_version: Optional[str]
     step_generations: Dict[str, GenerationParams] = field(default_factory=dict)
+    outline_candidates: int = 1
+    title_candidates: int = 1
+    key_page_candidates: int = 1
     aggressive_memory_cleanup: bool = True
     disable_category_temperature_adaptation: bool = False

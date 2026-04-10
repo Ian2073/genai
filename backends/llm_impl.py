@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import gc
+import importlib.util
+import inspect
 import logging
 import random
 from dataclasses import dataclass
@@ -73,7 +75,7 @@ class TransformersLLM(BaseLLM):
 	"""使用 HuggingFace transformers 模型真實生成文本。"""
 
 	@staticmethod
-	def _normalize_device(device: str) -> str:
+	def _normalize_runtime_device(device: str) -> str:
 		"""將裝置字串正規化為可直接給 transformers 的值。"""
 		normalized = (device or "auto").strip().lower()
 		if normalized == "auto":
@@ -84,9 +86,56 @@ class TransformersLLM(BaseLLM):
 		return normalized
 
 	@staticmethod
+	def _resolve_transformers_device_map(requested_device: str, runtime_device: str) -> Union[str, Dict[str, int]]:
+		"""Preserve device_map='auto' so larger quantized models can offload when needed."""
+		normalized = (requested_device or "auto").strip().lower()
+		if normalized == "auto":
+			if torch.cuda.is_available():
+				if importlib.util.find_spec("accelerate") is None:
+					logging.warning(
+						"device_map='auto' requested but accelerate is unavailable; using single-GPU placement instead."
+					)
+					return {"": 0}
+				return "auto"
+			return "cpu"
+		if runtime_device.startswith("cuda"):
+			gpu_id = int(runtime_device.split(":")[1]) if ":" in runtime_device else 0
+			return {"": gpu_id}
+		return runtime_device
+
+	def _resolve_input_device(self) -> torch.device:
+		"""Pick a stable input device even when the model is sharded or offloaded."""
+		if self.model is not None:
+			hf_device_map = getattr(self.model, "hf_device_map", None)
+			if isinstance(hf_device_map, dict):
+				for value in hf_device_map.values():
+					if isinstance(value, int):
+						return torch.device(f"cuda:{value}")
+					if isinstance(value, str) and value.startswith("cuda"):
+						return torch.device(value)
+			model_device = getattr(self.model, "device", None)
+			if model_device is not None:
+				return torch.device(str(model_device))
+		return torch.device(self.device)
+
+	def _apply_chat_template(self, messages: List[Dict[str, str]], *, add_generation_prompt: bool = True) -> str:
+		"""Use the tokenizer chat template while disabling vendor-specific hidden thinking when available."""
+		kwargs: Dict[str, Any] = {
+			"tokenize": False,
+			"add_generation_prompt": add_generation_prompt,
+		}
+		try:
+			signature = inspect.signature(self.tokenizer.apply_chat_template)
+			if "enable_thinking" in signature.parameters:
+				kwargs["enable_thinking"] = False
+		except (TypeError, ValueError):
+			pass
+		return self.tokenizer.apply_chat_template(messages, **kwargs)
+
+	@staticmethod
 	def _register_model_family_aliases(model_type: Optional[str]) -> None:
 		"""僅在需要時為舊版 transformers 補上模型家族別名。"""
-		if model_type not in {"qwen3", "phi4"}:
+		if model_type not in {"qwen3", "qwen3_5", "phi4"}:
 			return
 		try:
 			import transformers
@@ -100,21 +149,21 @@ class TransformersLLM(BaseLLM):
 			from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 			from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING
 
-			if model_type == "qwen3" and "qwen3" not in CONFIG_MAPPING and "qwen2" in CONFIG_MAPPING:
-				CONFIG_MAPPING.register("qwen3", CONFIG_MAPPING["qwen2"])
-				logging.warning("Registered 'qwen3' model type to use Qwen2Config")
+			if model_type in {"qwen3", "qwen3_5"} and model_type not in CONFIG_MAPPING and "qwen2" in CONFIG_MAPPING:
+				CONFIG_MAPPING.register(model_type, CONFIG_MAPPING["qwen2"])
+				logging.warning("Registered '%s' model type to use Qwen2Config", model_type)
 
 			if (
-				model_type == "qwen3"
-				and "qwen3" not in MODEL_FOR_CAUSAL_LM_MAPPING
+				model_type in {"qwen3", "qwen3_5"}
+				and model_type not in MODEL_FOR_CAUSAL_LM_MAPPING
 				and "qwen2" in CONFIG_MAPPING
 				and CONFIG_MAPPING["qwen2"] in MODEL_FOR_CAUSAL_LM_MAPPING
 			):
 				MODEL_FOR_CAUSAL_LM_MAPPING.register(
-					"qwen3",
+					model_type,
 					MODEL_FOR_CAUSAL_LM_MAPPING[CONFIG_MAPPING["qwen2"]],
 				)
-				logging.warning("Registered 'qwen3' to use Qwen2ForCausalLM")
+				logging.warning("Registered '%s' to use Qwen2ForCausalLM", model_type)
 
 			if model_type == "phi4" and "phi4" not in CONFIG_MAPPING and "phi3" in CONFIG_MAPPING:
 				CONFIG_MAPPING.register("phi4", CONFIG_MAPPING["phi3"])
@@ -148,7 +197,8 @@ class TransformersLLM(BaseLLM):
 
 		self.model_path = model_path
 		self.model_family = model_family
-		self.device = self._normalize_device(device)
+		self.device = self._normalize_runtime_device(device)
+		self.requested_device_map = (device or "auto").strip().lower()
 		self.quantization = quantization
 		self.model = None
 		self.tokenizer = None
@@ -249,11 +299,7 @@ class TransformersLLM(BaseLLM):
 			)
 			logging.info("Loading GPTQ pre-quantized model")
 
-		if self.device.startswith("cuda"):
-			gpu_id = int(self.device.split(":")[1]) if ":" in self.device else 0
-			device_map: Union[str, Dict[str, int]] = {"": gpu_id}
-		else:
-			device_map = self.device
+		device_map = self._resolve_transformers_device_map(self.requested_device_map, self.device)
 
 		self._register_model_family_aliases(selection.model_type)
 
@@ -280,11 +326,7 @@ class TransformersLLM(BaseLLM):
 	) -> Tuple[str, int]:
 		"""使用 HuggingFace generate API 生成文本。"""
 		messages = prompt.to_messages()
-		prompt_text = self.tokenizer.apply_chat_template(
-			messages,
-			tokenize=False,
-			add_generation_prompt=True,
-		)
+		prompt_text = self._apply_chat_template(messages, add_generation_prompt=True)
 		if prefill:
 			prompt_text += prefill
 
@@ -294,7 +336,8 @@ class TransformersLLM(BaseLLM):
 			padding=True,
 			truncation=True,
 		)
-		inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+		input_device = self._resolve_input_device()
+		inputs = {k: v.to(input_device) for k, v in inputs.items()}
 		if "attention_mask" not in inputs:
 			inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
 
@@ -369,17 +412,14 @@ class TransformersLLM(BaseLLM):
 		)
 
 		messages = prompt.to_messages()
-		text = self.tokenizer.apply_chat_template(
-			messages,
-			tokenize=False,
-			add_generation_prompt=True,
-		)
+		text = self._apply_chat_template(messages, add_generation_prompt=True)
 		if prefill:
 			text += prefill
 
 		inputs = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True)
-		input_ids = inputs["input_ids"].to(self.model.device)
-		mask = inputs.get("attention_mask", torch.ones_like(input_ids)).to(self.model.device)
+		input_device = self._resolve_input_device()
+		input_ids = inputs["input_ids"].to(input_device)
+		mask = inputs.get("attention_mask", torch.ones_like(input_ids)).to(input_device)
 
 		processors = LogitsProcessorList()
 		if params.min_tokens > 0:
@@ -426,7 +466,7 @@ class TransformersLLM(BaseLLM):
 			mask = torch.cat(
 				[
 					mask,
-					torch.ones((mask.shape[0], 1), device=self.model.device, dtype=mask.dtype),
+					torch.ones((mask.shape[0], 1), device=input_ids.device, dtype=mask.dtype),
 				],
 				dim=-1,
 			)

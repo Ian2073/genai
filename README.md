@@ -41,7 +41,7 @@
 |------|---------|---------|------|
 | 文本生成 | Qwen2.5-14B-Instruct-GPTQ-Int4 | `models/Qwen2.5-14B-Instruct-GPTQ-Int4` | 主線預設 |
 | 文本備援 | Qwen3-8B | `models/Qwen3-8B` | GPTQ 不可用時備援 |
-| 圖像生成 | SDXL Base + Refiner | `models/stable-diffusion-xl-base-1.0`、`models/stable-diffusion-xl-refiner-1.0` | 插圖與封面 |
+| 圖像生成 | FLUX.1-schnell | `models/FLUX.1-schnell` | 插圖與封面 |
 | 翻譯 | NLLB-200-3.3B | `models/nllb-200-3.3B` | 多語翻譯 |
 | 語音 | XTTS-v2 | `models/XTTS-v2` | 多語語音合成 |
 
@@ -221,8 +221,9 @@ models/
 ├── Qwen2.5-14B-Instruct-GPTQ-Int4/  # ~9GB  | 預設文本生成
 ├── Qwen3-8B/                        # ~16GB | 備援 / 非 GPTQ 相容路徑
 ├── nllb-200-3.3B/                   # ~13GB | 翻譯
-├── stable-diffusion-xl-base-1.0/    # ~7GB  | 圖像生成
-├── stable-diffusion-xl-refiner-1.0/ # ~6GB  | 圖像精煉
+├── FLUX.1-schnell/                  # ~23GB | 預設圖像生成
+├── stable-diffusion-xl-base-1.0/    # ~7GB  | SDXL 備援圖像生成
+├── stable-diffusion-xl-refiner-1.0/ # ~6GB  | SDXL 精煉器（僅 SDXL 使用）
 └── XTTS-v2/                         # ~2GB  | 語音合成
     └── samples/                     # 說話人樣本 (自備)
 ```
@@ -231,6 +232,7 @@ models/
 - Qwen2.5-14B-Instruct-GPTQ-Int4: https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4
 - Qwen3-8B: https://huggingface.co/Qwen/Qwen3-8B
 - NLLB: https://huggingface.co/facebook/nllb-200-3.3B
+- FLUX.1-schnell: https://huggingface.co/black-forest-labs/FLUX.1-schnell
 - SDXL: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0
 - XTTS: https://huggingface.co/coqui/XTTS-v2
 
@@ -700,10 +702,10 @@ DEFAULT_CHIEF_OPTIONS = ChiefOptions(
     story_pages_expected=10,      # 預期頁數 (0=自動)
     
     # === 圖像生成 ===
-    photo_steps=8,                # 採樣步數 (6-15)
-    photo_guidance=7.5,           # CFG 引導強度
+    photo_steps=4,                # FLUX.1-schnell 建議 1-4 步
+    photo_guidance=0.0,           # FLUX.1-schnell 建議 0 guidance
     photo_refiner_steps=4,        # 精煉步數
-    photo_skip_refiner=False,     # 跳過精煉 (2倍速)
+    photo_skip_refiner=True,      # FLUX 為單階段生成，不使用 refiner
     
     # === 翻譯 ===
     translation_beam_size=5,      # Beam Search 寬度

@@ -23,9 +23,11 @@ ALLOWED_ROOT_FILES: Set[str] = {
     "docker-compose.yml",
     "system_config.json",
     "Build_GenAI.bat",
+    "Build_GenAI.sh",
     "Build_GenAI_Docker.bat",
     "Build_GenAI_DevTools.bat",
     "Start_GenAI.bat",
+    "Start_GenAI.sh",
     "Start_GenAI_Docker.bat",
     "chief.py",
     "story.py",
@@ -56,6 +58,7 @@ ALLOWED_ROOT_DIRS: Set[str] = {
     "runtime",
     "scripts",
     "story_core",
+    "tests",
 }
 
 DISALLOWED_LEGACY_ROOT_NAMES: Set[str] = {

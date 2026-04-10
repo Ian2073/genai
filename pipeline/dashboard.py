@@ -1,4 +1,4 @@
-﻿"""Product-style local dashboard for orchestration control and operations insight."""
+"""Product-style local dashboard for orchestration control and operations insight."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover - optional dependency on CPU-only hosts
     pynvml = None
 
 try:
-    _SYSTEM_STATUS_CACHE_TTL_SEC = max(0.2, float(os.environ.get("DASHBOARD_SYSTEM_STATUS_CACHE_SEC", "2.0")))
+    _SYSTEM_STATUS_CACHE_TTL_SEC = max(0.2, float(os.environ.get("DASHBOARD_SYSTEM_STATUS_CACHE_SEC", "1.0")))
 except (TypeError, ValueError):
     _SYSTEM_STATUS_CACHE_TTL_SEC = 2.0
 
@@ -34,13 +34,158 @@ _SYSTEM_STATUS_LOCK = threading.Lock()
 _SYSTEM_STATUS_CACHE: Dict[str, Any] = {"cached_at": 0.0, "value": None}
 _NVML_INIT_ATTEMPTED = False
 _NVML_SUPPORTED = False
+_DASHBOARD_API_VERSION = "2026-04-07.1"
+_STALE_RUN_RECOVERY_GRACE_SEC = 45.0
+
+
+def _dashboard_capabilities() -> Dict[str, Any]:
+    return {
+        "queue_api": True,
+        "alerts_api": True,
+        "capacity_api": True,
+        "configs_api": True,
+        "system_cpu": True,
+        "system_processes": True,
+        "system_sampled_at": True,
+        "system_model_cache": True,
+    }
 
 
 def _clone_system_status(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
+        "api_version": str(payload.get("api_version") or _DASHBOARD_API_VERSION),
+        "capabilities": dict(payload.get("capabilities") or {}),
+        "cpu": dict(payload.get("cpu") or {}),
         "ram": dict(payload.get("ram") or {}),
         "gpus": [dict(item) for item in (payload.get("gpus") or [])],
+        "processes": {
+            str(name): dict(details)
+            for name, details in (payload.get("processes") or {}).items()
+            if isinstance(details, dict)
+        },
+        "model_cache": [dict(item) for item in (payload.get("model_cache") or [])],
+        "model_plan": dict(payload.get("model_plan") or {}),
+        "sampled_at": str(payload.get("sampled_at") or ""),
     }
+
+
+def _snapshot_process(pid: Any, *, label: str = "") -> Optional[Dict[str, Any]]:
+    process_id = _safe_int(pid, 0, min_value=0)
+    if process_id <= 0:
+        return None
+    try:
+        proc = psutil.Process(process_id)
+        mem = proc.memory_info()
+        try:
+            cpu_percent = round(float(proc.cpu_percent(interval=None)), 1)
+        except Exception:
+            cpu_percent = 0.0
+        try:
+            process_name = str(proc.name() or label or f"pid={process_id}")
+        except Exception:
+            process_name = label or f"pid={process_id}"
+        try:
+            status = str(proc.status() or "unknown")
+        except Exception:
+            status = "unknown"
+        try:
+            threads = int(proc.num_threads() or 0)
+        except Exception:
+            threads = 0
+        try:
+            uptime_sec = round(max(0.0, time.time() - float(proc.create_time() or time.time())), 1)
+        except Exception:
+            uptime_sec = 0.0
+        return {
+            "pid": process_id,
+            "label": label or process_name,
+            "name": process_name,
+            "status": status,
+            "cpu_percent": cpu_percent,
+            "rss": int(mem.rss),
+            "threads": threads,
+            "uptime_sec": uptime_sec,
+        }
+    except Exception:
+        return None
+
+
+def _build_runtime_process_status() -> Tuple[Dict[str, Dict[str, Any]], List[Dict[str, Any]]]:
+    processes: Dict[str, Dict[str, Any]] = {}
+    model_cache: List[Dict[str, Any]] = []
+
+    dashboard_snapshot = _snapshot_process(os.getpid(), label="dashboard")
+    if dashboard_snapshot:
+        processes["dashboard"] = dashboard_snapshot
+
+    handler_cls = globals().get("DashboardHandler")
+    runtime = getattr(handler_cls, "runtime", None) if handler_cls is not None else None
+    if runtime is None:
+        return processes, model_cache
+
+    chief_pid = 0
+    with getattr(runtime, "lock", threading.Lock()):
+        process = getattr(runtime, "process", None)
+        if process is not None and getattr(process, "poll", None) is not None and process.poll() is None:
+            chief_pid = _safe_int(getattr(process, "pid", 0), 0, min_value=0)
+
+    chief_snapshot = _snapshot_process(chief_pid, label="chief")
+    if chief_snapshot:
+        processes["chief"] = chief_snapshot
+
+    now_ts = time.time()
+    cache_lock = getattr(runtime, "model_cache_lock", None)
+    slots = getattr(runtime, "model_slots", None)
+    if cache_lock is None or not isinstance(slots, dict):
+        return processes, model_cache
+
+    with cache_lock:
+        for kind, slot in slots.items():
+            if not isinstance(slot, dict):
+                continue
+            model_cache.append(
+                {
+                    "kind": str(kind),
+                    "in_use": _safe_int(slot.get("in_use"), 0, min_value=0),
+                    "offloaded": bool(slot.get("offloaded")),
+                    "idle_sec": round(max(0.0, now_ts - _safe_float(slot.get("last_used_ts"), now_ts)), 1),
+                }
+            )
+    model_cache.sort(key=lambda item: str(item.get("kind") or ""))
+    return processes, model_cache
+
+
+def _build_model_plan_status() -> Dict[str, Any]:
+    try:
+        hardware = detect_hardware_profile()
+        recommended_plan = choose_plan_key("auto", hardware)
+        spec = MODEL_PLAN_SPECS.get(recommended_plan)
+        return {
+            "recommended_plan": recommended_plan,
+            "description": getattr(spec, "description", ""),
+            "hardware": {
+                "accelerator": hardware.accelerator,
+                "gpu_count": hardware.gpu_count,
+                "gpu_names": list(hardware.gpu_names),
+                "gpu_vram_gb": round(float(hardware.gpu_vram_gb), 1),
+                "system_ram_gb": round(float(hardware.system_ram_gb), 1),
+                "cuda_version": hardware.cuda_version or "",
+            },
+        }
+    except Exception:
+        return {
+            "recommended_plan": "balanced",
+            "description": "",
+            "hardware": {
+                "accelerator": "unknown",
+                "gpu_count": 0,
+                "gpu_names": [],
+                "gpu_vram_gb": 0.0,
+                "system_ram_gb": 0.0,
+                "cuda_version": "",
+            },
+        }
+
 
 def get_system_status():
     global _NVML_INIT_ATTEMPTED, _NVML_SUPPORTED
@@ -88,13 +233,25 @@ def get_system_status():
             except Exception:
                 gpus = []
 
+        processes, model_cache = _build_runtime_process_status()
+
         payload: Dict[str, Any] = {
+            "api_version": _DASHBOARD_API_VERSION,
+            "capabilities": _dashboard_capabilities(),
+            "cpu": {
+                "percent": round(float(psutil.cpu_percent(interval=None)), 1),
+                "logical_count": int(psutil.cpu_count(logical=True) or 0),
+            },
             "ram": {
                 "total": mem.total,
                 "used": mem.used,
                 "percent": mem.percent,
             },
             "gpus": gpus,
+            "processes": processes,
+            "model_cache": model_cache,
+            "model_plan": _build_model_plan_status(),
+            "sampled_at": _utc_now_iso(),
         }
         _SYSTEM_STATUS_CACHE["cached_at"] = now
         _SYSTEM_STATUS_CACHE["value"] = payload
@@ -107,7 +264,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Sequence, Tuple
  
  
 from urllib.parse import parse_qs, urlparse
@@ -126,6 +283,14 @@ from runtime.story_files import (
   list_generated_audio_files,
 )
 
+from .model_plan import (
+    MODEL_PLAN_SPECS,
+    choose_plan_key,
+    classify_image_model,
+    classify_image_provider,
+    detect_hardware_profile,
+    resolve_image_defaults,
+)
 from .options import AGE_CHOICES, CATEGORY_CHOICES, DEFAULT_CHIEF_OPTIONS, parse_dtype
 
 _LOG_BUFFER_SIZE = 2000
@@ -143,6 +308,10 @@ _MODEL_CLEANUP_WINDOW_SEC_DEFAULT = 900
 _MODEL_REAPER_INTERVAL_SEC = 10
 _LOG_LINE_PATTERN = re.compile(
     r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d+)?\s+\[(?P<level>[A-Za-z]+)\]\s?(?P<msg>.*)$"
+)
+_BOOK_RUN_DIR_PATTERN = re.compile(
+    r"^.+?_book-(?P<book_index>\d+)_of_(?P<book_total>\d+)_run-(?P<run_seq>\d+)$",
+    re.IGNORECASE,
 )
 
 
@@ -519,6 +688,8 @@ def _default_runner_payload(last_config: Dict[str, Any]) -> Dict[str, Any]:
         "last_story_root": None,
         "last_error": None,
         "pre_evaluation": None,
+        "stage_progress": None,
+        "stage_detail": None,
         "updated_at": _utc_now_iso(),
     }
 
@@ -528,7 +699,18 @@ _HTML_TEMPLATE = Path(__file__).parent / "templates" / "dashboard.html"
 def get_html() -> bytes:
     if _HTML_TEMPLATE.exists():
         with open(_HTML_TEMPLATE, "r", encoding="utf-8") as f:
-            return f.read().encode("utf-8")
+            html = f.read()
+        try:
+            css_mtime = int((Path(__file__).parent / "static" / "css" / "dashboard.css").stat().st_mtime)
+        except Exception:
+            css_mtime = 0
+        try:
+            js_mtime = int((Path(__file__).parent / "static" / "js" / "dashboard.js").stat().st_mtime)
+        except Exception:
+            js_mtime = 0
+        html = html.replace('/static/css/dashboard.css', f'/static/css/dashboard.css?v={css_mtime}')
+        html = html.replace('/static/js/dashboard.js', f'/static/js/dashboard.js?v={js_mtime}')
+        return html.encode("utf-8")
     return b"<html><body>Template not found.</body></html>"
 
 
@@ -545,6 +727,7 @@ class DashboardRuntime:
         self.history_file = self.records_dir / "dashboard_history.json"
         self.configs_file = self.records_dir / "dashboard_config_versions.json"
         self.alert_file = self.records_dir / "dashboard_alerts.json"
+        self.alert_state_file = self.records_dir / "dashboard_alert_state.json"
         self.module_jobs_file = self.records_dir / "dashboard_jobs.json"
         self.module_events_file = self.records_dir / "dashboard_job_events.json"
         self.module_history_file = self.records_dir / "dashboard_module_history.json"
@@ -574,6 +757,7 @@ class DashboardRuntime:
         self.history: List[Dict[str, Any]] = []
         self.config_versions: List[Dict[str, Any]] = []
         self.alerts: List[Dict[str, Any]] = []
+        self.suppressed_live_alert_ids: Dict[str, str] = {}
 
         self.module_log_seq = 0
         self.module_active_job: Optional[Dict[str, Any]] = None
@@ -613,6 +797,7 @@ class DashboardRuntime:
         self._load_history()
         self._load_config_versions()
         self._load_alerts()
+        self._load_alert_state()
         self._load_module_history()
         self._load_module_events()
         self._save_module_jobs_snapshot_locked()
@@ -853,6 +1038,24 @@ class DashboardRuntime:
 
     def _save_alerts(self) -> None:
         self._write_json_list(self.alert_file, self.alerts[-_ALERT_LIMIT:])
+
+    def _load_alert_state(self) -> None:
+        payload = self._read_json_dict(self.alert_state_file)
+        suppressed = payload.get("suppressed_live_alert_ids") if isinstance(payload, dict) else {}
+        if isinstance(suppressed, dict):
+            self.suppressed_live_alert_ids = {
+                str(key): str(value)
+                for key, value in suppressed.items()
+                if str(key).strip()
+            }
+        else:
+            self.suppressed_live_alert_ids = {}
+
+    def _save_alert_state(self) -> None:
+        self._write_json_dict(
+            self.alert_state_file,
+            {"suppressed_live_alert_ids": dict(self.suppressed_live_alert_ids)},
+        )
 
     def _load_module_history(self) -> None:
         self.module_history = self._read_json_list(self.module_history_file)[-_MODULE_HISTORY_LIMIT:]
@@ -1151,6 +1354,9 @@ class DashboardRuntime:
             story_input_mode = "preset"
         speaker_wav = _safe_text(payload.get("speaker_wav"), default="", max_length=512)
         speaker_dir = _safe_text(payload.get("speaker_dir"), default="", max_length=512)
+        model_plan = _safe_text(payload.get("model_plan"), default="auto", max_length=16).lower()
+        if model_plan not in {"auto", "quality", "balanced", "portable", "cpu", "off"}:
+            model_plan = "auto"
 
         sanitized: Dict[str, Any] = {
             "count": _safe_int(payload.get("count"), 1, min_value=1, max_value=500),
@@ -1167,6 +1373,7 @@ class DashboardRuntime:
             "story_materials": _safe_text(payload.get("story_materials"), default="", max_length=4000),
             "speaker_wav": speaker_wav or None,
             "speaker_dir": speaker_dir or None,
+            "model_plan": model_plan,
             "photo_enabled": _safe_bool(payload.get("photo_enabled"), True),
             "translation_enabled": _safe_bool(payload.get("translation_enabled"), True),
             "voice_enabled": _safe_bool(payload.get("voice_enabled"), True),
@@ -1930,7 +2137,18 @@ class DashboardRuntime:
             return {"ok": False, "error": "Expected WAV/RIFF audio payload"}
 
         script_text = _safe_text(payload.get("script_text"), default="", max_length=4000)
-        recordings_dir = self.root_dir / "runs" / "voice_samples"
+        custom_root = self.root_dir / "runs" / "voice_samples"
+        default_dir = custom_root / "custom"
+        custom_root.mkdir(parents=True, exist_ok=True)
+        default_dir.mkdir(parents=True, exist_ok=True)
+
+        selected_dir = self._safe_path_under_root(_safe_text(payload.get("speaker_dir"), default="", max_length=1200))
+        if selected_dir is not None:
+            try:
+                selected_dir.relative_to(custom_root.resolve(strict=False))
+            except Exception:
+                selected_dir = None
+        recordings_dir = selected_dir or default_dir
         recordings_dir.mkdir(parents=True, exist_ok=True)
 
         file_stem = f"speaker-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:6]}"
@@ -1950,8 +2168,105 @@ class DashboardRuntime:
         )
         return {
             "ok": True,
-            "path": str(wav_path),
+            "path": self._to_root_relative_path(wav_path),
+            "dir": self._to_root_relative_path(recordings_dir),
             "size_bytes": len(wav_bytes),
+        }
+
+    def list_voice_preset_samples(self) -> Dict[str, Any]:
+        root = self.root_dir / "models" / "XTTS-v2" / "samples"
+        samples: List[Dict[str, Any]] = []
+        if root.exists() and root.is_dir():
+            for item in sorted(root.glob("*.wav"), key=lambda path: path.name.lower()):
+                if not item.is_file():
+                    continue
+                samples.append(
+                    {
+                        "path": self._to_root_relative_path(item),
+                        "name": item.name,
+                        "language": self._infer_voice_sample_language(item),
+                    }
+                )
+        auto_defaults: Dict[str, str] = {}
+        for language in ("en", "zh", "zh-cn", "ja", "de", "es", "fr", "pt", "tr"):
+            resolved = self._best_wav_in_dir(root, language, fallback=False)
+            if resolved is not None:
+                auto_defaults[language] = self._to_root_relative_path(resolved)
+        fallback_wav = self._best_wav_in_dir(root, "en", fallback=True)
+        return {
+            "ok": True,
+            "root": self._to_root_relative_path(root),
+            "samples": samples,
+            "auto_defaults": auto_defaults,
+            "fallback_sample": self._to_root_relative_path(fallback_wav) if fallback_wav is not None else None,
+        }
+
+    def list_custom_voice_library(self, selected_dir_hint: str = "") -> Dict[str, Any]:
+        root = self.root_dir / "runs" / "voice_samples"
+        default_dir = root / "custom"
+        root.mkdir(parents=True, exist_ok=True)
+        default_dir.mkdir(parents=True, exist_ok=True)
+
+        selected_dir = self._safe_path_under_root(_safe_text(selected_dir_hint, default="", max_length=1200))
+        if selected_dir is not None:
+            try:
+                selected_dir.relative_to(root.resolve(strict=False))
+            except Exception:
+                selected_dir = None
+        selected_dir = selected_dir or default_dir
+        selected_dir.mkdir(parents=True, exist_ok=True)
+
+        directory_map: Dict[str, Path] = {str(root.resolve(strict=False)): root, str(default_dir.resolve(strict=False)): default_dir}
+        for item in root.rglob("*"):
+            if not item.is_dir():
+                continue
+            try:
+                rel = item.relative_to(root)
+            except Exception:
+                continue
+            if len(rel.parts) > 3:
+                continue
+            directory_map[str(item.resolve(strict=False))] = item
+
+        directories: List[Dict[str, Any]] = []
+        for item in sorted(directory_map.values(), key=lambda path: self._to_root_relative_path(path).lower()):
+            wav_count = 0
+            try:
+                wav_count = sum(1 for child in item.glob("*.wav") if child.is_file())
+            except Exception:
+                wav_count = 0
+            rel_path = self._to_root_relative_path(item)
+            label = "custom root" if item == root else str(item.relative_to(root)).replace("\\", "/")
+            directories.append(
+                {
+                    "path": rel_path,
+                    "label": label,
+                    "wav_count": wav_count,
+                }
+            )
+
+        files: List[Dict[str, Any]] = []
+        try:
+            wav_items = sorted(selected_dir.glob("*.wav"), key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
+        except Exception:
+            wav_items = []
+        for item in wav_items:
+            if not item.is_file():
+                continue
+            files.append(
+                {
+                    "path": self._to_root_relative_path(item),
+                    "name": item.name,
+                }
+            )
+
+        return {
+            "ok": True,
+            "root": self._to_root_relative_path(root),
+            "default_dir": self._to_root_relative_path(default_dir),
+            "selected_dir": self._to_root_relative_path(selected_dir),
+            "directories": directories,
+            "files": files,
         }
 
     @staticmethod
@@ -1974,7 +2289,61 @@ class DashboardRuntime:
             return str(path).replace("\\", "/")
 
     @staticmethod
-    def _latest_wav_in_dir(directory: Path) -> Optional[Path]:
+    def _normalize_voice_sample_language(value: str) -> str:
+        token = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+        if token in {"zh-tw", "zh-hant", "zho-hant", "cmn-hant", "zh-hk"}:
+            return "zh-tw"
+        if token in {"zh-cn", "zh-hans", "zho-hans", "cmn-hans"}:
+            return "zh-cn"
+        if token.startswith("en"):
+            return "en"
+        if token.startswith("zh"):
+            return "zh"
+        if token.startswith("ja"):
+            return "ja"
+        if token.startswith("de"):
+            return "de"
+        if token.startswith("es"):
+            return "es"
+        if token.startswith("fr"):
+            return "fr"
+        if token.startswith("pt"):
+            return "pt"
+        if token.startswith("tr"):
+            return "tr"
+        return token
+
+    @classmethod
+    def _preferred_voice_sample_tokens(cls, language: str) -> List[str]:
+        token = cls._normalize_voice_sample_language(language)
+        if token in {"", "en"}:
+            return ["en", "en-us", "en-gb"]
+        if token in {"zh", "zh-tw"}:
+            return ["zh-tw", "zh-hant", "zho-hant", "zh", "zh-cn", "zh-hans", "zho-hans"]
+        if token == "zh-cn":
+            return ["zh-cn", "zh-hans", "zho-hans", "zh", "zh-tw", "zh-hant", "zho-hant"]
+        if token == "ja":
+            return ["ja", "ja-jp"]
+        return [token]
+
+    @staticmethod
+    def _voice_sample_rank(path: Path, preferred_tokens: Sequence[str]) -> Optional[int]:
+        stem = re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-")
+        for index, token in enumerate(preferred_tokens):
+            if not token:
+                continue
+            if stem == token or stem.startswith(token + "-") or stem.endswith("-" + token) or f"-{token}-" in stem:
+                return index
+        return None
+
+    def _infer_voice_sample_language(self, path: Path) -> str:
+        stem = re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-")
+        for token in ("zh-tw", "zh-cn", "ja", "en", "de", "es", "fr", "pt", "tr", "zh"):
+            if stem == token or stem.startswith(token + "-") or stem.endswith("-" + token) or f"-{token}-" in stem:
+                return token
+        return "default"
+
+    def _best_wav_in_dir(self, directory: Path, language: str, *, fallback: bool = True) -> Optional[Path]:
         if not directory.exists() or not directory.is_dir():
             return None
         candidates: List[Path] = []
@@ -1986,20 +2355,47 @@ class DashboardRuntime:
             return None
         if not candidates:
             return None
-        candidates.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
+        candidates.sort(key=lambda p: p.name.lower())
+
+        preferred_tokens = self._preferred_voice_sample_tokens(language)
+        ranked: List[Tuple[int, str, Path]] = []
+        for item in candidates:
+            rank = self._voice_sample_rank(item, preferred_tokens)
+            if rank is not None:
+                ranked.append((rank, item.name.lower(), item))
+        if ranked:
+            ranked.sort(key=lambda entry: (entry[0], entry[1]))
+            return ranked[0][2]
+
+        if not fallback:
+            return None
+
+        english_tokens = self._preferred_voice_sample_tokens("en")
+        english_ranked: List[Tuple[int, str, Path]] = []
+        for item in candidates:
+            rank = self._voice_sample_rank(item, english_tokens)
+            if rank is not None:
+                english_ranked.append((rank, item.name.lower(), item))
+        if english_ranked:
+            english_ranked.sort(key=lambda entry: (entry[0], entry[1]))
+            return english_ranked[0][2]
         return candidates[0]
 
     def _resolve_general_speaker_wav(self, speaker_hint: str, language: str) -> Optional[Path]:
         hinted = self._safe_path_under_root(speaker_hint)
         if hinted and hinted.exists() and hinted.is_file() and hinted.suffix.lower() == ".wav":
             return hinted
+        if hinted and hinted.exists() and hinted.is_dir():
+            wav = self._best_wav_in_dir(hinted, language, fallback=True)
+            if wav is not None:
+                return wav
 
         language_text = _safe_text(language, default="", max_length=24).lower()
         language_short = language_text.split("-", 1)[0] if language_text else ""
 
         candidate_dirs: List[Path] = [
-            self.root_dir / "runs" / "voice_samples",
             self.root_dir / "models" / "XTTS-v2" / "samples",
+            self.root_dir / "runs" / "voice_samples",
         ]
         if language_text:
             candidate_dirs.insert(1, self.root_dir / "models" / "XTTS-v2" / "samples" / language_text)
@@ -2007,7 +2403,7 @@ class DashboardRuntime:
             candidate_dirs.insert(2, self.root_dir / "models" / "XTTS-v2" / "samples" / language_short)
 
         for directory in candidate_dirs:
-            wav = self._latest_wav_in_dir(directory)
+            wav = self._best_wav_in_dir(directory, language, fallback=True)
             if wav is not None:
                 return wav
         return None
@@ -2183,6 +2579,10 @@ class DashboardRuntime:
             max_value=2_147_483_647,
         )
         overrides = {
+            "provider": _safe_text(payload.get("provider"), default="", max_length=64),
+            "model_family": _safe_text(payload.get("model_family"), default="", max_length=64),
+            "base_model_dir": _safe_text(payload.get("base_model_dir"), default="", max_length=1200),
+            "refiner_model_dir": _safe_text(payload.get("refiner_model_dir"), default="", max_length=1200),
             "width": payload.get("width"),
             "height": payload.get("height"),
             "steps": payload.get("steps"),
@@ -2784,6 +3184,32 @@ class DashboardRuntime:
         return roots
 
     def _discover_run_log_files(self, run_id: str, *, history_item: Optional[Dict[str, Any]] = None) -> List[Path]:
+        records = self._discover_run_log_records(run_id, history_item=history_item)
+        return [item.get("path") for item in records if isinstance(item.get("path"), Path)]
+
+    @staticmethod
+    def _parse_book_run_dir_name(name: str) -> Dict[str, Optional[int]]:
+        token = _safe_text(name, default="", max_length=240)
+        if not token:
+            return {"source_tag": "", "book_index": None, "book_total": None, "run_seq": None}
+
+        match = _BOOK_RUN_DIR_PATTERN.match(token)
+        if match is None:
+            return {
+                "source_tag": token,
+                "book_index": None,
+                "book_total": None,
+                "run_seq": None,
+            }
+
+        return {
+            "source_tag": token,
+            "book_index": _safe_int(match.group("book_index"), 0, min_value=1),
+            "book_total": _safe_int(match.group("book_total"), 0, min_value=1),
+            "run_seq": _safe_int(match.group("run_seq"), 0, min_value=1),
+        }
+
+    def _discover_run_log_records(self, run_id: str, *, history_item: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         token = _safe_text(run_id, default="", max_length=120)
         if not token:
             return []
@@ -2834,14 +3260,53 @@ class DashboardRuntime:
         rows_all.sort(key=lambda item: _safe_float(item.get("mtime_ts"), 0.0))
         rows_in_window.sort(key=lambda item: _safe_float(item.get("mtime_ts"), 0.0))
 
-        selected = rows_in_window if rows_in_window else rows_all
-        if not selected:
+        selected_rows = rows_in_window if rows_in_window else rows_all
+        if not selected_rows:
             return []
 
-        if len(selected) > total_hint:
-            selected = selected[-total_hint:]
+        enriched_rows: List[Dict[str, Any]] = []
+        for item in selected_rows:
+            path = item.get("path")
+            if not isinstance(path, Path):
+                continue
+            meta = self._parse_book_run_dir_name(path.parent.parent.name)
+            enriched = dict(item)
+            enriched.update(meta)
+            enriched_rows.append(enriched)
 
-        return [item.get("path") for item in selected if isinstance(item.get("path"), Path)]
+        if not enriched_rows:
+            return []
+
+        grouped_by_book: Dict[int, Dict[str, Any]] = {}
+        ungrouped: List[Dict[str, Any]] = []
+        for item in enriched_rows:
+            book_index = _safe_int(item.get("book_index"), 0, min_value=0)
+            if book_index > 0:
+                current = grouped_by_book.get(book_index)
+                if current is None or _safe_float(current.get("mtime_ts"), 0.0) <= _safe_float(item.get("mtime_ts"), 0.0):
+                    grouped_by_book[book_index] = item
+            else:
+                ungrouped.append(item)
+
+        if grouped_by_book:
+            selected: List[Dict[str, Any]] = [grouped_by_book[index] for index in sorted(grouped_by_book)]
+            if total_hint > 0 and len(selected) < total_hint and ungrouped:
+                used = {
+                    str(item.get("path"))
+                    for item in selected
+                    if isinstance(item.get("path"), Path)
+                }
+                extras = [
+                    item for item in sorted(ungrouped, key=lambda row: _safe_float(row.get("mtime_ts"), 0.0))
+                    if str(item.get("path")) not in used
+                ]
+                while extras and len(selected) < total_hint:
+                    selected.append(extras.pop())
+            return selected
+
+        if total_hint > 0 and len(enriched_rows) > total_hint:
+            enriched_rows = enriched_rows[-total_hint:]
+        return enriched_rows
 
     def _read_run_logs_from_files(
         self,
@@ -2849,18 +3314,34 @@ class DashboardRuntime:
         *,
         history_item: Optional[Dict[str, Any]] = None,
         log_limit: int = 400,
+        book_index: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        limit = _safe_int(log_limit, 400, min_value=1, max_value=5000)
-        files = self._discover_run_log_files(run_id, history_item=history_item)
-        if not files:
+        requested_book_index = _safe_int(book_index, 0, min_value=0)
+        limit = _safe_int(log_limit, 400, min_value=1, max_value=6000)
+        records = self._discover_run_log_records(run_id, history_item=history_item)
+        if requested_book_index > 0:
+            records = [
+                item for item in records
+                if _safe_int(item.get("book_index"), 0, min_value=0) == requested_book_index
+            ]
+            limit = max(limit, 4000)
+
+        if not records:
             return []
 
-        per_file_limit = max(120, min(1600, (limit // max(1, len(files))) + 120))
+        file_count = len(records)
+        per_file_limit = max(120, min(1600, (limit // max(1, file_count)) + 120))
+        if requested_book_index > 0 and file_count <= 1:
+            per_file_limit = max(per_file_limit, limit)
+
         rows: List[Dict[str, Any]] = []
         seq = 1
-        add_source_tag = len(files) > 1
+        add_source_tag = file_count > 1 and requested_book_index <= 0
 
-        for log_path in files:
+        for record in records:
+            log_path = record.get("path")
+            if not isinstance(log_path, Path):
+                continue
             try:
                 raw_lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
             except Exception:
@@ -2869,7 +3350,7 @@ class DashboardRuntime:
             if len(raw_lines) > per_file_limit:
                 raw_lines = raw_lines[-per_file_limit:]
 
-            source_tag = log_path.parent.parent.name
+            source_tag = str(record.get("source_tag") or log_path.parent.parent.name)
             fallback_ts: Optional[str]
             try:
                 fallback_ts = datetime.fromtimestamp(float(log_path.stat().st_mtime), tz=timezone.utc).isoformat()
@@ -2900,6 +3381,8 @@ class DashboardRuntime:
                         "run_id": run_id,
                         "level": level,
                         "text": text,
+                        "source_tag": source_tag,
+                        "book_index": _safe_int(record.get("book_index"), 0, min_value=0) or None,
                     }
                 )
                 seq += 1
@@ -2933,12 +3416,20 @@ class DashboardRuntime:
             return []
 
         roots = self._collect_run_story_roots(token, history_item=history_item)
+        log_records = self._discover_run_log_records(token, history_item=history_item)
+        log_records_by_index: Dict[int, Dict[str, Any]] = {}
+        for item in log_records:
+            index = _safe_int(item.get("book_index"), 0, min_value=0)
+            if index > 0 and index not in log_records_by_index:
+                log_records_by_index[index] = item
+
         books: List[Dict[str, Any]] = []
         for index, story_root in enumerate(roots, start=1):
             story_root_rel = self._to_root_relative_path(story_root)
             report_file: Optional[str] = None
             report_updated_at: Optional[str] = None
             overall_score: Optional[float] = None
+            log_record = log_records_by_index.get(index)
 
             report_path = None
             for candidate in self._evaluation_report_candidates(story_root, "canonical"):
@@ -2968,8 +3459,27 @@ class DashboardRuntime:
                     "report_file": report_file,
                     "overall_score": overall_score,
                     "updated_at": report_updated_at,
+                    "artifact_run": str(log_record.get("source_tag") or "") if isinstance(log_record, dict) else None,
+                    "log_path": self._to_root_relative_path(log_record.get("path")) if isinstance(log_record, dict) and isinstance(log_record.get("path"), Path) else None,
                 }
             )
+
+        if not books and log_records:
+            for fallback_index, record in enumerate(log_records, start=1):
+                book_index = _safe_int(record.get("book_index"), fallback_index, min_value=1)
+                books.append(
+                    {
+                        "book_index": book_index,
+                        "book_id": f"{token}::book:{book_index}",
+                        "title": f"book_{book_index:02d}",
+                        "story_root": None,
+                        "report_file": None,
+                        "overall_score": None,
+                        "updated_at": None,
+                        "artifact_run": str(record.get("source_tag") or "") or None,
+                        "log_path": self._to_root_relative_path(record.get("path")) if isinstance(record.get("path"), Path) else None,
+                    }
+                )
 
         return books
 
@@ -3109,6 +3619,22 @@ class DashboardRuntime:
             return f"{prompt}, {suffix}"
         return prompt
 
+    def _resolve_image_runtime_defaults(self) -> Dict[str, Any]:
+        hardware = detect_hardware_profile()
+        models_dir = self.root_dir / "models"
+        plan_key, image_base, image_refiner, image_profile, notes = resolve_image_defaults(
+            "auto",
+            models_dir=models_dir,
+            hardware=hardware,
+        )
+        return {
+            "plan_key": plan_key,
+            "image_base": image_base or Path(DEFAULT_CHIEF_OPTIONS.sdxl_base),
+            "image_refiner": image_refiner or Path(DEFAULT_CHIEF_OPTIONS.sdxl_refiner),
+            "image_profile": image_profile,
+            "notes": notes,
+        }
+
     def _build_image_item(
         self,
         *,
@@ -3122,6 +3648,7 @@ class DashboardRuntime:
         seed: int,
         width: int,
         height: int,
+        runtime_defaults: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         image_main_dir = image_root / "main"
         image_original_dir = image_root / "original"
@@ -3145,6 +3672,12 @@ class DashboardRuntime:
 
         task_id = f"{resource_key}::{task_type}::{task_name}"
         prompt = self._compose_prompt(base_prompt, task_type)
+        defaults = runtime_defaults if isinstance(runtime_defaults, dict) else self._resolve_image_runtime_defaults()
+        image_profile = defaults.get("image_profile")
+        steps = int(getattr(image_profile, "steps", DEFAULT_CHIEF_OPTIONS.photo_steps))
+        guidance = float(getattr(image_profile, "guidance", DEFAULT_CHIEF_OPTIONS.photo_guidance))
+        skip_refiner = bool(getattr(image_profile, "skip_refiner", DEFAULT_CHIEF_OPTIONS.photo_skip_refiner))
+        refiner_steps = getattr(image_profile, "refiner_steps", DEFAULT_CHIEF_OPTIONS.photo_refiner_steps)
 
         return {
             "task_id": task_id,
@@ -3159,10 +3692,12 @@ class DashboardRuntime:
             "seed": int(seed),
             "width": int(width),
             "height": int(height),
-            "steps": int(DEFAULT_CHIEF_OPTIONS.photo_steps),
-            "guidance": float(DEFAULT_CHIEF_OPTIONS.photo_guidance),
-            "skip_refiner": bool(DEFAULT_CHIEF_OPTIONS.photo_skip_refiner),
-            "refiner_steps": DEFAULT_CHIEF_OPTIONS.photo_refiner_steps,
+            "steps": steps,
+            "guidance": guidance,
+            "skip_refiner": skip_refiner,
+            "refiner_steps": refiner_steps,
+            "base_model": str(defaults.get("image_base") or ""),
+            "image_plan": str(defaults.get("plan_key") or "auto"),
             "image_path": str(preview_path),
             "output_paths": [str(original_path), str(main_path)],
             "exists": preview_path.exists(),
@@ -3171,6 +3706,10 @@ class DashboardRuntime:
 
     def _collect_image_items_for_story(self, story_root: Path, limit: int = 200) -> List[Dict[str, Any]]:
         items: List[Dict[str, Any]] = []
+        runtime_defaults = self._resolve_image_runtime_defaults()
+        image_profile = runtime_defaults.get("image_profile")
+        page_width = int(getattr(image_profile, "width", DEFAULT_CHIEF_OPTIONS.photo_width))
+        page_height = int(getattr(image_profile, "height", DEFAULT_CHIEF_OPTIONS.photo_height))
         for resource_dir in self._find_resource_dirs(story_root):
             image_root = self._resolve_image_root_for_resource(story_root, resource_dir)
             seed = load_or_create_seed(resource_dir)
@@ -3189,8 +3728,9 @@ class DashboardRuntime:
                             prompt_file=cover_prompt_file,
                             base_prompt=base_prompt,
                             seed=seed,
-                            width=int(DEFAULT_CHIEF_OPTIONS.photo_width),
-                            height=int(DEFAULT_CHIEF_OPTIONS.photo_height),
+                            width=page_width,
+                            height=page_height,
+                            runtime_defaults=runtime_defaults,
                         )
                     )
 
@@ -3211,6 +3751,7 @@ class DashboardRuntime:
                         seed=seed,
                         width=1024,
                         height=1024,
+                        runtime_defaults=runtime_defaults,
                     )
                 )
 
@@ -3229,8 +3770,9 @@ class DashboardRuntime:
                         prompt_file=page_prompt,
                         base_prompt=base_prompt,
                         seed=seed,
-                        width=int(DEFAULT_CHIEF_OPTIONS.photo_width),
-                        height=int(DEFAULT_CHIEF_OPTIONS.photo_height),
+                        width=page_width,
+                        height=page_height,
+                        runtime_defaults=runtime_defaults,
                     )
                 )
 
@@ -3409,23 +3951,49 @@ class DashboardRuntime:
         }
 
     def _build_image_backend_config(self, overrides: Dict[str, Any]) -> Any:
-        steps = _safe_int(overrides.get("steps"), int(DEFAULT_CHIEF_OPTIONS.photo_steps), min_value=1, max_value=150)
-        guidance = _safe_float(overrides.get("guidance"), float(DEFAULT_CHIEF_OPTIONS.photo_guidance))
-        skip_refiner = _safe_bool(overrides.get("skip_refiner"), bool(DEFAULT_CHIEF_OPTIONS.photo_skip_refiner))
+        runtime_defaults = self._resolve_image_runtime_defaults()
+        image_profile = runtime_defaults.get("image_profile")
+        default_steps = int(getattr(image_profile, "steps", DEFAULT_CHIEF_OPTIONS.photo_steps))
+        default_guidance = float(getattr(image_profile, "guidance", DEFAULT_CHIEF_OPTIONS.photo_guidance))
+        default_skip_refiner = bool(getattr(image_profile, "skip_refiner", DEFAULT_CHIEF_OPTIONS.photo_skip_refiner))
+        default_refiner_steps = getattr(image_profile, "refiner_steps", DEFAULT_CHIEF_OPTIONS.photo_refiner_steps)
+        default_width = int(getattr(image_profile, "width", DEFAULT_CHIEF_OPTIONS.photo_width))
+        default_height = int(getattr(image_profile, "height", DEFAULT_CHIEF_OPTIONS.photo_height))
+        default_base = runtime_defaults.get("image_base") or Path(DEFAULT_CHIEF_OPTIONS.sdxl_base)
+        default_refiner = runtime_defaults.get("image_refiner") or Path(DEFAULT_CHIEF_OPTIONS.sdxl_refiner)
+        override_base = _safe_text(overrides.get("base_model_dir"), default="", max_length=1200)
+        base_model_dir = Path(override_base) if override_base else Path(default_base)
+        provider = _safe_text(overrides.get("provider"), default=classify_image_provider(base_model_dir), max_length=64).lower()
+        model_family = _safe_text(overrides.get("model_family"), default=classify_image_model(base_model_dir), max_length=64).lower()
+        override_refiner = _safe_text(overrides.get("refiner_model_dir"), default="", max_length=1200)
+        refiner_model_dir = Path(override_refiner) if override_refiner else Path(default_refiner)
+        if not str(model_family).startswith("sdxl"):
+            refiner_model_dir = Path("")
+
+        steps = _safe_int(overrides.get("steps"), default_steps, min_value=1, max_value=150)
+        guidance = _safe_float(overrides.get("guidance"), default_guidance)
+        skip_refiner = _safe_bool(overrides.get("skip_refiner"), default_skip_refiner)
         refiner_steps_raw = overrides.get("refiner_steps")
         refiner_steps = None
         if refiner_steps_raw not in {None, ""}:
             refiner_steps = _safe_int(refiner_steps_raw, max(1, steps // 4), min_value=1, max_value=80)
+        elif default_refiner_steps not in {None, ""}:
+            refiner_steps = _safe_int(default_refiner_steps, max(1, steps // 4), min_value=1, max_value=80)
 
         return SimpleNamespace(
-            provider="diffusers_sdxl",
-            model_family="sdxl",
-            base_model_dir=Path(DEFAULT_CHIEF_OPTIONS.sdxl_base),
-            refiner_model_dir=Path(DEFAULT_CHIEF_OPTIONS.sdxl_refiner),
+            provider=provider,
+            model_family=model_family,
+            base_model_dir=base_model_dir,
+            refiner_model_dir=refiner_model_dir,
             device=str(DEFAULT_CHIEF_OPTIONS.photo_device),
             dtype=parse_dtype(str(DEFAULT_CHIEF_OPTIONS.photo_dtype)),
-            width=_safe_int(overrides.get("width"), int(DEFAULT_CHIEF_OPTIONS.photo_width), min_value=256, max_value=2048),
-            height=_safe_int(overrides.get("height"), int(DEFAULT_CHIEF_OPTIONS.photo_height), min_value=256, max_value=2048),
+            quantization_mode=_safe_text(overrides.get("quantization_mode"), default=str(getattr(DEFAULT_CHIEF_OPTIONS, "photo_quantization", "fp8")), max_length=32).lower(),
+            output_mode=_safe_text(overrides.get("output_mode"), default=str(getattr(DEFAULT_CHIEF_OPTIONS, "photo_output_mode", "dual")), max_length=32).lower(),
+            asset_granularity=_safe_text(overrides.get("asset_granularity"), default=str(getattr(DEFAULT_CHIEF_OPTIONS, "photo_asset_granularity", "page_bundle")), max_length=64).lower(),
+            bg_removal_policy=_safe_text(overrides.get("bg_removal_policy"), default=str(getattr(DEFAULT_CHIEF_OPTIONS, "photo_bg_removal_policy", "characters_props")), max_length=64).lower(),
+            reuse_strategy=_safe_text(overrides.get("reuse_strategy"), default=str(getattr(DEFAULT_CHIEF_OPTIONS, "photo_reuse_strategy", "page_bundle_first")), max_length=64).lower(),
+            width=_safe_int(overrides.get("width"), default_width, min_value=256, max_value=2048),
+            height=_safe_int(overrides.get("height"), default_height, min_value=256, max_value=2048),
             steps=steps,
             guidance=guidance,
             refiner_steps=refiner_steps,
@@ -3443,6 +4011,11 @@ class DashboardRuntime:
             str(getattr(cfg, "refiner_model_dir", "")),
             str(getattr(cfg, "device", "")),
             str(getattr(cfg, "dtype", "")),
+            str(getattr(cfg, "quantization_mode", "")),
+            str(getattr(cfg, "output_mode", "")),
+            str(getattr(cfg, "asset_granularity", "")),
+            str(getattr(cfg, "bg_removal_policy", "")),
+            str(getattr(cfg, "reuse_strategy", "")),
             bool(getattr(cfg, "skip_refiner", False)),
             bool(getattr(cfg, "low_vram", False)),
         )
@@ -3615,6 +4188,8 @@ class DashboardRuntime:
             str(payload["pages"]),
             "--story-input-mode",
             str(payload.get("story_input_mode") or "preset"),
+            "--model-plan",
+            str(payload.get("model_plan") or "auto"),
             "--pre-eval-policy",
             str(payload.get("pre_eval_policy") or "stop"),
             "--pre-eval-threshold",
@@ -3651,7 +4226,15 @@ class DashboardRuntime:
         return cmd
 
     def _is_running(self) -> bool:
-        return bool(self.process and self.process.poll() is None)
+        process = self.process
+        if process is None:
+            return False
+        try:
+            if process.poll() is not None:
+                return False
+        except Exception:
+            return False
+        return self._pid_alive(getattr(process, "pid", 0))
 
     def _read_runner_status(self) -> Dict[str, Any]:
         if not self.status_file.exists():
@@ -3662,12 +4245,96 @@ class DashboardRuntime:
         except Exception:
             return {}
 
+    def _runner_payload_from_history_item(self, history_item: Dict[str, Any], *, fallback_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        config = dict(fallback_config or {})
+        if isinstance(history_item.get("config"), dict):
+            config = dict(history_item.get("config") or {})
+
+        runner = _default_runner_payload(config)
+        runner["state"] = str(history_item.get("state") or "stopped")
+        runner["total_books"] = _safe_int(history_item.get("total_books"), _safe_int(config.get("count"), 0, min_value=0), min_value=0)
+        runner["completed_books"] = _safe_int(history_item.get("completed_books"), 0, min_value=0)
+        runner["success_books"] = _safe_int(history_item.get("success_books"), 0, min_value=0)
+        runner["failed_books"] = _safe_int(history_item.get("failed_books"), 0, min_value=0)
+        runner["current_book"] = _safe_int(history_item.get("completed_books"), 0, min_value=0)
+        runner["current_attempt"] = 0
+        runner["current_stage"] = str(history_item.get("current_stage") or runner["state"] or "stopped")
+        runner["last_story_root"] = history_item.get("story_root")
+        runner["last_error"] = history_item.get("last_error")
+        runner["stage_progress"] = None
+        runner["stage_detail"] = None
+        runner["model_plan"] = _safe_text(config.get("model_plan"), default="auto", max_length=16)
+        runner["updated_at"] = str(history_item.get("finished_at") or history_item.get("started_at") or _utc_now_iso())
+        return runner
+
     def _clean_stale_status_locked(self) -> None:
         if self.status_file.exists():
             try:
                 self.status_file.unlink()
             except Exception:
                 pass
+
+    def _recover_orphaned_active_run(self) -> None:
+        with self.lock:
+            active = dict(self.active_job) if isinstance(self.active_job, dict) else None
+            run_id = str((active or {}).get("run_id") or self.current_run_id or "").strip()
+            last_config = dict(self.last_config)
+
+        if not active and not run_id:
+            return
+
+        external_chief = self._find_external_chief_process()
+        if external_chief is not None:
+            return
+
+        runner = self._read_runner_status()
+        updated_at = _parse_iso_datetime(runner.get("updated_at"))
+        stale_sec: Optional[float] = None
+        if updated_at is not None:
+            stale_sec = max(0.0, (datetime.now(timezone.utc) - updated_at).total_seconds())
+
+        with self.lock:
+            history_item = None
+            if run_id:
+                for item in reversed(self.history):
+                    if str(item.get("run_id") or "") == run_id:
+                        history_item = dict(item)
+                        break
+            if isinstance(history_item, dict):
+                final_state = str(history_item.get("state") or "").strip().lower()
+                if final_state in {"completed", "failed", "stopped", "error"}:
+                    history_exit = history_item.get("exit_code")
+                    exit_code = None if history_exit in {None, ""} else _safe_int(history_exit, 0)
+                    if isinstance(history_item.get("config"), dict):
+                        self.last_config = dict(history_item.get("config") or {})
+                    self.process = None
+                    self.active_job = None
+                    self.current_run_id = None
+                    self.current_run_started_at = None
+                    self.current_run_started_iso = None
+                    self.current_exit_code = exit_code
+                    self.current_status_signature = None
+                    self._clean_stale_status_locked()
+                    self._release_cross_process_run_lock()
+                    self._append_log_line_locked(
+                        "[dashboard] Reconciled stale active run from persisted history.",
+                        run_id=run_id or None,
+                        level="warning",
+                    )
+                    return
+
+            if stale_sec is None or stale_sec < _STALE_RUN_RECOVERY_GRACE_SEC:
+                return
+
+            inferred_exit = self.current_exit_code if self.current_exit_code is not None else 15
+            self.process = None
+            self._append_log_line_locked(
+                "[dashboard] Recovered orphaned active run: no chief process detected; marking run stopped.",
+                run_id=run_id or None,
+                level="warning",
+            )
+            self._finalize_run_locked(state="stopped", runner=runner or _default_runner_payload(last_config), exit_code=inferred_exit)
+            self._clean_stale_status_locked()
 
     def _sort_queue_locked(self) -> None:
         self.pending_jobs.sort(key=lambda item: (item.get("priority_rank", 1), item.get("enqueued_at_ts", 0.0)))
@@ -3969,12 +4636,17 @@ class DashboardRuntime:
         with self.lock:
             process = self.process
             active = self.active_job
-        if not process or not active:
+        if not active:
+            return
+        if not process:
+            self._recover_orphaned_active_run()
             return
 
         exit_code = process.poll()
-        if exit_code is None:
+        if exit_code is None and self._pid_alive(getattr(process, "pid", 0)):
             return
+        if exit_code is None:
+            exit_code = self.current_exit_code if self.current_exit_code is not None else 15
 
         run_id = str(active.get("run_id") or "")
         runner = self._read_runner_status()
@@ -4182,6 +4854,9 @@ class DashboardRuntime:
             if removed_alerts:
                 self.alerts = kept_alerts
                 self._save_alerts()
+            if self.suppressed_live_alert_ids:
+                self.suppressed_live_alert_ids = {}
+                self._save_alert_state()
 
             self.history = []
             self._save_history()
@@ -4227,6 +4902,11 @@ class DashboardRuntime:
                 alert["acknowledged_at"] = _utc_now_iso()
                 self._save_alerts()
                 return {"ok": True}
+            live_alert_id = str(alert_id or "").strip()
+            if live_alert_id.startswith("derived-"):
+                self.suppressed_live_alert_ids[live_alert_id] = _utc_now_iso()
+                self._save_alert_state()
+                return {"ok": True, "suppressed": True}
         return {"ok": False, "error": f"Alert not found: {alert_id}"}
 
     def _recent_failure_ratio_locked(self, window: int = 10) -> float:
@@ -4247,6 +4927,7 @@ class DashboardRuntime:
             queue_depth = len(self.pending_jobs)
             running = self._is_running()
             failure_ratio = self._recent_failure_ratio_locked(window=12)
+            suppressed_live_alert_ids = dict(self.suppressed_live_alert_ids)
 
         derived: List[Dict[str, Any]] = []
         if queue_depth >= 4:
@@ -4286,10 +4967,28 @@ class DashboardRuntime:
                 "derived": True,
             })
 
+        active_derived_ids = {str(item.get("alert_id") or "") for item in derived}
+        if suppressed_live_alert_ids:
+            stale_suppressed = [key for key in suppressed_live_alert_ids if key not in active_derived_ids]
+            if stale_suppressed:
+                with self.lock:
+                    changed = False
+                    for key in stale_suppressed:
+                        if key in self.suppressed_live_alert_ids:
+                            self.suppressed_live_alert_ids.pop(key, None)
+                            changed = True
+                    if changed:
+                        self._save_alert_state()
+                    suppressed_live_alert_ids = dict(self.suppressed_live_alert_ids)
+
         all_items = base_items + derived
         all_items.sort(key=lambda item: str(item.get("ts") or ""), reverse=True)
         if not include_ack:
-            all_items = [item for item in all_items if not item.get("acknowledged")]
+            all_items = [
+                item
+                for item in all_items
+                if (not item.get("acknowledged")) and (str(item.get("alert_id") or "") not in suppressed_live_alert_ids)
+            ]
         return {
             "ok": True,
             "items": all_items[:limit],
@@ -4447,9 +5146,33 @@ class DashboardRuntime:
             related_alerts = [dict(item) for item in self.alerts if str(item.get("run_id") or "") == str(run_id)]
             related_alerts.sort(key=lambda item: str(item.get("ts") or ""), reverse=True)
 
+        books = self._build_run_book_entries(run_id, history_item=history_item)
+        selected_book = self._select_run_book_entry(books, book)
+        selected_book_index = _safe_int(
+            selected_book.get("book_index") if isinstance(selected_book, dict) else None,
+            0,
+            min_value=0,
+        )
+
         run_state = str(history_item.get("state") or "").strip().lower()
+        logs_scope = "run"
+        logs_source = None
         file_logs = self._read_run_logs_from_files(str(run_id), history_item=history_item, log_limit=log_limit)
-        if file_logs:
+        selected_book_logs: List[Dict[str, Any]] = []
+        if selected_book_index > 0:
+            selected_book_logs = self._read_run_logs_from_files(
+                str(run_id),
+                history_item=history_item,
+                log_limit=max(log_limit, 4000),
+                book_index=selected_book_index,
+            )
+            if selected_book_logs:
+                logs = selected_book_logs
+                logs_scope = "book"
+                if isinstance(selected_book, dict):
+                    logs_source = selected_book.get("artifact_run") or selected_book.get("log_path")
+
+        if logs_scope != "book" and file_logs:
             if run_state in {"completed", "failed", "stopped", "error"} or not logs:
                 logs = file_logs[-log_limit:]
             else:
@@ -4464,9 +5187,9 @@ class DashboardRuntime:
                 if len(merged) > log_limit:
                     merged = merged[-log_limit:]
                 logs = merged
-
-        books = self._build_run_book_entries(run_id, history_item=history_item)
-        selected_book = self._select_run_book_entry(books, book)
+            if not logs_source and logs:
+                first_source = logs[0].get("source_tag") if isinstance(logs[0], dict) else None
+                logs_source = str(first_source or "") or None
 
         return {
             "ok": True,
@@ -4474,8 +5197,12 @@ class DashboardRuntime:
             "books": books,
             "selected_book": selected_book,
             "logs": logs,
+            "logs_scope": logs_scope,
+            "logs_source": logs_source,
             "events": events,
+            "events_scope": "run",
             "alerts": related_alerts,
+            "alerts_scope": "run",
         }
 
     def get_evaluation(
@@ -4642,11 +5369,16 @@ class DashboardRuntime:
             last_error = self.last_error
             queue_depth = len(self.pending_jobs)
             active_job = _job_public_view(self.active_job) if self.active_job else None
+            if active_job is not None and isinstance(self.active_job, dict):
+                payload = self.active_job.get("payload")
+                if isinstance(payload, dict):
+                    active_job["payload"] = dict(payload)
             module_queue_depth = len(self.module_pending_jobs)
             module_active_job = self._module_job_public_view(self.module_active_job)
             status_signature_old = self.current_status_signature
             log_next_seq = self.log_seq + 1
             failure_ratio = self._recent_failure_ratio_locked(window=12)
+            latest_history = dict(self.history[-1]) if self.history else None
 
         runner = self._read_runner_status()
         if not runner:
@@ -4654,10 +5386,19 @@ class DashboardRuntime:
 
         runner_state = str(runner.get("state") or "").lower()
         if not running and runner_state == "running":
-            runner = dict(runner)
-            runner["state"] = "stopped"
-            runner["current_stage"] = "stopped"
-
+            if isinstance(latest_history, dict):
+                latest_state = str(latest_history.get("state") or "").strip().lower()
+                if latest_state in {"completed", "failed", "stopped", "error"}:
+                    runner = self._runner_payload_from_history_item(latest_history, fallback_config=last_config)
+                    runner_state = str(runner.get("state") or "").lower()
+                else:
+                    runner = dict(runner)
+                    runner["state"] = "stopped"
+                    runner["current_stage"] = "stopped"
+            else:
+                runner = dict(runner)
+                runner["state"] = "stopped"
+                runner["current_stage"] = "stopped"
         status_signature = "|".join(
             [
                 str(runner.get("updated_at")),
@@ -4683,19 +5424,106 @@ class DashboardRuntime:
         completed_books = _safe_int(runner.get("completed_books"), 0, min_value=0, max_value=total_books if total_books > 0 else None)
         success_books = _safe_int(runner.get("success_books"), 0, min_value=0)
         failed_books = _safe_int(runner.get("failed_books"), 0, min_value=0)
+        stage_progress = dict(runner.get("stage_progress") or {}) if isinstance(runner.get("stage_progress"), dict) else {}
+        stage_detail = _safe_text(runner.get("stage_detail"), default="", max_length=400) or None
+
+        def _stage_range_for(stage_value: str) -> Tuple[float, float]:
+            token = str(stage_value or "").upper()
+            if "PRE_EVAL" in token:
+                return 0.0, 0.08
+            if "STORY" in token or "LLM" in token:
+                return 0.08, 0.35
+            if "IMAGE" in token or "SDXL" in token:
+                return 0.35, 0.70
+            if "TRANSLATE" in token or "TRANSLATION" in token:
+                return 0.70, 0.84
+            if "VOICE" in token:
+                return 0.84, 0.94
+            if "VERIFY" in token:
+                return 0.94, 0.99
+            if "DONE" in token or "SUCCESS" in token:
+                return 1.0, 1.0
+            return 0.0, 0.0
 
         progress_pct = 0.0
+        total_progress = float(completed_books)
         if total_books > 0:
-            progress_pct = round((completed_books / total_books) * 100.0, 2)
+            stage_str = str(runner.get("current_stage") or "").upper()
+            fraction = 0.0
+            stage_start, stage_end = _stage_range_for(stage_str)
+            if stage_end > stage_start and stage_progress:
+                progress_done = _safe_int(stage_progress.get("completed"), 0, min_value=0)
+                progress_total = _safe_int(stage_progress.get("total"), 0, min_value=0)
+                progress_ratio = min(1.0, max(0.0, (progress_done / progress_total))) if progress_total > 0 else 0.0
+                fraction = stage_start + ((stage_end - stage_start) * progress_ratio)
+            elif "LLM" in stage_str or "STORY" in stage_str:
+                fraction = 0.1
+            elif "IMAGE" in stage_str or "SDXL" in stage_str:
+                fraction = 0.4
+            elif "TRANSLATE" in stage_str or "TRANSLATION" in stage_str:
+                fraction = 0.7
+            elif "VOICE" in stage_str:
+                fraction = 0.85
+            elif "VERIFY" in stage_str:
+                fraction = 0.95
+            elif "DONE" in stage_str or "SUCCESS" in stage_str:
+                fraction = 1.0
+
+            state_str = str(runner.get("state") or "").lower()
+            if state_str not in ("running", "active") and fraction < 1.0:
+                fraction = 0.0
+
+            total_progress = min(float(total_books), float(completed_books) + float(fraction))
+            progress_pct = round((total_progress / total_books) * 100.0, 2)
 
         elapsed_sec: Optional[float] = None
         if run_started_at is not None:
             elapsed_sec = round(max(0.0, time.time() - run_started_at), 2)
 
+        latest_run_id: Optional[str] = None
+        latest_run_state: Optional[str] = None
+        latest_run_started_at: Optional[str] = None
+        latest_run_finished_at: Optional[str] = None
+        latest_run_stage: Optional[str] = None
+        latest_run_elapsed_sec: Optional[float] = None
+        latest_run_exit_code: Optional[int] = None
+        latest_run_last_error: Optional[str] = None
+        latest_run_updated_ago_sec: Optional[float] = None
+        latest_run_total_books = 0
+        latest_run_completed_books = 0
+        latest_run_success_books = 0
+        latest_run_failed_books = 0
+        if isinstance(latest_history, dict):
+            latest_run_id = _safe_text(latest_history.get("run_id"), default="", max_length=120) or None
+            latest_run_state = _safe_text(latest_history.get("state"), default="", max_length=32) or None
+            latest_run_started_at = _safe_text(latest_history.get("started_at"), default="", max_length=64) or None
+            latest_run_finished_at = _safe_text(latest_history.get("finished_at"), default="", max_length=64) or None
+            latest_run_stage = _safe_text(latest_history.get("current_stage"), default="", max_length=64) or None
+            latest_run_last_error = _safe_text(latest_history.get("last_error"), default="", max_length=4000) or None
+            latest_duration = _safe_float(latest_history.get("duration_sec"), 0.0)
+            latest_run_elapsed_sec = round(latest_duration, 2) if latest_duration > 0 else None
+            raw_latest_exit = latest_history.get("exit_code")
+            latest_run_exit_code = None if raw_latest_exit in {None, ""} else _safe_int(raw_latest_exit, 0)
+            latest_updated_at = _parse_iso_datetime(latest_history.get("finished_at") or latest_history.get("started_at"))
+            if latest_updated_at is not None:
+                latest_run_updated_ago_sec = round(
+                    (datetime.now(timezone.utc) - latest_updated_at).total_seconds(),
+                    2,
+                )
+            latest_run_total_books = _safe_int(latest_history.get("total_books"), 0, min_value=0)
+            latest_run_completed_books = _safe_int(
+                latest_history.get("completed_books"),
+                0,
+                min_value=0,
+                max_value=latest_run_total_books if latest_run_total_books > 0 else None,
+            )
+            latest_run_success_books = _safe_int(latest_history.get("success_books"), 0, min_value=0)
+            latest_run_failed_books = _safe_int(latest_history.get("failed_books"), 0, min_value=0)
+
         eta_sec: Optional[float] = None
-        if running and elapsed_sec is not None and completed_books > 0 and total_books > completed_books:
-            avg_per_book = elapsed_sec / completed_books
-            eta_sec = round(avg_per_book * (total_books - completed_books), 2)
+        if running and elapsed_sec is not None and total_books > total_progress and total_progress > 0:
+            avg_per_book = elapsed_sec / total_progress
+            eta_sec = round(avg_per_book * (total_books - total_progress), 2)
 
         updated_ago_sec: Optional[float] = None
         updated_at = _parse_iso_datetime(runner.get("updated_at"))
@@ -4704,15 +5532,32 @@ class DashboardRuntime:
 
         return {
             "ok": True,
+            "api_version": _DASHBOARD_API_VERSION,
+            "capabilities": _dashboard_capabilities(),
             "running": running,
             "pid": pid,
             "run_id": run_id,
             "run_started_at": run_started_iso,
             "exit_code": exit_code,
+            "latest_run_id": latest_run_id,
+            "latest_run_state": latest_run_state,
+            "latest_run_started_at": latest_run_started_at,
+            "latest_run_finished_at": latest_run_finished_at,
+            "latest_run_stage": latest_run_stage,
+            "latest_run_elapsed_sec": latest_run_elapsed_sec,
+            "latest_run_exit_code": latest_run_exit_code,
+            "latest_run_last_error": latest_run_last_error,
+            "latest_run_updated_ago_sec": latest_run_updated_ago_sec,
+            "latest_run_total_books": latest_run_total_books,
+            "latest_run_completed_books": latest_run_completed_books,
+            "latest_run_success_books": latest_run_success_books,
+            "latest_run_failed_books": latest_run_failed_books,
             "status_file": str(self.status_file),
             "last_config": last_config,
             "last_error": last_error,
             "runner": runner,
+            "stage_progress": stage_progress or None,
+            "stage_detail": stage_detail,
             "progress_pct": progress_pct,
             "elapsed_sec": elapsed_sec,
             "eta_sec": eta_sec,
@@ -4735,6 +5580,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
+        self.send_header("Pragma", "no-cache")
         self.end_headers()
         self.wfile.write(body)
 
@@ -4765,6 +5612,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
+            self.send_header("Pragma", "no-cache")
             self.end_headers()
             self.wfile.write(body)
             return
@@ -4781,6 +5630,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     content_type = "text/css" if parsed.path.endswith(".css") else "application/javascript" if parsed.path.endswith(".js") else "application/octet-stream"
                     self.send_header("Content-Type", f"{content_type}; charset=utf-8")
                     self.send_header("Content-Length", str(len(content)))
+                    self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
+                    self.send_header("Pragma", "no-cache")
                     self.end_headers()
                     self.wfile.write(content)
                     return
@@ -4795,6 +5646,35 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/status":
             self._send_json(self.runtime.get_status())
+            return
+
+        if parsed.path == "/api/queue":
+            self._send_json(self.runtime.get_queue())
+            return
+
+        if parsed.path == "/api/alerts":
+            limit = _safe_int((query.get("limit") or [30])[0], 30, min_value=1, max_value=200)
+            include_ack = _safe_bool((query.get("include_ack") or ["false"])[0], False)
+            self._send_json(self.runtime.get_alerts(limit=limit, include_ack=include_ack))
+            return
+
+        if parsed.path == "/api/capacity":
+            window = _safe_int((query.get("window") or [_CAPACITY_WINDOW])[0], _CAPACITY_WINDOW, min_value=1, max_value=300)
+            self._send_json(self.runtime.get_capacity(window=window))
+            return
+
+        if parsed.path == "/api/configs":
+            limit = _safe_int((query.get("limit") or [20])[0], 20, min_value=1, max_value=200)
+            self._send_json(self.runtime.list_config_versions(limit=limit))
+            return
+
+        if parsed.path == "/api/voice/preset-samples":
+            self._send_json(self.runtime.list_voice_preset_samples())
+            return
+
+        if parsed.path == "/api/voice/custom-speakers":
+            selected_dir = (query.get("selected_dir") or [""])[0]
+            self._send_json(self.runtime.list_custom_voice_library(selected_dir))
             return
 
         if parsed.path == "/api/evaluation":

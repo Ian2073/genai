@@ -1,4 +1,4 @@
-"""Story pipeline 輸出產物協調工具。"""
+"""Helpers for persisting story pipeline outputs."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from utils import write_json_or_raise
 
 
 def select_canonical_branch(generated_branches_ids: List[str], root_branch_id: str) -> str:
-    """選出作為 canonical metadata / cover 來源的分支。"""
+    """Choose the branch used for canonical metadata and cover artifacts."""
 
     if "option_1" in generated_branches_ids:
         return "option_1"
@@ -21,7 +21,7 @@ def select_canonical_branch(generated_branches_ids: List[str], root_branch_id: s
 
 
 def collect_branch_pages(language_root: Path, branch_id: str, total_pages: int, *, logger=None) -> List[str]:
-    """直接從指定分支目錄收集頁面內容，不經 inheritance。"""
+    """Load non-empty page text files from a branch."""
 
     branch_pages: List[str] = []
     branch_dir = language_root / "branches" / branch_id
@@ -50,7 +50,7 @@ def collect_branch_pages(language_root: Path, branch_id: str, total_pages: int, 
 
 
 def load_full_story_text(language_root: Path, branch_id: str) -> str:
-    """讀取指定分支的 full_story 內容。"""
+    """Load the compiled full story text for a branch if present."""
 
     full_story_path = language_root / "branches" / branch_id / "full_story.txt"
     if not full_story_path.exists():
@@ -61,6 +61,16 @@ def load_full_story_text(language_root: Path, branch_id: str) -> str:
         return ""
 
 
+def _trim_cover_source(text: str, limit: int = 900) -> str:
+    cleaned = " ".join(str(text or "").split())
+    if not cleaned:
+        return ""
+    if len(cleaned) <= limit:
+        return cleaned
+    shortened = cleaned[:limit].rsplit(" ", 1)[0].strip()
+    return (shortened or cleaned[:limit]).rstrip(",;:.") + "..."
+
+
 def build_cover_context(
     *,
     cover_source: str,
@@ -69,16 +79,27 @@ def build_cover_context(
     age: str,
     character_descriptions: str,
     cover_guidelines: str,
+    category: str = "",
+    theme: str = "",
+    visual_style: str = "",
+    cover_source_label: str = "",
 ) -> Dict[str, str]:
-    """建立 cover prompt 需要的完整上下文。"""
+    """Build cover prompt context with a bounded source excerpt."""
 
+    source_label = (cover_source_label or "story").strip() or "story"
+    source_excerpt = _trim_cover_source(cover_source)
     return {
-        "cover_source": cover_source,
+        "cover_source": source_excerpt,
+        "cover_source_excerpt": source_excerpt,
+        "cover_source_label": source_label,
         "story_outline": outline,
         "story_title": title,
         "age": age,
+        "story_category": category,
+        "story_theme": theme,
         "character_descriptions": character_descriptions,
         "cover_guidelines": cover_guidelines,
+        "image_style_lock": visual_style,
         "rag_context": "",
     }
 
@@ -94,7 +115,7 @@ def build_story_meta(
     generated_branches_ids: List[str],
     start_time: float,
 ) -> Dict[str, Any]:
-    """建立 story metadata 內容。"""
+    """Build persisted story metadata."""
 
     elapsed = time.perf_counter() - start_time if start_time else 0
     created_at = datetime.now(timezone.utc).isoformat()
@@ -125,7 +146,7 @@ def build_story_meta(
 
 
 def persist_story_meta(language_root: Path, meta: Dict[str, Any]) -> Path:
-    """將 story metadata 寫入標準 resource 位置。"""
+    """Persist story metadata under the resource directory."""
 
     resource_dir = language_root / "resource"
     resource_dir.mkdir(parents=True, exist_ok=True)

@@ -960,12 +960,28 @@ def setup_logging(
 
 	logger = logging.getLogger(module_name)
 	logger.setLevel(level)
+	logger.propagate = False
+
+	resolved_log_path = str(log_path.resolve()) if log_path else None
+
+	# If the same logger is reused with a new file path, detach stale file handlers first.
+	if resolved_log_path:
+		for handler in list(logger.handlers):
+			if isinstance(handler, logging.FileHandler):
+				base_filename = getattr(handler, "baseFilename", "")
+				if base_filename != resolved_log_path:
+					logger.removeHandler(handler)
+					try:
+						handler.close()
+					except Exception:
+						pass
 
 	# If setup_logging is called with a specific file, ensure it's added.
 	already_has_file = False
 	for h in logger.handlers:
-		if isinstance(h, logging.FileHandler) and log_path and getattr(h, "baseFilename", "") == str(log_path.resolve()):
+		if isinstance(h, logging.FileHandler) and resolved_log_path and getattr(h, "baseFilename", "") == resolved_log_path:
 			already_has_file = True
+			break
 
 	if hasattr(logger, "_console_added"):
 		console = False # Don't add console twice
@@ -1334,7 +1350,11 @@ def list_character_prompt_files(resources_dir: Path) -> List[Path]:
 
 	if not resources_dir.exists():
 		return []
-	files = [p for p in resources_dir.glob("character_*.txt") if p.is_file()]
+	files = [
+		p
+		for p in resources_dir.glob("character_*.txt")
+		if p.is_file() and p.name.lower() != "character_poses.txt"
+	]
 	return sorted(files)
 
 

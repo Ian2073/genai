@@ -9,6 +9,9 @@ genai_env/
 # Local workspace tooling
 .vscode/
 .gemini/
+.dashboard_test_tmp/
+tests/translation-hints-*/
+tmpsdablx1f/
 
 # Archive / research datasets
 backups/

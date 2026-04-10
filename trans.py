@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import gc
+import json
 import logging
 import platform
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import torch
 import time
@@ -43,6 +45,11 @@ class Config:
 	batch_size: int = 16           # 批次翻譯大小
 
 
+	entity_lock_names: Sequence[str] = field(default_factory=tuple)
+	glossary: Dict[str, Any] = field(default_factory=dict)
+	source_title: str = ""
+
+
 @dataclass
 class RunConfig:
 	"""翻譯流程的統一設定，集中於程式內部。"""
@@ -75,6 +82,92 @@ def ensure_languages(config: Config) -> List[str]:
 
 
 
+def _safe_load_json(path: Path) -> Dict[str, Any]:
+	try:
+		payload = json.loads(path.read_text(encoding="utf-8"))
+		return payload if isinstance(payload, dict) else {}
+	except Exception:
+		return {}
+
+
+def _normalize_character_name(value: str) -> str:
+	text = re.sub(r"\s*\([^)]*\)\s*", "", str(value or "")).strip()
+	return re.sub(r"\s+", " ", text)
+
+
+def _extract_title_text(raw_text: str) -> str:
+	text = str(raw_text or "").strip()
+	if not text:
+		return ""
+	try:
+		payload = json.loads(text)
+		if isinstance(payload, dict) and isinstance(payload.get("title"), str):
+			return str(payload["title"]).strip()
+		if isinstance(payload, str):
+			return payload.strip()
+	except Exception:
+		pass
+	return text
+
+
+def _looks_like_bad_translation(text: str) -> bool:
+	text = str(text or "").strip()
+	if not text:
+		return True
+	if "�" in text or "?" in text or "?" in text:
+		return True
+	return len(re.findall(r"[A-Za-z\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", text)) < 2
+
+
+def load_story_translation_hints(story_root: Path, source_folder: str) -> Dict[str, Any]:
+	source_dir = story_root / source_folder
+	title_candidates = [
+		source_dir / "branches" / "option_1" / "title.txt",
+		source_dir / "title.txt",
+	]
+	kg_profile_candidates = [
+		source_dir / "branches" / "option_1" / "resource" / "kg_profile.json",
+		source_dir / "resource" / "kg_profile.json",
+	]
+
+	title_text = ""
+	for candidate in title_candidates:
+		if not candidate.exists():
+			continue
+		try:
+			title_text = _extract_title_text(candidate.read_text(encoding="utf-8"))
+		except Exception:
+			title_text = ""
+		if title_text:
+			break
+
+	entity_names: List[str] = []
+	for candidate in kg_profile_candidates:
+		if not candidate.exists():
+			continue
+		payload = _safe_load_json(candidate)
+		kg_payload = payload.get("kg_payload") if isinstance(payload.get("kg_payload"), dict) else {}
+		characters = kg_payload.get("characters") if isinstance(kg_payload, dict) else []
+		if not isinstance(characters, list):
+			continue
+		for item in characters:
+			name = _normalize_character_name(str(item))
+			if name and name not in entity_names:
+				entity_names.append(name)
+		if entity_names:
+			break
+
+	glossary: Dict[str, Any] = {name: name for name in entity_names}
+	if title_text:
+		glossary[title_text] = title_text
+	return {"title": title_text, "entity_lock_names": entity_names, "glossary": glossary}
+
+
+def build_translated_title_payload(source_title: str, translated_title: str) -> str:
+	title_value = str(translated_title or "").strip() or str(source_title or "").strip()
+	return json.dumps({"title": title_value}, ensure_ascii=False, indent=2)
+
+
 def translate_story(
 	story_root: Path,
 	config: Config,
@@ -83,7 +176,6 @@ def translate_story(
 	"""使用 NLLB 將指定故事資料夾翻譯到多語語系。"""
 	log_path = story_root / "logs" / "translation.log"
 	logger = setup_logging(f"translation_pipeline_{story_root.name}", log_path, console=console)
-	translator = build_translation_backend(config)
 	source_dir = story_root / config.source_folder
 	if not source_dir.exists():
 		raise FileNotFoundError(f"Source language folder not found: {source_dir}")
@@ -99,6 +191,20 @@ def translate_story(
 	if not languages:
 		raise ValueError("翻譯語言集合為空，請確認 config 或樣本語系設定")
 	
+	hints = load_story_translation_hints(story_root, config.source_folder)
+	config = replace(
+		config,
+		entity_lock_names=tuple(
+			name for name in (
+				list(getattr(config, "entity_lock_names", ()) or [])
+				+ list(hints.get("entity_lock_names", []) or [])
+			)
+			if name
+		),
+		glossary={**dict(hints.get("glossary", {}) or {}), **dict(getattr(config, "glossary", {}) or {})},
+		source_title=str(getattr(config, "source_title", "") or hints.get("title", "") or ""),
+	)
+	translator = build_translation_backend(config)
 	total_tasks = len(files) * len(languages)
 	logger.info("Translating %s files into %s languages (%s total tasks)", len(files), len(languages), total_tasks)
 
@@ -109,9 +215,15 @@ def translate_story(
 	# 預先讀取所有源文件內容
 	file_contents: List[str] = []
 	files_to_process: List[Path] = []
+	title_files: List[Tuple[Path, str]] = []
 	
 	for file_path in files:
 		content = file_path.read_text(encoding="utf-8")
+		relative = relative_to_language(file_path, source_dir)
+		if relative.name.lower() == "title.txt":
+			title_text = _extract_title_text(content) or str(config.source_title or "")
+			title_files.append((file_path, title_text))
+			continue
 		if content.strip():
 			file_contents.append(content)
 			files_to_process.append(file_path)
@@ -123,7 +235,7 @@ def translate_story(
 				out = ensure_dir(lang_dir / relative)
 				out.write_text("", encoding="utf-8")
 
-	if not files_to_process:
+	if not files_to_process and not title_files:
 		logger.info("No content to translate.")
 		return outputs
 
@@ -147,6 +259,20 @@ def translate_story(
 				output_path = lang_dir / relative_path
 				ensure_dir(output_path.parent)
 				output_path.write_text(translated_texts[i] + "\n", encoding="utf-8")
+				lang_outputs.append(output_path)
+			for title_file_path, source_title in title_files:
+				relative_path = relative_to_language(title_file_path, source_dir)
+				output_path = lang_dir / relative_path
+				ensure_dir(output_path.parent)
+				translated_title = translator.translate(source_title, lang)
+				if _looks_like_bad_translation(translated_title):
+					logger.warning(
+						"Title translation looked unstable for %s -> %s, keeping source title",
+						source_title,
+						lang,
+					)
+					translated_title = source_title
+				output_path.write_text(build_translated_title_payload(source_title, translated_title) + "\n", encoding="utf-8")
 				lang_outputs.append(output_path)
 			
 			outputs[lang] = lang_outputs

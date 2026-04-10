@@ -33,6 +33,7 @@ import argparse
 import gc
 import logging
 import platform
+import re
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -108,6 +109,89 @@ def find_first_wav(directory: Path) -> Optional[Path]:
     return wavs[0] if wavs else None
 
 
+def _normalize_sample_language_token(value: str) -> str:
+    token = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+    if token in {"zh-tw", "zh-hant", "zho-hant", "cmn-hant", "zh-hk"}:
+        return "zh-tw"
+    if token in {"zh-cn", "zh-hans", "zho-hans", "cmn-hans"}:
+        return "zh-cn"
+    if token.startswith("en"):
+        return "en"
+    if token.startswith("zh"):
+        return "zh"
+    if token.startswith("ja"):
+        return "ja"
+    if token.startswith("de"):
+        return "de"
+    if token.startswith("es"):
+        return "es"
+    if token.startswith("fr"):
+        return "fr"
+    if token.startswith("pt"):
+        return "pt"
+    if token.startswith("tr"):
+        return "tr"
+    return token
+
+
+def _preferred_sample_language_tokens(language: str) -> List[str]:
+    token = _normalize_sample_language_token(language)
+    if token in {"", "en"}:
+        return ["en", "en-us", "en-gb"]
+    if token in {"zh", "zh-tw"}:
+        return ["zh-tw", "zh-hant", "zho-hant", "zh", "zh-cn", "zh-hans", "zho-hans"]
+    if token == "zh-cn":
+        return ["zh-cn", "zh-hans", "zho-hans", "zh", "zh-tw", "zh-hant", "zho-hant"]
+    if token == "ja":
+        return ["ja", "ja-jp"]
+    return [token]
+
+
+def _wav_language_rank(path: Path, preferred_tokens: Sequence[str]) -> Optional[int]:
+    stem = re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-")
+    for index, token in enumerate(preferred_tokens):
+        if not token:
+            continue
+        if stem == token or stem.startswith(token + "-") or stem.endswith("-" + token) or f"-{token}-" in stem:
+            return index
+    return None
+
+
+def find_best_wav(directory: Path, language: str = "") -> Optional[Path]:
+    if not directory.exists() or not directory.is_dir():
+        return None
+    try:
+        candidates = sorted(
+            (item for item in directory.glob("*.wav") if item.exists() and item.is_file()),
+            key=lambda path: path.name.lower(),
+        )
+    except Exception:
+        return None
+    if not candidates:
+        return None
+
+    preferred_tokens = _preferred_sample_language_tokens(language)
+    ranked: List[Tuple[int, str, Path]] = []
+    for item in candidates:
+        rank = _wav_language_rank(item, preferred_tokens)
+        if rank is not None:
+            ranked.append((rank, item.name.lower(), item))
+    if ranked:
+        ranked.sort(key=lambda entry: (entry[0], entry[1]))
+        return ranked[0][2]
+
+    english_tokens = _preferred_sample_language_tokens("en")
+    english_ranked: List[Tuple[int, str, Path]] = []
+    for item in candidates:
+        rank = _wav_language_rank(item, english_tokens)
+        if rank is not None:
+            english_ranked.append((rank, item.name.lower(), item))
+    if english_ranked:
+        english_ranked.sort(key=lambda entry: (entry[0], entry[1]))
+        return english_ranked[0][2]
+    return candidates[0]
+
+
 def resolve_speaker_reference(config: Config, logger: logging.Logger) -> Optional[Path]:
     """決定要使用的「說書人參考音檔」(Speaker Reference)。
     
@@ -128,23 +212,23 @@ def resolve_speaker_reference(config: Config, logger: logging.Logger) -> Optiona
     if config.speaker_wav:
         candidates.append(config.speaker_wav)
     if config.speaker_dir:
-        wav = find_first_wav(config.speaker_dir)
+        wav = find_best_wav(config.speaker_dir, config.language)
         if wav:
             candidates.append(wav)
     
     # 嘗試從 sample_dir 找
     if config.sample_dir.exists():
         lang_specific = config.sample_dir / config.language
-        wav = find_first_wav(lang_specific)
+        wav = find_best_wav(lang_specific, config.language)
         if wav:
             candidates.append(wav)
-        wav = find_first_wav(config.sample_dir)
+        wav = find_best_wav(config.sample_dir, config.language)
         if wav:
             candidates.append(wav)
     
     # XTTS 預設資料集路徑
     dataset_dir = config.model_dir / "LJSpeech-1.1" / "wavs"
-    wav = find_first_wav(dataset_dir)
+    wav = find_best_wav(dataset_dir, "en")
     if wav:
         candidates.append(wav)
 

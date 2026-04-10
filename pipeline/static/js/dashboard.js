@@ -8,13 +8,28 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'hero.eyebrow': 'GenAI Operations',
         'hero.title': 'Chief Control Plane',
         'hero.sub': 'Operate runs, inspect alerts, manage queue priority, and audit production history from one dashboard.',
+        'page.overview.title': 'Generate',
+        'page.overview.sub': 'Compose story runs, monitor execution health, and control the main pipeline from one screen.',
+        'page.ops.title': 'Operations',
+        'page.ops.sub': 'Inspect queue pressure, alert activity, capacity, and saved config versions.',
+        'page.detail.title': 'Run Detail',
+        'page.detail.sub': 'Review one run end-to-end, including timeline, alerts, artifacts, and logs.',
+        'page.evaluation.title': 'Evaluation',
+        'page.evaluation.sub': 'Inspect assessment reports, radar dimensions, and key findings for one story output.',
+        'page.gallery.title': 'Gallery',
+        'page.gallery.sub': 'Browse generated stories with cover previews and inspect freshness, coverage, and metadata at a glance.',
+        'page.modules.title': 'Modules',
+        'page.modules.sub': 'Run text, image, translation, voice, and general tools independently from the main pipeline.',
         'label.auto_refresh': 'Auto refresh',
         'label.language': 'Language',
-        'kpi.system_state': 'System State',
-        'kpi.queue_depth': 'Queue Depth',
+        'kpi.system_state': 'Run State',
+        'kpi.queue_depth': 'Queue',
         'kpi.success_rate': 'Success Rate',
         'kpi.avg_duration': 'Avg Duration',
         'kpi.gpu_cost': 'Est. GPU Cost',
+        'kpi.progress': 'Progress',
+        'kpi.elapsed': 'Elapsed',
+        'kpi.updated': 'Last Update',
         'tab.overview': 'Generate',
         'tab.ops': 'Operations',
         'tab.detail': 'Run Detail',
@@ -23,15 +38,39 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'label.tab_gallery': 'Gallery',
         'gallery.title': 'Story Gallery',
         'gallery.sub': 'Browse generated stories with cover previews and quick metadata.',
-        'gallery.system_title': 'System Snapshot',
-        'gallery.system_hint': 'Live resource usage helps avoid running heavy stages under memory pressure.',
-        'gallery.system.gpu_na': 'GPU: n/a',
-        'gallery.system.status': 'RAM: {ram}% | {gpu}',
-        'gallery.system.gpu_na': 'GPU: n/a',
-        'gallery.system.status': 'RAM: {ram}% | {gpu}',
+        'gallery.snapshot.title': 'Gallery Snapshot',
+        'gallery.snapshot.hint': 'Use this summary to spot freshness gaps and missing covers without leaving the gallery.',
+        'gallery.snapshot.total': 'Stories',
+        'gallery.snapshot.covers': 'Covers',
+        'gallery.snapshot.categories': 'Categories',
+        'gallery.snapshot.latest': 'Latest Update',
+        'gallery.snapshot.highlights': 'Highlights',
+        'gallery.snapshot.empty': 'Load the gallery to see freshness and cover coverage.',
+        'gallery.snapshot.latest_none': 'No gallery data yet.',
+        'gallery.snapshot.missing_covers': 'Missing covers: {count}',
+        'gallery.snapshot.top_category': 'Top category: {name} ({count})',
+        'gallery.snapshot.age_mix': 'Age mix: {ages}',
+        'gallery.system_title': 'Resource Snapshot',
+        'gallery.system_hint': 'Same live telemetry as Generate, kept here for quick checks while browsing results.',
+        'gallery.empty.title': 'No stories to preview yet.',
+        'gallery.empty.copy': 'Generated covers and story cards will appear here after the first successful run.',
+        'gallery.system.status_limited': 'CPU: n/a | RAM: {ram}% | {gpu}',
         'overview.composer.title': 'Run Composer',
         'overview.composer.sub': 'Product mode supports queueing with priority and versioned run profiles.',
         'overview.telemetry.title': 'Live Telemetry',
+        'overview.resource.cpu': 'CPU',
+        'overview.resource.ram': 'RAM',
+        'overview.resource.gpu': 'GPU',
+        'overview.resource.vram': 'VRAM',
+        'overview.resource.cpu_value': '{value}% of {count} threads',
+        'overview.resource.ram_value': '{used} / {total} GB ({pct}%)',
+        'overview.resource.gpu_value': '{value}% | {name}',
+        'overview.resource.vram_value': '{used} / {total} GB ({pct}%)',
+        'overview.resource.gpu_na': 'n/a',
+        'overview.resource.detail': '{accelerator} | updated {time}',
+        'overview.resource.detail_na': 'System telemetry unavailable.',
+        'overview.resource.detail_limited': '{accelerator} | limited telemetry',
+        'overview.resource.metric_unavailable': 'n/a',
         'overview.field.book_count': 'Book Count',
         'overview.field.retry_per_book': 'Retry Per Book',
         'overview.field.queue_priority': 'Queue Priority',
@@ -49,6 +88,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'overview.field.materials_elements': 'Materials / Elements',
         'overview.field.speaker_dir_optional': 'Speaker Samples Dir (optional)',
         'overview.field.recording_script_recommended': 'Recording Script (recommended)',
+        'overview.field.model_plan': 'Model Plan',
         'overview.field.config_version_name': 'Config Version Name',
         'overview.field.version_note': 'Version Note',
         'overview.toggle.photo': 'Photo',
@@ -56,11 +96,26 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'overview.toggle.voice': 'Voice',
         'overview.toggle.verify': 'Verify',
         'overview.toggle.low_vram': 'Low VRAM',
-        'overview.toggle.strict_translation': 'Strict translation',
-        'overview.toggle.strict_voice': 'Strict voice',
+        'overview.toggle.strict_translation': 'Translation required',
+        'overview.toggle.strict_voice': 'Voice required',
+        'overview.strict_modes.hint': 'If required, that stage must succeed or the book is marked failed. Turn it off to allow degraded output.',
         'overview.preset.balanced': 'Balanced',
         'overview.preset.speed': 'Speed',
         'overview.preset.quality': 'Quality',
+        'overview.quick_profile.label': 'Workflow Preset',
+        'overview.quick_profile.hint': 'Workflow presets change model plan plus retries, stage toggles, and required-stage behavior.',
+        'overview.model_plan.hint': 'Auto chooses a model profile from the current hardware. Workflow presets also update this field.',
+        'overview.model_plan.scope_hint': 'Use this only when you want to change model/hardware strategy without changing the rest of the workflow.',
+        'overview.model_plan.selected': 'Selected: {plan}',
+        'overview.model_plan.recommended': 'Auto recommends: {plan}',
+        'overview.model_plan.hardware': '{accelerator} | VRAM {vram} GB | RAM {ram} GB',
+        'overview.model_plan.hardware_unknown': 'Hardware detection unavailable',
+        'overview.model_plan.unknown': 'Unknown',
+        'overview.model_plan.auto': 'Auto',
+        'overview.model_plan.balanced': 'Balanced',
+        'overview.model_plan.portable': 'Portable',
+        'overview.model_plan.quality': 'Quality',
+        'overview.model_plan.cpu': 'CPU Safe',
         'overview.metric.total': 'Total',
         'overview.metric.completed': 'Completed',
         'overview.metric.success': 'Success',
@@ -74,12 +129,48 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'overview.progress.stage': 'Stage {stage}',
         'overview.logs.title': 'Live Logs (Now)',
         'overview.logs.hint': 'Latest lines from the active run. Full logs are in Run Detail.',
+        'overview.process.title': 'Run Context',
+        'overview.process.pid': 'PID',
+        'overview.process.stage': 'Stage',
+        'overview.process.book': 'Book',
+        'overview.process.updated': 'Updated',
+        'overview.process.uptime': 'Uptime',
         'overview.meta.run_id': 'Run ID',
         'overview.meta.pid': 'PID',
         'overview.meta.exit_code': 'Exit Code',
         'overview.meta.queue_depth': 'Queue Depth',
+        'overview.monitor.summary.running': 'Run in progress',
+        'overview.monitor.summary.ready': 'Ready for the next run',
+        'overview.monitor.summary.queued': 'Queue pending',
+        'overview.monitor.summary.postrun': 'Last run {state}',
+        'overview.monitor.copy.running': 'Run {run_id} is active at {stage}.',
+        'overview.monitor.copy.running_compact': 'Review the active book, stage, and pre-evaluation below.',
+        'overview.monitor.copy.ready': 'Adjust the composer on the left, then start or queue a run.',
+        'overview.monitor.copy.queued': 'No active run right now. {count} job(s) remain in queue.',
+        'overview.monitor.copy.postrun': 'Last run {run_id} ended in {state}. Review the summary below before starting again.',
+        'overview.monitor.copy.postrun_compact': 'Review the latest run summary below before starting again.',
+        'overview.monitor.side.progress': 'Progress',
+        'overview.monitor.side.queue': 'Queue',
+        'overview.monitor.side.elapsed': 'Elapsed',
+        'overview.monitor.side.updated': 'Last update',
+        'overview.monitor.side.pressure': 'Pressure',
+        'overview.monitor.last_run.title': 'Latest Run',
+        'overview.monitor.last_run.none': 'No recent run summary yet.',
+        'overview.monitor.last_run.result': 'Result',
+        'overview.monitor.last_run.books': 'Books',
+        'overview.monitor.next.title': 'Next Step',
+        'overview.monitor.next.ready': 'Configure the next run from the composer on the left.',
+        'overview.monitor.next.review': 'Review the previous run if needed, then adjust settings and start again.',
+        'overview.monitor.next.queued': 'A queued job is waiting. You can still adjust future runs on the left.',
+        'overview.monitor.next.queue': 'Queue depth: {count}',
+        'overview.monitor.next.plan': 'Model plan: {selected} | Auto: {recommended}',
+        'overview.monitor.next.pressure': 'Resource pressure: {value}',
+        'overview.monitor.result.ready': 'Ready',
+        'overview.advisory.issues': 'Current Issues',
+        'health.process.detail.chief_resources': 'PID {pid} | CPU {cpu}% | RAM {ram} GB | {cache}',
         'ops.queue.title': 'Queue and Priority',
         'ops.alert.title': 'Alert Center',
+        'ops.alert.hint': 'Alerts include queue pressure, repeated failures, and run-stop incidents.',
         'ops.capacity.title': 'Capacity and Cost',
         'ops.capacity.window_runs': 'Window Runs',
         'ops.capacity.success_rate': 'Success Rate',
@@ -116,15 +207,21 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'eval.book': 'Book',
         'eval.book.latest': 'Latest book',
         'eval.story_root': 'Story Root',
-        'eval.branch': 'Branch',
+        'eval.branch': 'Report Variant',
+        'eval.branch_hint': 'Use the report variant name. In most cases, keep `canonical`.',
+        'eval.advanced.show': 'Advanced options',
+        'eval.advanced.hide': 'Hide advanced',
+        'eval.advanced.custom': 'Advanced: {value}',
         'eval.overall': 'Overall Score',
         'eval.scope': 'Scope',
-        'eval.branch_used': 'Branch',
+        'eval.branch_used': 'Report Variant',
         'eval.report_file': 'Report File',
         'eval.meta.source': 'Source',
         'eval.meta.run_id': 'Run ID',
         'eval.meta.story_root': 'Story Root',
         'eval.chart.title': 'Dimension Radar',
+        'eval.chart.empty.title': 'No evaluation chart yet.',
+        'eval.chart.empty.copy': 'Load a story report to compare dimension scores on the radar chart.',
         'eval.log.title': 'Assessment JSON',
         'module.jobs.title': 'Module Jobs',
         'module.job_detail.title': 'Module Job Detail',
@@ -137,6 +234,14 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'module.tab.translation': 'Translation Studio',
         'module.tab.voice': 'Voice Studio',
         'module.tab.general': 'General Studio',
+        'module.studio.story.title': 'Text Studio',
+        'module.studio.story.sub': 'Generate standalone story drafts and queue text-only runs without touching images or voice.',
+        'module.studio.image.title': 'Image Studio',
+        'module.studio.image.sub': 'Inspect existing image tasks, tweak prompts, and rerun only the visual layer for a story.',
+        'module.studio.translation.title': 'Translation Studio',
+        'module.studio.translation.sub': 'Translate existing story outputs, choose target languages, and rerun translation independently.',
+        'module.studio.voice.title': 'Voice Studio',
+        'module.studio.voice.sub': 'Generate narration from an existing story root, with direct control over speaker samples and page ranges.',
         'general.tools.title': 'General AI Toolkit',
         'general.tools.sub': 'Use direct non-story tools for text QA, image generation, translation, and TTS preview.',
         'module.story.book_count': 'Book Count',
@@ -318,7 +423,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'btn.run_general_voice': 'Run General Voice',
         'btn.apply': 'Apply',
         'btn.cancel': 'Cancel',
-        'btn.acknowledge': 'Acknowledge',
+        'btn.acknowledge': 'Dismiss',
         'btn.inspect': 'Inspect',
         'btn.select': 'Select',
         'th.job': 'Job',
@@ -341,6 +446,18 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'th.status': 'Status',
         'th.story_root': 'Story Root',
         'msg.request_failed': 'Request failed',
+        'msg.compatibility_limited': 'Compatibility mode: {items} unavailable in the current backend. Restart dashboard after the current run.',
+        'msg.capability.queue': 'queue',
+        'msg.capability.alerts': 'alerts',
+        'msg.capability.capacity': 'capacity analytics',
+        'msg.capability.configs': 'config versions',
+        'msg.capability.process_telemetry': 'process telemetry',
+        'msg.queue_unavailable': 'Queue data is unavailable in the current backend.',
+        'msg.alerts_unavailable': 'Alert data is unavailable in the current backend.',
+        'msg.capacity_unavailable': 'Capacity analytics are unavailable in the current backend.',
+        'msg.configs_unavailable': 'Config versions are unavailable in the current backend.',
+        'ops.summary.hint_unavailable': 'Historical capacity metrics are unavailable in the current backend.',
+        'ops.summary.health_limited': 'Limited',
         'msg.refresh_failed': 'Refresh failed.',
         'msg.select_module_job_first': 'Select a module job first.',
         'msg.no_module_jobs': 'No module jobs.',
@@ -358,6 +475,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'msg.none_selected': 'None selected.',
         'msg.no_live_logs': 'No active run logs yet.',
         'msg.no_generated_images': 'No generated images yet.',
+        'msg.select_story_root_for_images': 'Load a story root or wait for image generation to populate this grid.',
         'msg.select_at_least_one_image': 'Please select at least one image item.',
         'msg.regenerating_selected_images': 'Regenerating selected images...',
         'msg.regenerated_images': 'Regenerated {ok}/{total} images.',
@@ -432,7 +550,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'msg.failed_reprioritize_job': 'Failed to reprioritize job.',
         'msg.canceled_job': 'Canceled queued job {id}.',
         'msg.failed_cancel_job': 'Failed to cancel job.',
-        'msg.failed_ack_alert': 'Failed to acknowledge alert.',
+        'msg.failed_ack_alert': 'Failed to dismiss alert.',
         'msg.loaded_local_profile': 'Loaded local profile.',
         'msg.saving_template': 'Saving template...',
         'msg.template_saved': 'Template saved.',
@@ -468,9 +586,11 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'placeholder.story_prompt_custom': 'Use concise requirements: mood, values, characters, conflict, ending style.',
         'placeholder.story_materials_custom': 'Paste notes, outlines, facts, classroom material, or family context.',
         'placeholder.speaker_wav': 'ex: models/XTTS-v2/samples/my_parent.wav',
+        'placeholder.voice_script': 'Read 3 to 5 calm, natural sentences with one line of narration, one short line of dialogue, and one clear pause.',
         'placeholder.theme_custom': 'ex: friendship, courage, mystery',
         'placeholder.subcategory_custom': 'ex: forest, tradition, science',
         'placeholder.speaker_dir': 'ex: models/XTTS-v2/samples/custom',
+        'placeholder.evaluation_branch': 'canonical',
         'placeholder.version_name': 'example: quality-v3',
         'placeholder.version_note': 'what changed and why',
         'placeholder.template_name': 'Template name',
@@ -491,11 +611,14 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'hero.sub': '在同一個儀表板管理生成任務、監看警示、調整佇列優先序，並追蹤執行歷史。',
         'label.auto_refresh': '自動刷新',
         'label.language': '語言',
-        'kpi.system_state': '系統狀態',
-        'kpi.queue_depth': '佇列深度',
-        'kpi.success_rate': '成功率',
-        'kpi.avg_duration': '平均耗時',
-        'kpi.gpu_cost': '預估 GPU 成本',
+      'kpi.system_state': '系統狀態',
+      'kpi.queue_depth': '佇列深度',
+      'kpi.success_rate': '成功率',
+      'kpi.avg_duration': '平均耗時',
+      'kpi.gpu_cost': '預估 GPU 成本',
+      'kpi.progress': '進度',
+      'kpi.elapsed': '已耗時',
+      'kpi.updated': '更新延遲',
         'tab.overview': '故事生成',
         'tab.ops': '營運中心',
         'tab.detail': '執行明細',
@@ -507,12 +630,24 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'gallery.system_title': '系統資源快照',
         'gallery.system_hint': '即時資源監看可避免在記憶體壓力過高時啟動重型流程。',
         'gallery.system.gpu_na': 'GPU：無資料',
-        'gallery.system.status': 'RAM：{ram}% | {gpu}',
+        'gallery.system.status': 'CPU?{cpu}% | RAM?{ram}% | {gpu}',
+        'gallery.system.status_limited': 'CPU：無資料 | RAM：{ram}% | {gpu}',
         'gallery.system.gpu_na': 'GPU：無資料',
-        'gallery.system.status': 'RAM：{ram}% | {gpu}',
+        'gallery.system.status': 'CPU?{cpu}% | RAM?{ram}% | {gpu}',
         'overview.composer.title': '主流程生成設定',
         'overview.composer.sub': '主介面用於一般故事生成流程，支援排隊、優先序與版本化設定。',
         'overview.telemetry.title': '即時執行監控',
+        'overview.resource.cpu': 'CPU',
+        'overview.resource.ram': 'RAM',
+        'overview.resource.gpu': 'GPU',
+        'overview.resource.vram': 'VRAM',
+        'overview.resource.cpu_value': '?? {count} ????? {value}%',
+        'overview.resource.ram_value': '{used} / {total} GB ({pct}%)',
+        'overview.resource.gpu_value': '{name} | {value}%',
+        'overview.resource.vram_value': '{used} / {total} GB ({pct}%)',
+        'overview.resource.gpu_na': '???',
+        'overview.resource.detail': '{accelerator} | {gpus} | ?? {time}',
+        'overview.resource.detail_na': '?????????????',
         'overview.field.book_count': '生成本數',
         'overview.field.retry_per_book': '每本重試次數',
         'overview.field.queue_priority': '佇列優先序',
@@ -530,6 +665,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'overview.field.materials_elements': '素材 / 元素',
         'overview.field.speaker_dir_optional': '說話人樣本資料夾（選填）',
         'overview.field.recording_script_recommended': '錄音稿（建議）',
+        'overview.field.model_plan': '模型方案',
         'overview.field.config_version_name': '設定版本名稱',
         'overview.field.version_note': '版本備註',
         'overview.toggle.photo': '圖片',
@@ -542,6 +678,17 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'overview.preset.balanced': '平衡',
         'overview.preset.speed': '速度',
         'overview.preset.quality': '品質',
+        'overview.model_plan.hint': 'Auto 會依目前硬體自動選擇模型方案，套用預設時也會同步更新這個欄位。',
+        'overview.model_plan.selected': '目前選擇：{plan}',
+        'overview.model_plan.recommended': 'Auto 建議：{plan}',
+        'overview.model_plan.hardware': '{accelerator} | VRAM {vram} GB | RAM {ram} GB',
+        'overview.model_plan.hardware_unknown': '目前無法偵測硬體資訊',
+        'overview.model_plan.unknown': '未知',
+        'overview.model_plan.auto': '自動',
+        'overview.model_plan.balanced': '平衡',
+        'overview.model_plan.portable': '速度 / 可攜',
+        'overview.model_plan.quality': '品質',
+        'overview.model_plan.cpu': 'CPU 安全',
         'overview.metric.total': '總數',
         'overview.metric.completed': '已完成',
         'overview.metric.success': '成功',
@@ -553,14 +700,18 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'overview.progress.remaining': '剩餘 {count}',
         'overview.progress.success_rate': '成功率 {pct}%',
         'overview.progress.stage': '階段 {stage}',
-        'overview.logs.title': '即時日誌（主畫面）',
-        'overview.logs.hint': '顯示目前執行的最新日誌；完整日誌可到執行明細查看。',
-        'overview.meta.run_id': 'Run ID',
+      'overview.logs.title': '即時日誌（主畫面）',
+      'overview.logs.hint': '顯示目前執行的最新日誌；完整日誌可到執行明細查看。',
+      'overview.process.pid': 'PID',
+      'overview.process.stage': '階段',
+      'overview.process.updated': '更新延遲',
+      'overview.meta.run_id': 'Run ID',
         'overview.meta.pid': 'PID',
         'overview.meta.exit_code': '結束代碼',
         'overview.meta.queue_depth': '佇列深度',
         'ops.queue.title': '佇列與優先序',
         'ops.alert.title': '警示中心',
+        'ops.alert.hint': '這裡會顯示佇列壓力、連續失敗與執行中斷等警示。',
         'ops.capacity.title': '容量與成本',
         'ops.capacity.window_runs': '視窗內任務數',
         'ops.capacity.success_rate': '成功率',
@@ -597,10 +748,14 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'eval.book': '書本',
         'eval.book.latest': '最新一本',
         'eval.story_root': '故事路徑',
-        'eval.branch': '分支',
+        'eval.branch': '報告版本',
+        'eval.branch_hint': '這是評估報告的版本名稱；大多數情況保持 `canonical` 即可。',
+        'eval.advanced.show': '進階選項',
+        'eval.advanced.hide': '收合進階選項',
+        'eval.advanced.custom': '進階選項：{value}',
         'eval.overall': '總分',
         'eval.scope': '評估範圍',
-        'eval.branch_used': '分支',
+        'eval.branch_used': '報告版本',
         'eval.report_file': '報告檔案',
         'eval.meta.source': '來源',
         'eval.meta.run_id': 'Run ID',
@@ -799,7 +954,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'btn.run_general_voice': '執行通用語音',
         'btn.apply': '套用',
         'btn.cancel': '取消',
-        'btn.acknowledge': '確認',
+        'btn.acknowledge': '忽略',
         'btn.inspect': '檢視',
         'btn.select': '選取',
         'th.job': '任務',
@@ -913,7 +1068,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'msg.failed_reprioritize_job': '更新優先序失敗。',
         'msg.canceled_job': '已取消排隊任務：{id}',
         'msg.failed_cancel_job': '取消任務失敗。',
-        'msg.failed_ack_alert': '警示確認失敗。',
+        'msg.failed_ack_alert': '忽略警示失敗。',
         'msg.loaded_local_profile': '已載入本機設定。',
         'msg.saving_template': '正在儲存模板...',
         'msg.template_saved': '模板已儲存。',
@@ -949,9 +1104,11 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'placeholder.story_prompt_custom': '輸入精簡需求：情緒、價值、角色、衝突、結局風格。',
         'placeholder.story_materials_custom': '可貼上筆記、大綱、教材重點或家庭情境。',
         'placeholder.speaker_wav': '例如：models/XTTS-v2/samples/my_parent.wav',
+        'placeholder.voice_script': '請用自然、穩定的語氣錄 3 到 5 句，包含旁白、一句對話和一次明顯停頓。',
         'placeholder.theme_custom': '例如：友情、勇氣、冒險',
         'placeholder.subcategory_custom': '例如：森林、傳統、科學',
         'placeholder.speaker_dir': '例如：models/XTTS-v2/samples/custom',
+        'placeholder.evaluation_branch': 'canonical（通常不用改）',
         'placeholder.version_name': '例如：quality-v3',
         'placeholder.version_note': '這版改了什麼、為什麼改',
         'placeholder.template_name': '模板名稱',
@@ -967,14 +1124,244 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       },
     };
 
+    Object.assign(I18N['zh-TW'], {
+      'overview.system.title': '系統資源',
+      'overview.process.title': '目前執行程序',
+      'overview.advisory.title': '執行建議',
+      'ops.summary.title': '營運摘要',
+      'ops.summary.active': '目前主流程',
+      'ops.summary.queue': '排隊任務',
+      'ops.summary.alerts': '未處理警示',
+      'ops.summary.modules': '模組任務',
+      'ops.summary.health': '營運健康度',
+      'ops.summary.running_job': '執行中 {job}',
+      'ops.summary.hint_dynamic': '成功率 {success} | 平均排隊延遲 {delay} | GPU 成本 {cost}',
+      'detail.artifact.story_root': '故事目錄',
+      'detail.artifact.book': '目前書本',
+      'detail.artifact.stage': '最後階段',
+      'detail.artifact.eval': '評估狀態',
+      'detail.artifact.eval_ready': '已就緒',
+      'detail.artifact.eval_pending': '未就緒',
+      'eval.insight.title': '評估洞察',
+      'eval.insight.empty_summary': '尚未載入評估資料。',
+      'eval.insight.empty_findings': '重點觀察會顯示在這裡。',
+      'eval.insight.strongest': '最佳維度',
+      'eval.insight.strongest_detail': '{name} 分數為 {score}。',
+      'eval.insight.weakest': '待加強維度',
+      'eval.insight.weakest_detail': '{name} 分數為 {score}。',
+      'eval.insight.scope': '目前評估範圍',
+      'eval.insight.scope_detail': '書本 {book}，來源 {story_root}',
+      'eval.insight.issues': '問題',
+      'eval.insight.warnings': '警示',
+      'eval.insight.findings': '觀察',
+      'eval.insight.recommendations': '建議',
+      'module.summary.title': '模組摘要',
+      'module.summary.active': '執行中任務',
+      'module.summary.pending': '等待中任務',
+      'module.summary.history': '可見紀錄',
+      'module.summary.selected': '目前選取',
+      'module.summary.none': '無',
+      'module.summary.hint_dynamic': '歷史紀錄 {history} | 已隱藏 {hidden} | 執行中類型 {type}',
+      'btn.recommended': '建議組合',
+      'btn.select_all': '全選',
+      'overview.strict_modes.hint': '嚴格翻譯或嚴格語音代表該階段一旦失敗，這本書會直接記為失敗，而不是降級完成。',
+      'overview.quick_profile.label': '快捷方案',
+      'overview.quick_profile.hint': '快捷方案會一起調整模型方案、重試次數、階段開關與嚴格模式。',
+      'overview.model_plan.scope_hint': '如果你只想改模型與硬體策略、不想動其他流程設定，改這裡就好。',
+      'health.level.stable': '穩定',
+      'health.level.warning': '警示',
+      'health.level.critical': '危急',
+      'health.level.info': '資訊',
+      'health.model_cache.empty': '模型快取：空',
+      'health.model_cache.summary': '模型快取：{items}',
+      'health.model_cache.state.ready': '待命',
+      'health.model_cache.state.busy': '使用中',
+      'health.model_cache.state.offloaded': '已卸載',
+      'health.process.active': 'chief 執行中',
+      'health.process.idle': '閒置',
+      'health.process.none': '目前沒有執行中的主流程程序。',
+      'health.process.metric_limited': '受限',
+      'health.process.detail.chief': 'PID {pid} | {name} | {cache}',
+      'health.process.detail.chief_limited': 'PID {pid} | {name} | 目前後端的程序遙測受限 | {cache}',
+      'health.process.detail.dashboard': 'Dashboard PID {pid} | {cache}',
+      'health.advisory.telemetry_missing.title': '系統遙測尚未就緒',
+      'health.advisory.telemetry_missing.detail': '目前還沒有可用的資源使用資料。',
+      'health.advisory.memory_high.title': '記憶體壓力過高',
+      'health.advisory.memory_high.detail': 'VRAM 或 RAM 已超過 92%，建議切換可攜方案或暫停重型階段。',
+      'health.advisory.memory_warn.title': '資源壓力偏高',
+      'health.advisory.memory_warn.detail': '目前工作負載已接近系統上限。',
+      'health.advisory.heartbeat_stale.title': '執行心跳過久未更新',
+      'health.advisory.heartbeat_stale.detail': '狀態檔已 {seconds} 秒沒有更新。',
+      'health.advisory.heartbeat_slow.title': '執行更新速度變慢',
+      'health.advisory.heartbeat_slow.detail': '狀態更新速度低於預期。',
+      'overview.resource.detail_limited': '{accelerator} | {gpus} | 遙測資料受限',
+      'overview.resource.metric_unavailable': '受限',
+      'health.advisory.chief_missing.title': '找不到 chief 程序',
+      'health.advisory.chief_missing.detail': 'Dashboard 顯示主流程執行中，但目前偵測不到 chief 程序。',
+      'health.advisory.queue_pressure.title': '佇列深度正在上升',
+      'health.advisory.queue_pressure.detail': '可能需要調整優先序，或改用成本較低的方案。',
+      'health.advisory.gpu_missing.title': '未偵測到 GPU',
+      'health.advisory.gpu_missing.detail': '圖片階段在純 CPU 環境下會明顯變慢。',
+      'health.advisory.plan_override.title': '目前方案覆蓋了硬體建議',
+      'health.advisory.plan_override.detail': '目前選擇為 {selected}，Auto 建議為 {recommended}。',
+      'health.advisory.ready': '系統狀態正常，目前設定與資源餘裕相符。',
+      'health.summary.ready': '系統已準備好進行下一次生成。',
+      'health.summary.running_healthy': '主流程執行中，資源餘裕看起來正常。',
+      'health.run_context.active': 'Run {run_id} | {stage}',
+      'health.run_context.idle': '目前沒有主流程執行中',
+      'health.pressure.low': '低',
+      'health.pressure.moderate': '中',
+      'health.pressure.elevated': '偏高',
+      'health.pressure.critical': '危急',
+      'health.meta.plan': '方案：{selected} | Auto：{recommended}',
+      'health.meta.run': '執行：{text}',
+      'health.meta.pressure': '壓力：{value}',
+    });
+
+    Object.assign(I18N['zh-TW'], {
+      'kpi.system_state': '執行狀態',
+      'kpi.queue_depth': '佇列',
+      'kpi.updated': '最後更新',
+      'gallery.system_title': '資源快照',
+      'gallery.system_hint': '這裡顯示和 Generate 相同的即時遙測，方便瀏覽成果時快速查看資源狀況。',
+      'overview.resource.metric_unavailable': '無資料',
+      'overview.toggle.strict_translation': '翻譯必須成功',
+      'overview.toggle.strict_voice': '語音必須成功',
+      'overview.strict_modes.hint': '開啟後，該階段失敗就會讓整本書記為失敗；關閉時則允許降級完成。',
+      'overview.quick_profile.label': '工作流預設',
+      'overview.quick_profile.hint': '工作流預設會一起調整模型方案、重試次數、階段開關與必須成功的階段。',
+      'overview.model_plan.hint': 'Auto 會依目前硬體自動選擇模型方案；套用工作流預設時也會同步更新這個欄位。',
+      'overview.model_plan.scope_hint': '如果你只想調整模型與硬體策略，不想改其他流程設定，就改這裡。',
+      'ops.summary.hint_dynamic': '成功率 {success} | 平均排隊延遲 {delay} | GPU 成本 {cost}',
+      'ops.summary.hint_unavailable': '目前後端不支援歷史容量統計。',
+      'ops.summary.health_limited': '受限',
+      'health.process.metric_limited': '無資料',
+      'health.process.detail.chief_limited': 'PID {pid} | {name} | 目前後端只提供 PID 與階段資訊 | {cache}',
+      'msg.compatibility_limited': '相容模式：目前後端不支援 {items}。請在這次執行結束後重啟 dashboard。',
+      'msg.capability.queue': '佇列',
+      'msg.capability.alerts': '警示',
+      'msg.capability.capacity': '容量統計',
+      'msg.capability.configs': '設定版本',
+      'msg.capability.process_telemetry': '程序遙測',
+      'msg.queue_unavailable': '目前後端無法提供佇列資料。',
+      'msg.alerts_unavailable': '目前後端無法提供警示資料。',
+      'msg.capacity_unavailable': '目前後端無法提供容量統計資料。',
+      'msg.configs_unavailable': '目前後端無法提供設定版本資料。',
+    });
+
+    Object.assign(I18N['zh-TW'], {
+      'page.overview.title': '故事生成',
+      'page.overview.sub': '在同一個頁面完成主流程設定、即時監控與執行控制。',
+      'page.ops.title': '營運中心',
+      'page.ops.sub': '集中查看佇列、警示、容量與設定版本，適合排程與營運管理。',
+      'page.detail.title': '執行明細',
+      'page.detail.sub': '追蹤單次 run 的時間線、警示、產物與完整日誌。',
+      'page.evaluation.title': '評估診斷',
+      'page.evaluation.sub': '檢視單一本故事的評估報告、維度雷達與重點發現。',
+      'page.gallery.title': '作品圖庫',
+      'page.gallery.sub': '快速瀏覽已生成的故事與封面，並同步查看當前資源壓力。',
+      'page.modules.title': '模組工作台',
+      'page.modules.sub': '將文字、圖片、翻譯、語音與通用工具拆開單獨執行。',
+      'gallery.empty.title': '目前還沒有可預覽的作品。',
+      'gallery.empty.copy': '第一批生成完成後，這裡會顯示封面卡片與故事摘要。',
+      'eval.chart.empty.title': '目前沒有可顯示的雷達圖。',
+      'eval.chart.empty.copy': '先載入一份評估報告，這裡才會顯示各維度分數。',
+      'module.studio.story.title': '文字工作台',
+      'module.studio.story.sub': '單獨生成故事草稿或排入文字模組任務，不影響圖片與語音。',
+      'module.studio.image.title': '圖片工作台',
+      'module.studio.image.sub': '檢查既有圖片任務、調整 prompt，並只重跑視覺層。',
+      'module.studio.translation.title': '翻譯工作台',
+      'module.studio.translation.sub': '針對既有故事輸出執行翻譯，獨立選擇目標語言與翻譯參數。',
+      'module.studio.voice.title': '語音工作台',
+      'module.studio.voice.sub': '從既有故事目錄產生旁白，直接控制 speaker sample 與頁碼範圍。',
+      'msg.select_story_root_for_images': '先載入故事目錄，或等待圖片生成完成後再回到這裡查看。',
+    });
+
+    Object.assign(I18N['zh-TW'], {
+      'overview.monitor.summary.running': '主流程執行中',
+      'overview.monitor.summary.ready': '系統已準備好進行下一次生成',
+      'overview.monitor.summary.queued': '佇列中仍有待處理任務',
+      'overview.monitor.summary.postrun': '上一次執行為 {state}',
+      'overview.monitor.copy.running': 'Run {run_id} 目前停在 {stage}。',
+      'overview.monitor.copy.ready': '左側完成設定後，就可以直接開始或加入佇列。',
+      'overview.monitor.copy.queued': '目前沒有 active run，但佇列中還有 {count} 個任務待處理。',
+      'overview.monitor.copy.postrun': '上一個 Run {run_id} 已結束，結果為 {state}。重新開始前先看一次摘要會比較安全。',
+      'overview.monitor.side.progress': '進度',
+      'overview.monitor.side.queue': '佇列',
+      'overview.monitor.side.elapsed': '已耗時',
+      'overview.monitor.side.updated': '最後更新',
+      'overview.monitor.side.pressure': '壓力',
+      'overview.monitor.last_run.title': '最近一次執行',
+      'overview.monitor.last_run.none': '目前沒有可用的最近執行摘要。',
+      'overview.monitor.last_run.result': '結果',
+      'overview.monitor.last_run.books': '書本',
+      'overview.monitor.next.title': '下一步',
+      'overview.monitor.next.ready': '先在左側調整這次要跑的設定，再開始或加入佇列。',
+      'overview.monitor.next.review': '先確認上一個 run 的結果，再調整設定後重新開始。',
+      'overview.monitor.next.queued': '佇列裡還有待跑任務；你現在可以繼續調整下一次的設定。',
+      'overview.monitor.next.queue': '佇列深度：{count}',
+      'overview.monitor.next.plan': '模型方案：{selected} | Auto 建議：{recommended}',
+      'overview.monitor.next.pressure': '目前資源壓力：{value}',
+      'overview.monitor.result.ready': '待命',
+      'overview.advisory.issues': '目前問題',
+    });
+
+    Object.assign(I18N['zh-TW'], {
+      'overview.resource.detail': '{accelerator} | 已更新 {time}',
+      'overview.resource.detail_limited': '{accelerator} | 遙測資料受限',
+      'overview.process.title': '執行摘要',
+      'overview.process.stage': '階段',
+      'overview.process.book': '書本',
+      'overview.process.updated': '最後更新',
+      'overview.process.uptime': '已執行時間',
+      'health.process.active': '主流程執行中',
+      'health.process.idle': '待命',
+      'health.process.none': '目前沒有執行中的主流程。',
+      'health.process.detail.chief_resources': 'PID {pid} | CPU {cpu}% | RAM {ram} GB | {cache}',
+      'health.process.detail.chief_limited': 'PID {pid} | {name} | 以執行內容為主的摘要模式 | {cache}',
+    });
+
+    Object.assign(I18N['zh-TW'], {
+      'page.gallery.sub': '瀏覽已產生作品，快速確認封面覆蓋、更新時間與基本分佈。',
+      'gallery.snapshot.title': '圖庫摘要',
+      'gallery.snapshot.hint': '不用離開圖庫就能先看出封面缺漏、更新新鮮度與內容分佈。',
+      'gallery.snapshot.total': '作品數',
+      'gallery.snapshot.covers': '封面覆蓋',
+      'gallery.snapshot.categories': '類別數',
+      'gallery.snapshot.latest': '最近更新',
+      'gallery.snapshot.highlights': '重點提示',
+      'gallery.snapshot.empty': '載入圖庫後會在這裡顯示封面覆蓋與更新摘要。',
+      'gallery.snapshot.latest_none': '尚無圖庫資料。',
+      'gallery.snapshot.missing_covers': '缺少封面：{count}',
+      'gallery.snapshot.top_category': '主要類別：{name}（{count}）',
+      'gallery.snapshot.age_mix': '年齡分佈：{ages}',
+    });
+
     const ui = {
       timer: null,
       logCursor: 0,
       activeLogRunId: null,
+      formHydratedRunId: '',
+      lastLogReceiptTs: 0,
+      apiVersion: '',
+      apiCapabilities: {
+        queue_api: null,
+        alerts_api: null,
+        capacity_api: null,
+        configs_api: null,
+        system_cpu: null,
+        system_processes: null,
+        system_sampled_at: null,
+        system_model_cache: null,
+      },
       historyRows: [],
       selectedRunId: '',
       selectedRunBookByRun: {},
       latestStatus: null,
+      lastSystemStatus: null,
+      lastQueue: null,
+      lastAlerts: [],
+      lastCapacity: null,
       activeTab: 'overview',
       refreshTick: 0,
       recorder: null,
@@ -990,6 +1377,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       imageSelectedTaskIds: {},
       imageDetailTaskId: '',
       moduleJobs: [],
+      lastModuleJobsData: null,
       hiddenModuleJobs: {},
       moduleSelectedJobId: '',
       moduleStudio: 'story',
@@ -1001,6 +1389,9 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       moduleRecordContext: null,
       moduleRecordSource: null,
       moduleRecordProcessor: null,
+      presetSpeakerSamples: [],
+      customSpeakerDirs: [],
+      customSpeakerFiles: [],
       language: 'zh-TW',
       generalBusy: {
         text: false,
@@ -1014,6 +1405,12 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         book: '',
         storyRoot: '',
         branch: 'canonical',
+        showAdvanced: false,
+        pendingKey: '',
+        pendingPromise: null,
+        lastFetchKey: '',
+        lastFetchAt: 0,
+        renderSignature: '',
         chart: null,
         lastResponse: null,
       },
@@ -1043,10 +1440,22 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       return 'en';
     }
 
+    function looksCorruptedText(value) {
+      const text = String(value == null ? '' : value);
+      if (!text) return false;
+      if (/[\uE000-\uF8FF\uFFFD]/.test(text)) return true;
+      if (text.indexOf('嚗') >= 0) return true;
+      const questionCount = (text.match(/\?/g) || []).length;
+      return questionCount >= 3;
+    }
+
     function t(key, fallback) {
       const lang = ui.language && I18N[ui.language] ? ui.language : 'en';
       const table = I18N[lang] || {};
-      if (Object.prototype.hasOwnProperty.call(table, key)) return table[key];
+      if (Object.prototype.hasOwnProperty.call(table, key)) {
+        const value = table[key];
+        if (!(lang === 'zh-TW' && looksCorruptedText(value))) return value;
+      }
       if (Object.prototype.hasOwnProperty.call(I18N.en, key)) return I18N.en[key];
       return fallback != null ? fallback : key;
     }
@@ -1068,6 +1477,126 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       node.textContent = t(key, fallback);
     }
 
+    function renderEmptyStateMarkup(title, copy, extraClass) {
+      const classes = ['empty-state'];
+      if (extraClass) classes.push(extraClass);
+      return (
+        '<div class="' + classes.join(' ') + '">' +
+          '<strong class="empty-state-title">' + escapeHtml(String(title || '')) + '</strong>' +
+          '<span class="empty-state-copy">' + escapeHtml(String(copy || '')) + '</span>' +
+        '</div>'
+      );
+    }
+
+    function renderGalleryEmptyState() {
+      return renderEmptyStateMarkup(
+        t('gallery.empty.title', 'No stories to preview yet.'),
+        t('gallery.empty.copy', 'Generated covers and story cards will appear here after the first successful run.')
+      );
+    }
+
+    function renderGallerySnapshot(data) {
+      const images = Array.isArray(data && data.images) ? data.images : [];
+      let withCover = 0;
+      let latestModified = 0;
+      const categories = Object.create(null);
+      const ages = Object.create(null);
+
+      for (let i = 0; i < images.length; i += 1) {
+        const item = images[i] || {};
+        if (item.cover) withCover += 1;
+
+        const modified = Number(item.modified || 0);
+        if (Number.isFinite(modified) && modified > latestModified) latestModified = modified;
+
+        const category = String(item.category || '').trim();
+        if (category && category !== '-') {
+          categories[category] = (categories[category] || 0) + 1;
+        }
+
+        const age = String(item.age || '').trim();
+        if (age && age !== '-') ages[age] = true;
+      }
+
+      const categoryNames = Object.keys(categories);
+      let topCategory = '';
+      let topCategoryCount = 0;
+      for (let i = 0; i < categoryNames.length; i += 1) {
+        const name = categoryNames[i];
+        const count = parseIntSafe(categories[name], 0);
+        if (count > topCategoryCount) {
+          topCategory = name;
+          topCategoryCount = count;
+        }
+      }
+      const ageNames = Object.keys(ages).sort();
+
+      const totalNode = byId('gallery_stat_total');
+      const coversNode = byId('gallery_stat_covers');
+      const categoriesNode = byId('gallery_stat_categories');
+      const latestNode = byId('gallery_stat_latest');
+      if (totalNode) totalNode.textContent = String(images.length);
+      if (coversNode) coversNode.textContent = String(withCover) + '/' + String(images.length);
+      if (categoriesNode) categoriesNode.textContent = String(categoryNames.length);
+      if (latestNode) {
+        latestNode.textContent = latestModified > 0
+          ? new Date(latestModified * 1000).toLocaleString()
+          : t('gallery.snapshot.latest_none', 'No gallery data yet.');
+      }
+
+      const highlightNode = byId('gallery_highlights');
+      if (!highlightNode) return;
+
+      const highlights = [];
+      if (!images.length) {
+        highlights.push(t('gallery.snapshot.empty', 'Load the gallery to see freshness and cover coverage.'));
+      } else {
+        const missingCovers = Math.max(0, images.length - withCover);
+        if (missingCovers > 0) {
+          highlights.push(tf('gallery.snapshot.missing_covers', {count: String(missingCovers)}, 'Missing covers: {count}'));
+        }
+        if (topCategory) {
+          highlights.push(tf('gallery.snapshot.top_category', {name: topCategory, count: String(topCategoryCount)}, 'Top category: {name} ({count})'));
+        }
+        if (ageNames.length) {
+          highlights.push(tf('gallery.snapshot.age_mix', {ages: ageNames.join(' / ')}, 'Age mix: {ages}'));
+        }
+      }
+      if (!highlights.length) {
+        highlights.push(t('gallery.snapshot.empty', 'Load the gallery to see freshness and cover coverage.'));
+      }
+
+      highlightNode.innerHTML = highlights.map(function (text) {
+        return '<div class="list-item advisory-info">' + escapeHtml(String(text)) + '</div>';
+      }).join('');
+    }
+
+    function renderImageGalleryEmptyState() {
+      return renderEmptyStateMarkup(
+        t('msg.no_generated_images', 'No generated images yet.'),
+        t('msg.select_story_root_for_images', 'Load a story root or wait for image generation to populate this grid.')
+      );
+    }
+
+    function setEvaluationChartPlaceholder(visible) {
+      const emptyNode = byId('eval_chart_empty');
+      const canvasNode = byId('evalRadarChart');
+      if (emptyNode) emptyNode.style.display = visible ? 'flex' : 'none';
+      if (canvasNode) canvasNode.style.display = visible ? 'none' : 'block';
+    }
+
+    function renderPageHeader() {
+      const tab = String(ui.activeTab || 'overview');
+      const titleNode = byId('page_title');
+      const subtitleNode = byId('page_subtitle');
+      if (titleNode) {
+        titleNode.textContent = t('page.' + tab + '.title', t('tab.' + tab, 'Dashboard'));
+      }
+      if (subtitleNode) {
+        subtitleNode.textContent = t('page.' + tab + '.sub', t('hero.sub', 'Operate runs, inspect alerts, manage queue priority, and audit production history from one dashboard.'));
+      }
+    }
+
     function applyLanguage() {
       document.documentElement.lang = ui.language;
       document.title = t('title.dashboard', 'GenAI Chief Control Plane');
@@ -1075,14 +1604,13 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       const staticMappings = [
         ['hero_eyebrow', 'hero.eyebrow', 'GenAI Operations'],
         ['hero_title', 'hero.title', 'Chief Control Plane'],
-        ['hero_sub', 'hero.sub', 'Operate runs, inspect alerts, manage queue priority, and audit production history from one dashboard.'],
         ['label_auto_refresh_text', 'label.auto_refresh', 'Auto refresh'],
         ['label_language', 'label.language', 'Language'],
-        ['kpi_label_system_state', 'kpi.system_state', 'System State'],
-        ['kpi_label_queue_depth', 'kpi.queue_depth', 'Queue Depth'],
-        ['kpi_label_success_rate', 'kpi.success_rate', 'Success Rate'],
-        ['kpi_label_avg_duration', 'kpi.avg_duration', 'Avg Duration'],
-        ['kpi_label_gpu_cost', 'kpi.gpu_cost', 'Est. GPU Cost'],
+        ['kpi_label_system_state', 'kpi.system_state', 'Run State'],
+        ['kpi_label_queue_depth', 'kpi.queue_depth', 'Queue'],
+        ['kpi_label_success_rate', 'kpi.progress', 'Progress'],
+        ['kpi_label_avg_duration', 'kpi.elapsed', 'Elapsed'],
+        ['kpi_label_gpu_cost', 'kpi.updated', 'Last Update'],
         ['label_tab_gallery', 'label.tab_gallery', 'Gallery'],
         ['label_tab_overview', 'tab.overview', 'Generate'],
         ['label_tab_ops', 'tab.ops', 'Operations'],
@@ -1091,15 +1619,41 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['label_tab_modules', 'tab.modules', 'Modules'],
         ['gallery_title', 'gallery.title', 'Story Gallery'],
         ['gallery_sub', 'gallery.sub', 'Browse generated stories with cover previews and quick metadata.'],
-        ['gallery_status_title', 'gallery.system_title', 'System Snapshot'],
-        ['gallery_status_hint', 'gallery.system_hint', 'Live resource usage helps avoid running heavy stages under memory pressure.'],
+        ['gallery_status_title', 'gallery.snapshot.title', 'Gallery Snapshot'],
+        ['gallery_status_hint', 'gallery.snapshot.hint', 'Use this summary to spot freshness gaps and missing covers without leaving the gallery.'],
+        ['gallery_label_total', 'gallery.snapshot.total', 'Stories'],
+        ['gallery_label_covers', 'gallery.snapshot.covers', 'Covers'],
+        ['gallery_label_categories', 'gallery.snapshot.categories', 'Categories'],
+        ['gallery_label_latest', 'gallery.snapshot.latest', 'Latest Update'],
+        ['gallery_highlights_title', 'gallery.snapshot.highlights', 'Highlights'],
+        ['gallery_empty_title', 'gallery.empty.title', 'No stories to preview yet.'],
+        ['gallery_empty_copy', 'gallery.empty.copy', 'Generated covers and story cards will appear here after the first successful run.'],
         ['overview_composer_title', 'overview.composer.title', 'Run Composer'],
         ['overview_composer_sub', 'overview.composer.sub', 'Product mode supports queueing with priority and versioned run profiles.'],
         ['overview_telemetry_title', 'overview.telemetry.title', 'Live Telemetry'],
+        ['quick_profile_label', 'overview.quick_profile.label', 'Workflow Preset'],
+        ['overview_system_panel_title', 'overview.system.title', 'System Resources'],
+        ['overview_process_panel_title', 'overview.process.title', 'Run Context'],
+        ['overview_advisory_title', 'overview.advisory.title', 'Run Readiness'],
+        ['overview_resource_label_cpu', 'overview.resource.cpu', 'CPU'],
+        ['overview_resource_label_ram', 'overview.resource.ram', 'RAM'],
+        ['overview_resource_label_gpu', 'overview.resource.gpu', 'GPU'],
+        ['overview_resource_label_vram', 'overview.resource.vram', 'VRAM'],
+        ['overview_process_label_cpu', 'overview.process.stage', 'Stage'],
+        ['overview_process_label_ram', 'overview.process.book', 'Book'],
+        ['overview_process_label_threads', 'overview.process.updated', 'Updated'],
+        ['overview_process_label_uptime', 'overview.process.uptime', 'Uptime'],
         ['overview_live_logs_title', 'overview.logs.title', 'Live Logs (Now)'],
         ['overview_live_logs_hint', 'overview.logs.hint', 'Latest lines from the active run. Full logs are in Run Detail.'],
         ['ops_queue_title', 'ops.queue.title', 'Queue and Priority'],
+        ['ops_summary_title', 'ops.summary.title', 'Operations Snapshot'],
+        ['ops_summary_label_active', 'ops.summary.active', 'Active Run'],
+        ['ops_summary_label_queue', 'ops.summary.queue', 'Queued Runs'],
+        ['ops_summary_label_alerts', 'ops.summary.alerts', 'Open Alerts'],
+        ['ops_summary_label_modules', 'ops.summary.modules', 'Module Jobs'],
+        ['ops_summary_label_health', 'ops.summary.health', 'Ops Health'],
         ['ops_alert_title', 'ops.alert.title', 'Alert Center'],
+        ['ops_alert_hint', 'ops.alert.hint', 'Alerts include queue pressure, repeated failures, and run-stop incidents.'],
         ['ops_capacity_title', 'ops.capacity.title', 'Capacity and Cost'],
         ['cap_label_runs', 'ops.capacity.window_runs', 'Window Runs'],
         ['cap_label_success_rate', 'ops.capacity.success_rate', 'Success Rate'],
@@ -1108,7 +1662,6 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['cap_label_gpu_hours', 'ops.capacity.gpu_hours', 'GPU Hours'],
         ['cap_label_gpu_cost', 'ops.capacity.gpu_cost', 'GPU Cost'],
         ['ops_config_title', 'ops.config.title', 'Config Versions'],
-        ['ops_logs_title', 'ops.logs.title', 'Live Logs'],
         ['ops_recent_title', 'ops.recent.title', 'Recent Runs'],
         ['detail_selector_title', 'detail.selector.title', 'Run Detail Selector'],
         ['detail_summary_title', 'detail.summary.title', 'Run Summary'],
@@ -1119,13 +1672,19 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['detail_label_success_books', 'detail.summary.success_books', 'Success Books'],
         ['detail_label_failed_books', 'detail.summary.failed_books', 'Failed Books'],
         ['detail_meta_priority', 'detail.summary.priority', 'Priority'],
+        ['detail_artifact_label_story_root', 'detail.artifact.story_root', 'Story Root'],
+        ['detail_artifact_label_book', 'detail.artifact.book', 'Selected Book'],
+        ['detail_artifact_label_stage', 'detail.artifact.stage', 'Last Stage'],
+        ['detail_artifact_label_eval', 'detail.artifact.eval', 'Evaluation'],
         ['detail_label_book', 'detail.book', 'Book'],
         ['detail_meta_queue_delay', 'detail.summary.queue_delay', 'Queue Delay'],
         ['detail_meta_started_at', 'detail.summary.started_at', 'Started At'],
         ['detail_meta_finished_at', 'detail.summary.finished_at', 'Finished At'],
         ['detail_timeline_title', 'detail.timeline.title', 'Timeline and Alerts'],
+        ['detail_timeline_sub', 'detail.timeline.sub', 'Run-level events and alerts for the whole batch.'],
         ['detail_related_alerts_title', 'detail.related_alerts.title', 'Related Alerts'],
         ['detail_logs_title', 'detail.logs.title', 'Run Logs'],
+        ['detail_logs_sub', 'detail.logs.sub', 'Select a book to inspect its captured terminal log.'],
         ['evaluation_title', 'eval.title', 'Evaluation Diagnostics'],
         ['evaluation_sub', 'eval.sub', 'Inspect assessment reports by latest story, run ID, or manual story root.'],
         ['label_evaluation_source', 'eval.source', 'Data Source'],
@@ -1133,6 +1692,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['label_evaluation_book', 'eval.book', 'Book'],
         ['label_evaluation_story_root', 'eval.story_root', 'Story Root'],
         ['label_evaluation_branch', 'eval.branch', 'Branch'],
+        ['evaluation_branch_hint', 'eval.branch_hint', 'Use the report variant name. In most cases, keep `canonical`.'],
         ['eval_label_overall', 'eval.overall', 'Overall Score'],
         ['eval_label_scope', 'eval.scope', 'Scope'],
         ['eval_label_branch', 'eval.branch_used', 'Branch'],
@@ -1141,12 +1701,20 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['eval_meta_run_label', 'eval.meta.run_id', 'Run ID'],
         ['eval_meta_book_label', 'eval.book', 'Book'],
         ['eval_meta_story_root_label', 'eval.meta.story_root', 'Story Root'],
+        ['eval_insight_title', 'eval.insight.title', 'Evaluation Insights'],
         ['evaluation_chart_title', 'eval.chart.title', 'Dimension Radar'],
+        ['eval_chart_empty_title', 'eval.chart.empty.title', 'No evaluation chart yet.'],
+        ['eval_chart_empty_copy', 'eval.chart.empty.copy', 'Load a story report to compare dimension scores on the radar chart.'],
         ['evaluation_log_title', 'eval.log.title', 'Assessment JSON'],
         ['module_jobs_title', 'module.jobs.title', 'Module Jobs'],
         ['module_job_detail_title', 'module.job_detail.title', 'Module Job Detail'],
         ['module_job_events_title', 'module.job_events.title', 'Events'],
         ['module_job_logs_title', 'module.job_logs.title', 'Logs'],
+        ['module_summary_title', 'module.summary.title', 'Module Snapshot'],
+        ['module_summary_label_active', 'module.summary.active', 'Active Job'],
+        ['module_summary_label_pending', 'module.summary.pending', 'Pending Jobs'],
+        ['module_summary_label_history', 'module.summary.history', 'Visible Records'],
+        ['module_summary_label_selected', 'module.summary.selected', 'Selected Job'],
         ['module_workbenches_title', 'module.workbenches.title', 'Module Workbenches'],
         ['module_workbenches_sub', 'module.workbenches.sub', 'Run text, image, translation, and voice independently without executing the full pipeline.'],
         ['module_tab_story', 'module.tab.story', 'Text Studio'],
@@ -1154,6 +1722,14 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['module_tab_translation', 'module.tab.translation', 'Translation Studio'],
         ['module_tab_voice', 'module.tab.voice', 'Voice Studio'],
         ['module_tab_general', 'module.tab.general', 'General Studio'],
+        ['studio_story_title', 'module.studio.story.title', 'Text Studio'],
+        ['studio_story_sub', 'module.studio.story.sub', 'Generate standalone story drafts and queue text-only runs without touching images or voice.'],
+        ['studio_image_title', 'module.studio.image.title', 'Image Studio'],
+        ['studio_image_sub', 'module.studio.image.sub', 'Inspect existing image tasks, tweak prompts, and rerun only the visual layer for a story.'],
+        ['studio_translation_title', 'module.studio.translation.title', 'Translation Studio'],
+        ['studio_translation_sub', 'module.studio.translation.sub', 'Translate existing story outputs, choose target languages, and rerun translation independently.'],
+        ['studio_voice_title', 'module.studio.voice.title', 'Voice Studio'],
+        ['studio_voice_sub', 'module.studio.voice.sub', 'Generate narration from an existing story root, with direct control over speaker samples and page ranges.'],
         ['general_tools_title', 'general.tools.title', 'General AI Toolkit'],
         ['general_tools_sub', 'general.tools.sub', 'Use direct non-story tools for text QA, image generation, translation, and TTS preview.'],
         ['general_section_text_title', 'module.general.section.text', 'General Text'],
@@ -1176,7 +1752,6 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['btn_record_start', 'btn.record_start', 'Start Recording'],
         ['btn_record_stop', 'btn.record_stop', 'Stop Recording'],
         ['btn_record_save', 'btn.record_save', 'Save As Speaker WAV'],
-        ['btn_clear_logs', 'btn.clear', 'Clear'],
         ['btn_overview_clear_view', 'btn.clear_view', 'Clear View'],
         ['btn_clear_history', 'btn.clear_history', 'Clear Ops History'],
         ['btn_detail_refresh', 'btn.refresh_detail', 'Refresh Detail'],
@@ -1186,6 +1761,9 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['btn_module_show_all', 'btn.show_all', 'Show All'],
         ['btn_module_job_stop', 'btn.stop_selected', 'Stop Selected'],
         ['btn_images_refresh', 'btn.refresh_images', 'Refresh Images'],
+        ['btn_module_trans_target_recommended', 'btn.recommended', 'Recommended'],
+        ['btn_module_trans_target_all', 'btn.select_all', 'Select All'],
+        ['btn_module_trans_target_none', 'btn.clear', 'Clear'],
         ['btn_module_trans_story_refresh', 'btn.refresh_story_list', 'Refresh Story List'],
         ['btn_images_regen', 'btn.regen_selected', 'Regenerate Selected'],
         ['btn_images_module_run', 'btn.queue_image_module', 'Queue Image Module Job'],
@@ -1252,6 +1830,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['#tab_overview label[for="story_materials"]', 'overview.field.materials_elements', 'Materials / Elements'],
         ['#tab_overview label[for="speaker_dir"]', 'overview.field.speaker_dir_optional', 'Speaker Samples Dir (optional)'],
         ['#tab_overview label[for="voice_script"]', 'overview.field.recording_script_recommended', 'Recording Script (recommended)'],
+        ['#tab_overview label[for="model_plan"]', 'overview.field.model_plan', 'Model Plan'],
         ['#tab_overview label[for="version_name"]', 'overview.field.config_version_name', 'Config Version Name'],
         ['#tab_overview label[for="version_note"]', 'overview.field.version_note', 'Version Note'],
         ['#studio_story label[for="module_story_count"]', 'module.story.book_count', 'Book Count'],
@@ -1356,11 +1935,11 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       }
       const overviewStrictTranslation = document.querySelector('#tab_overview label.chip-check input#strict_translation');
       if (overviewStrictTranslation && overviewStrictTranslation.parentElement) {
-        overviewStrictTranslation.parentElement.lastChild.textContent = t('overview.toggle.strict_translation', 'Strict translation');
+        overviewStrictTranslation.parentElement.lastChild.textContent = t('overview.toggle.strict_translation', 'Translation required');
       }
       const overviewStrictVoice = document.querySelector('#tab_overview label.chip-check input#strict_voice');
       if (overviewStrictVoice && overviewStrictVoice.parentElement) {
-        overviewStrictVoice.parentElement.lastChild.textContent = t('overview.toggle.strict_voice', 'Strict voice');
+        overviewStrictVoice.parentElement.lastChild.textContent = t('overview.toggle.strict_voice', 'Voice required');
       }
 
       const presetButtons = document.querySelectorAll('#tab_overview button[data-preset]');
@@ -1371,16 +1950,29 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         btn.textContent = t('overview.preset.' + preset, btn.textContent);
       }
 
-      setTextById('overview_metric_total', 'overview.metric.total', 'Total');
-      setTextById('overview_metric_completed', 'overview.metric.completed', 'Completed');
+      setTextById('model_plan_hint', 'overview.model_plan.hint', 'Auto chooses a model profile from the current hardware. Workflow presets also update this field.');
+      setTextById('model_plan_scope_hint', 'overview.model_plan.scope_hint', 'Use this only when you want to change model/hardware strategy without changing the rest of the workflow.');
+      setTextById('quick_profile_hint', 'overview.quick_profile.hint', 'Workflow presets change model plan plus retries, stage toggles, and required-stage behavior.');
+      setTextById('strict_modes_hint', 'overview.strict_modes.hint', 'If required, that stage must succeed or the book is marked failed. Turn it off to allow degraded output.');
+      const modelPlanSelect = byId('model_plan');
+      if (modelPlanSelect && modelPlanSelect.options) {
+        for (let i = 0; i < modelPlanSelect.options.length; i += 1) {
+          const option = modelPlanSelect.options[i];
+          const value = String(option.value || '').toLowerCase();
+          if (!value) continue;
+          option.text = t('overview.model_plan.' + value, option.text);
+        }
+      }
+      renderModelPlanStatus(ui.lastSystemStatus);
+      renderSystemTelemetry(ui.lastSystemStatus);
+      updateHeaderKpis(ui.latestStatus || {}, ui.lastCapacity || {});
+      syncStrictOptionAvailability();
+
       setTextById('overview_metric_success', 'overview.metric.success', 'Success');
       setTextById('overview_metric_failed', 'overview.metric.failed', 'Failed');
-      setTextById('overview_metric_elapsed', 'overview.metric.elapsed', 'Elapsed');
       setTextById('overview_metric_eta', 'overview.metric.eta', 'ETA');
       setTextById('overview_meta_run_id', 'overview.meta.run_id', 'Run ID');
-      setTextById('overview_meta_pid', 'overview.meta.pid', 'PID');
       setTextById('overview_meta_exit_code', 'overview.meta.exit_code', 'Exit Code');
-      setTextById('overview_meta_queue_depth', 'overview.meta.queue_depth', 'Queue Depth');
       const overviewLogOutput = byId('overview_log_output');
       if (overviewLogOutput) {
         const oldText = String(overviewLogOutput.textContent || '').trim();
@@ -1437,9 +2029,11 @@ const STORE_KEY = 'genai.dashboard.form.v4';
 
       const placeholderMappings = [
         ['speaker_wav', 'placeholder.speaker_wav', 'ex: models/XTTS-v2/samples/my_parent.wav'],
+        ['voice_script', 'placeholder.voice_script', 'Read 3 to 5 calm, natural sentences with one line of narration, one short line of dialogue, and one clear pause.'],
         ['theme_custom', 'placeholder.theme_custom', 'ex: friendship, courage, mystery'],
         ['subcategory_custom', 'placeholder.subcategory_custom', 'ex: forest, tradition, science'],
         ['speaker_dir', 'placeholder.speaker_dir', 'ex: models/XTTS-v2/samples/custom'],
+        ['evaluation_branch', 'placeholder.evaluation_branch', 'canonical'],
         ['template_name_input', 'placeholder.template_name', 'Template name'],
         ['version_name', 'placeholder.version_name', 'example: quality-v3'],
         ['version_note', 'placeholder.version_note', 'what changed and why'],
@@ -1591,6 +2185,10 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         }
       }
 
+      if (imageGallery && (!ui.imageItems || ui.imageItems.length === 0)) {
+        imageGallery.innerHTML = renderImageGalleryEmptyState();
+      }
+
       const imageDetailMeta = byId('image_detail_meta');
       if (imageDetailMeta) {
         const old = String(imageDetailMeta.textContent || '').trim();
@@ -1683,10 +2281,880 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       if (ui.evaluation && ui.evaluation.lastResponse) {
         renderEvaluation(ui.evaluation.lastResponse, {preserveStatus: true});
       }
+
+      syncEvaluationAdvancedControls();
+      renderPageHeader();
     }
 
     function byId(id) {
       return document.getElementById(id);
+    }
+
+    function modelPlanLabel(value) {
+      const key = String(value || '').trim().toLowerCase();
+      if (!key) return t('overview.model_plan.unknown', 'Unknown');
+      return t('overview.model_plan.' + key, key);
+    }
+
+    function formatGiBFromBytes(value) {
+      const bytes = Number(value || 0);
+      if (!Number.isFinite(bytes) || bytes <= 0) return '0.0';
+      return (bytes / (1024 * 1024 * 1024)).toFixed(1);
+    }
+
+    function formatSampledTime(isoText) {
+      if (!isoText) return '-';
+      const d = new Date(isoText);
+      if (Number.isNaN(d.getTime())) return '-';
+      return d.toLocaleTimeString();
+    }
+
+    function localizeBackendMessage(message) {
+      const text = String(message || '');
+      if (!text || ui.language !== 'zh-TW') return text;
+      const exactMap = {
+        'No assessment report found for selected story.': '找不到所選故事的評估報告。',
+        'No stories found.': '目前找不到可用的故事。',
+        'run_id is required when source=run.': '當資料來源是 Run ID 時，必須先選擇 run_id。',
+        'story_root is required when source=story_root.': '當資料來源是故事路徑時，必須先輸入 story_root。',
+        'No evaluation story root resolved.': '目前無法解析評估用的故事路徑。',
+      };
+      if (Object.prototype.hasOwnProperty.call(exactMap, text)) {
+        return exactMap[text];
+      }
+      if (text.indexOf('Invalid story_root:') === 0) {
+        return '無效的 story_root：' + text.slice('Invalid story_root:'.length).trim();
+      }
+      if (text.indexOf('Unable to resolve story_root for run_id:') === 0) {
+        return '無法從這個 run_id 解析 story_root：' + text.slice('Unable to resolve story_root for run_id:'.length).trim();
+      }
+      if (text.indexOf('Failed to parse assessment report:') === 0) {
+        return '評估報告解析失敗：' + text.slice('Failed to parse assessment report:'.length).trim();
+      }
+      return text;
+    }
+
+    function setPillTone(node, tone, text) {
+      if (!node) return;
+      node.className = 'pill';
+      const value = String(tone || '').trim().toLowerCase();
+      if (value) node.classList.add(value);
+      if (text != null) node.textContent = String(text);
+    }
+
+    function advisoryRank(level) {
+      const value = String(level || '').trim().toLowerCase();
+      if (value === 'critical') return 3;
+      if (value === 'warning') return 2;
+      return 1;
+    }
+
+    function formatPillLabel(value) {
+      const text = String(value || '').trim();
+      if (!text) return '-';
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    function healthLabel(value) {
+      const key = String(value || '').trim().toLowerCase();
+      return t('health.level.' + key, formatPillLabel(key));
+    }
+
+    function summarizeModelCache(entries) {
+      if (!Array.isArray(entries) || !entries.length) return t('health.model_cache.empty', 'Model cache: empty');
+      const parts = [];
+      for (let i = 0; i < entries.length; i += 1) {
+        const item = entries[i] || {};
+        const kind = String(item.kind || 'model');
+        const inUse = parseIntSafe(item.in_use, 0);
+        const offloaded = Boolean(item.offloaded);
+        let state = t('health.model_cache.state.ready', 'ready');
+        if (inUse > 0) state = t('health.model_cache.state.busy', 'busy');
+        else if (offloaded) state = t('health.model_cache.state.offloaded', 'offloaded');
+        parts.push(kind + ' ' + state);
+      }
+      return tf('health.model_cache.summary', {items: parts.join(' | ')}, 'Model cache: {items}');
+    }
+
+    function buildChiefProcessFallback(systemPayload, statusPayload) {
+      const system = systemPayload || {};
+      const status = statusPayload || ui.latestStatus || {};
+      const processes = system && system.processes ? system.processes : {};
+      const chief = processes && processes.chief ? processes.chief : null;
+      if (chief) return chief;
+      if (!status || !status.running) return null;
+      const pid = parseIntSafe(status.pid, 0);
+      if (pid <= 0) return null;
+      return {
+        pid: pid,
+        label: 'chief',
+        name: 'chief',
+        status: 'running',
+        cpu_percent: null,
+        rss: null,
+        threads: null,
+        uptime_sec: Number(status.elapsed_sec || 0),
+        limited: true,
+      };
+    }
+
+    function heartbeatThresholdsForStage(stageText) {
+      const stage = String(stageText || '').trim().toUpperCase();
+      if (!stage) return {warningSec: 300, criticalSec: 600};
+      if (stage.indexOf('STORY:') === 0) return {warningSec: 600, criticalSec: 1200};
+      if (stage.indexOf('PRE_EVAL:') === 0) return {warningSec: 420, criticalSec: 900};
+      if (stage.indexOf('IMAGE:') === 0) return {warningSec: 420, criticalSec: 900};
+      if (stage.indexOf('VOICE:') === 0 || stage.indexOf('TRANSLATION:') === 0) return {warningSec: 300, criticalSec: 720};
+      return {warningSec: 300, criticalSec: 600};
+    }
+
+    function isTerminalRunState(state) {
+      const normalized = String(state || '').trim().toLowerCase();
+      return normalized === 'completed' || normalized === 'failed' || normalized === 'error' || normalized === 'stopped';
+    }
+
+    function latestRunIdFromStatus(statusPayload) {
+      const status = statusPayload || {};
+      const candidate = status.latest_run_id != null
+        ? status.latest_run_id
+        : (!status.running ? status.run_id : '');
+      return String(candidate || '').trim();
+    }
+
+    function latestRunStateFromStatus(statusPayload, fallbackState) {
+      const status = statusPayload || {};
+      const candidate = status.latest_run_state != null ? status.latest_run_state : fallbackState;
+      return String(candidate || '').trim().toLowerCase() || 'idle';
+    }
+
+    function renderProcessTelemetry(data) {
+      const payload = data || ui.lastSystemStatus || {};
+      const processes = payload && payload.processes ? payload.processes : {};
+      const chief = buildChiefProcessFallback(payload, ui.latestStatus);
+      const dashboardProc = processes && processes.dashboard ? processes.dashboard : null;
+      const status = ui.latestStatus || {};
+      const runner = status && status.runner ? status.runner : {};
+      const state = String(runner.state || (status.running ? 'running' : 'idle')).trim().toLowerCase() || 'idle';
+      const latestRunId = latestRunIdFromStatus(status);
+      const latestState = latestRunStateFromStatus(status, state);
+      const currentStage = String(runner.current_stage || '').trim();
+      const displayStage = Boolean(status.running)
+        ? currentStage
+        : String(status.latest_run_stage || currentStage || '').trim();
+      const totalBooks = Boolean(status.running)
+        ? parseIntSafe(runner.total_books, 0)
+        : parseIntSafe(status.latest_run_total_books, parseIntSafe(runner.total_books, 0));
+      const currentBook = runner.current_book == null ? null : String(runner.current_book);
+      const updatedAgoSource = Boolean(status.running)
+        ? status.updated_ago_sec
+        : (status.latest_run_updated_ago_sec != null ? status.latest_run_updated_ago_sec : status.updated_ago_sec);
+      const updatedAgo = updatedAgoSource == null ? '-' : (String(Math.round(Number(updatedAgoSource || 0))) + 's');
+      const elapsedSource = Boolean(status.running)
+        ? status.elapsed_sec
+        : (status.latest_run_elapsed_sec != null ? status.latest_run_elapsed_sec : status.elapsed_sec);
+      const uptimeText = chief
+        ? formatDuration(Number(chief.uptime_sec || 0))
+        : (elapsedSource != null ? formatDuration(Number(elapsedSource || 0)) : '-');
+      const cpuNode = byId('overview_process_cpu');
+      const ramNode = byId('overview_process_ram');
+      const threadsNode = byId('overview_process_threads');
+      const uptimeNode = byId('overview_process_uptime');
+      const detailNode = byId('overview_process_detail');
+      const stateNode = byId('overview_process_state');
+      const cpuLabelNode = byId('overview_process_label_cpu');
+      const ramLabelNode = byId('overview_process_label_ram');
+      const threadsLabelNode = byId('overview_process_label_threads');
+      const uptimeLabelNode = byId('overview_process_label_uptime');
+
+      if (cpuLabelNode) cpuLabelNode.textContent = t('overview.process.stage', 'Stage');
+      if (ramLabelNode) ramLabelNode.textContent = t('overview.process.book', 'Book');
+      if (threadsLabelNode) threadsLabelNode.textContent = t('overview.process.updated', 'Updated');
+      if (uptimeLabelNode) uptimeLabelNode.textContent = t('overview.process.uptime', 'Uptime');
+
+      if (cpuNode) {
+        cpuNode.textContent = displayStage || localizeState(Boolean(status.running) ? state : latestState);
+      }
+      if (ramNode) {
+        if (Boolean(status.running)) {
+          ramNode.textContent = currentBook == null ? '-' : currentBook;
+        } else {
+          ramNode.textContent = totalBooks > 0 ? String(totalBooks) : '-';
+        }
+      }
+      if (threadsNode) threadsNode.textContent = updatedAgo;
+      if (uptimeNode) uptimeNode.textContent = uptimeText;
+
+      if (stateNode) {
+        if (Boolean(status.running) || chief) {
+          setPillTone(stateNode, 'running', t('health.process.active', 'chief active'));
+        } else if (latestRunId || isTerminalRunState(latestState)) {
+          setPillTone(stateNode, latestState, localizeState(latestState));
+        } else {
+          setPillTone(stateNode, 'info', t('health.process.idle', 'idle'));
+        }
+      }
+
+      if (detailNode) {
+        if (chief) {
+          if (!chief.limited && (chief.cpu_percent != null || chief.rss != null)) {
+            detailNode.textContent = tf(
+              'health.process.detail.chief_resources',
+              {
+                pid: String(chief.pid || '-'),
+                cpu: chief.cpu_percent != null ? String(Number(chief.cpu_percent || 0).toFixed(1)) : '-',
+                ram: chief.rss != null ? formatGiBFromBytes(chief.rss) : '-',
+                cache: summarizeModelCache(payload.model_cache || []),
+              },
+              'PID {pid} | CPU {cpu}% | RAM {ram} GB | {cache}'
+            );
+          } else {
+            detailNode.textContent = tf(
+              'health.process.detail.chief_limited',
+              {
+                pid: String(chief.pid || '-'),
+                name: String(chief.name || 'chief'),
+                cache: summarizeModelCache(payload.model_cache || []),
+              },
+              'PID {pid} | {name} | stage-focused telemetry | {cache}'
+            );
+          }
+        } else if (dashboardProc) {
+          detailNode.textContent = tf(
+            'health.process.detail.dashboard',
+            {
+              pid: String(dashboardProc.pid || '-'),
+              cache: summarizeModelCache(payload.model_cache || []),
+            },
+            'Dashboard PID {pid} | {cache}'
+          );
+        } else {
+          detailNode.textContent = t('health.process.none', 'No active run process.');
+        }
+      }
+    }
+
+    function buildHealthSnapshot(systemPayload, statusPayload) {
+      const system = systemPayload || {};
+      const status = statusPayload || {};
+      const cpu = system && system.cpu ? system.cpu : {};
+      const ram = system && system.ram ? system.ram : {};
+      const gpus = Array.isArray(system && system.gpus) ? system.gpus : [];
+      const primaryGpu = gpus.length ? (gpus[0] || {}) : null;
+      const chief = buildChiefProcessFallback(system, status);
+      const modelPlanPayload = system && system.model_plan ? system.model_plan : {};
+      const recommendedPlan = String(modelPlanPayload.recommended_plan || '').trim().toLowerCase() || 'balanced';
+      const selectedPlan = byId('model_plan') ? String(byId('model_plan').value || 'auto').trim().toLowerCase() : 'auto';
+      const advisories = [];
+
+      function push(level, title, detail) {
+        advisories.push({level: level, title: title, detail: detail});
+      }
+
+      const cpuPercent = Number(cpu.percent || 0);
+      const ramPercent = Number(ram.percent || 0);
+      const vramPercent = primaryGpu ? Number(primaryGpu.vram_percent || 0) : 0;
+      const queueDepth = parseIntSafe(status.queue_depth, 0);
+      const updatedAgo = Number(status.updated_ago_sec || 0);
+      const running = Boolean(status.running);
+      const runner = status && status.runner ? status.runner : {};
+      const stageText = String(runner.current_stage || '');
+      const heartbeatThresholds = heartbeatThresholdsForStage(stageText);
+      const recentLogAgeSec = ui.lastLogReceiptTs > 0 ? ((Date.now() - ui.lastLogReceiptTs) / 1000) : Number.POSITIVE_INFINITY;
+      const hasRecentLogs = running && recentLogAgeSec <= 90;
+
+      const hasTelemetry = Boolean(
+        system.sampled_at ||
+        system.cpu ||
+        system.ram ||
+        (Array.isArray(system.gpus) && system.gpus.length) ||
+        (system.processes && Object.keys(system.processes).length)
+      );
+
+      if (!hasTelemetry) {
+        push('warning', t('health.advisory.telemetry_missing.title', 'System telemetry missing'), t('health.advisory.telemetry_missing.detail', 'Resource usage is not available yet.'));
+      }
+      if (vramPercent >= 92 || ramPercent >= 92) {
+        push('critical', t('health.advisory.memory_high.title', 'Memory pressure is high'), t('health.advisory.memory_high.detail', 'VRAM or RAM is above 92%. Consider portable mode or pausing heavy stages.'));
+      } else if (cpuPercent >= 90 || ramPercent >= 85 || vramPercent >= 85) {
+        push('warning', t('health.advisory.memory_warn.title', 'Resource pressure is elevated'), t('health.advisory.memory_warn.detail', 'Current workload is close to system limits.'));
+      }
+      if (running && !hasRecentLogs && updatedAgo >= heartbeatThresholds.criticalSec) {
+        push('critical', t('health.advisory.heartbeat_stale.title', 'Run heartbeat is stale'), tf('health.advisory.heartbeat_stale.detail', {seconds: String(Math.round(updatedAgo))}, 'Status file has not refreshed for {seconds}s.'));
+      } else if (running && !hasRecentLogs && updatedAgo >= heartbeatThresholds.warningSec) {
+        push('warning', t('health.advisory.heartbeat_slow.title', 'Run heartbeat is slowing down'), t('health.advisory.heartbeat_slow.detail', 'Status updates are slower than expected.'));
+      }
+      if (running && !chief) {
+        push('warning', t('health.advisory.chief_missing.title', 'Chief process not detected'), t('health.advisory.chief_missing.detail', 'The dashboard reports an active run but the chief process is not visible.'));
+      }
+      if (queueDepth >= 4) {
+        push('warning', t('health.advisory.queue_pressure.title', 'Queue depth is growing'), t('health.advisory.queue_pressure.detail', 'Queued jobs may need priority tuning or lower-cost presets.'));
+      }
+      if (!primaryGpu && (byId('photo_enabled') && byId('photo_enabled').checked)) {
+        push('info', t('health.advisory.gpu_missing.title', 'GPU not detected'), t('health.advisory.gpu_missing.detail', 'Image stages will run slower on CPU-only hardware.'));
+      }
+      if (selectedPlan !== 'auto' && selectedPlan !== recommendedPlan) {
+        push(
+          'info',
+          t('health.advisory.plan_override.title', 'Selected plan overrides hardware recommendation'),
+          tf(
+            'health.advisory.plan_override.detail',
+            {selected: modelPlanLabel(selectedPlan), recommended: modelPlanLabel(recommendedPlan)},
+            'Current selection is {selected}, auto recommends {recommended}.'
+          )
+        );
+      }
+
+      advisories.sort(function (a, b) {
+        return advisoryRank(b.level) - advisoryRank(a.level);
+      });
+
+      let level = 'stable';
+      if (advisories.length) level = advisories[0].level;
+
+      let summary = t('health.summary.ready', 'System is ready for the next run.');
+      if (running && chief && level === 'stable') {
+        summary = t('health.summary.running_healthy', 'Run is active and resource headroom looks healthy.');
+      } else if (level === 'critical') {
+        summary = advisories[0].title;
+      } else if (level === 'warning') {
+        summary = advisories[0].title;
+      } else if (advisories.length) {
+        summary = advisories[0].title;
+      }
+
+      const runContext = running
+        ? tf('health.run_context.active', {run_id: String(status.run_id || '-'), stage: String(runner.current_stage || 'running')}, 'Run {run_id} | {stage}')
+        : t('health.run_context.idle', 'No active run');
+      const pressureValue = Math.max(cpuPercent, ramPercent, vramPercent || 0);
+      let pressureLabel = t('health.pressure.low', 'low');
+      if (pressureValue >= 90) pressureLabel = t('health.pressure.critical', 'critical');
+      else if (pressureValue >= 75) pressureLabel = t('health.pressure.elevated', 'elevated');
+      else if (pressureValue >= 50) pressureLabel = t('health.pressure.moderate', 'moderate');
+
+      return {
+        level: level,
+        summary: summary,
+        context: runContext,
+        pressure: pressureLabel + ' (' + pressureValue.toFixed(1) + '%)',
+        advisories: advisories.slice(0, 4),
+        recommendedPlan: recommendedPlan,
+        selectedPlan: selectedPlan,
+      };
+    }
+
+    function renderDashboardHealth(systemPayload, statusPayload) {
+      const health = buildHealthSnapshot(systemPayload || ui.lastSystemStatus, statusPayload || ui.latestStatus);
+      const globalLevel = byId('global_health_level');
+      const overviewLevel = byId('overview_health_level');
+      setPillTone(globalLevel, health.level, healthLabel(health.level));
+      setPillTone(overviewLevel, health.level, healthLabel(health.level));
+
+      const globalSummary = byId('global_health_summary');
+      if (globalSummary) globalSummary.textContent = health.summary;
+      const globalContext = byId('global_health_context');
+      if (globalContext) globalContext.textContent = health.context;
+      const overviewSummary = byId('overview_health_summary');
+      if (overviewSummary) overviewSummary.textContent = health.summary;
+
+      const advisoryPanel = byId('overview_advisory_panel');
+      if (advisoryPanel) advisoryPanel.hidden = !health.advisories.length;
+      const advisoryTitle = byId('overview_advisory_title');
+      if (advisoryTitle) {
+        advisoryTitle.textContent = health.advisories.length
+          ? t('overview.advisory.issues', 'Current Issues')
+          : t('overview.advisory.title', 'Run Readiness');
+      }
+
+      const globalPlan = byId('global_health_plan');
+      if (globalPlan) {
+        globalPlan.textContent = tf(
+          'health.meta.plan',
+          {selected: modelPlanLabel(health.selectedPlan), recommended: modelPlanLabel(health.recommendedPlan)},
+          'Plan: {selected} | Auto: {recommended}'
+        );
+      }
+      const globalRun = byId('global_health_run');
+      if (globalRun) {
+        const status = statusPayload || ui.latestStatus || {};
+        const runner = status && status.runner ? status.runner : {};
+        globalRun.textContent = Boolean(status.running)
+          ? tf(
+              'health.meta.run',
+              {
+                text: String(status.run_id || '-') + ' | ' + String(runner.current_book == null ? '-' : runner.current_book),
+              },
+              'Run: {text}'
+            )
+          : tf('health.meta.run', {text: t('state.idle', 'idle')}, 'Run: {text}');
+      }
+      const globalPressure = byId('global_health_pressure');
+      if (globalPressure) {
+        globalPressure.textContent = tf('health.meta.pressure', {value: health.pressure}, 'Pressure: {value}');
+      }
+
+      const advisoryList = byId('overview_advisory_list');
+      if (advisoryList) {
+        if (!health.advisories.length) {
+          advisoryList.innerHTML = '<div class="list-item advisory-info">' + escapeHtml(t('health.advisory.ready', 'System ready. Current settings match the available headroom.')) + '</div>';
+        } else {
+          advisoryList.innerHTML = health.advisories.map(function (item) {
+            const detail = item.detail ? ('<div class="meta">' + escapeHtml(String(item.detail)) + '</div>') : '';
+            return '<div class="list-item advisory-' + escapeHtml(String(item.level || 'info')) + '">' +
+              '<strong>' + escapeHtml(String(item.title || 'Advisory')) + '</strong>' +
+              detail +
+              '</div>';
+          }).join('');
+        }
+      }
+
+      return health;
+    }
+
+    function formatUpdatedAgo(seconds) {
+      if (seconds == null || !Number.isFinite(Number(seconds))) return '-';
+      return String(Math.round(Number(seconds))) + 's';
+    }
+
+    function formatRunMoment(isoText, compact) {
+      if (!isoText) return '-';
+      const d = new Date(isoText);
+      if (Number.isNaN(d.getTime())) return '-';
+      return compact ? d.toLocaleTimeString() : d.toLocaleString();
+    }
+
+    function summarizeRunIssue(errorText, stageText) {
+      const raw = String(errorText || '').trim();
+      const stage = String(stageText || '').trim();
+      const source = (raw + ' ' + stage).toLowerCase();
+      if (source.indexOf('translation') >= 0) return 'Translation failed';
+      if (source.indexOf('voice') >= 0 || source.indexOf('tts') >= 0) return 'Voice generation failed';
+      if (source.indexOf('image') >= 0 || source.indexOf('photo') >= 0) return 'Image generation failed';
+      if (source.indexOf('pre_eval') >= 0) return 'Pre-evaluation failed';
+      if (source.indexOf('eval') >= 0) return 'Final evaluation failed';
+      if (source.indexOf('story') >= 0) return 'Story generation failed';
+      if (raw) {
+        return raw
+          .replace(/^errors=/i, '')
+          .replace(/[_|]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+      if (stage && stage !== '-') return stage + ' failed';
+      return '';
+    }
+
+    function suggestedFailureAction(errorText, stageText) {
+      const source = (String(errorText || '') + ' ' + String(stageText || '')).toLowerCase();
+      if (source.indexOf('translation') >= 0) {
+        return 'Check the translation setup or backend first, then rerun.';
+      }
+      if (source.indexOf('voice') >= 0 || source.indexOf('tts') >= 0) {
+        return 'Review voice sample selection and TTS settings before rerunning.';
+      }
+      if (source.indexOf('image') >= 0 || source.indexOf('photo') >= 0) {
+        return 'Review image prompts or model settings before rerunning.';
+      }
+      if (source.indexOf('pre_eval') >= 0 || source.indexOf('eval') >= 0) {
+        return 'Open Evaluation and review the failing report before rerunning.';
+      }
+      return 'Open Run Detail, inspect the failed book log, then rerun.';
+    }
+
+    function deriveOverviewMonitorMode(statusPayload) {
+      const status = statusPayload || {};
+      const runner = status && status.runner ? status.runner : {};
+      const state = String(runner.state || (status.running ? 'running' : 'idle')).trim().toLowerCase();
+      const latestState = latestRunStateFromStatus(status, state);
+      const latestRunId = latestRunIdFromStatus(status);
+      if (Boolean(status.running)) return 'running';
+      if (parseIntSafe(status.queue_depth, 0) > 0) return 'idle';
+      if (latestRunId || isTerminalRunState(latestState)) {
+        return 'postrun';
+      }
+      return 'idle';
+    }
+
+    function renderOverviewMonitor(statusPayload, healthPayload) {
+      const status = statusPayload || ui.latestStatus || {};
+      const health = healthPayload || buildHealthSnapshot(ui.lastSystemStatus, status);
+      const runner = status && status.runner ? status.runner : {};
+      const state = String(runner.state || (status.running ? 'running' : 'idle')).trim().toLowerCase() || 'idle';
+      const mode = deriveOverviewMonitorMode(status);
+      const latestState = latestRunStateFromStatus(status, state);
+      const latestRunId = latestRunIdFromStatus(status);
+      const card = byId('overview_monitor_card');
+      if (card) {
+        card.classList.remove('mode-running', 'mode-idle', 'mode-postrun');
+        card.classList.add('mode-' + mode);
+      }
+
+      const total = mode === 'postrun'
+        ? parseIntSafe(status.latest_run_total_books, parseIntSafe(runner.total_books, 0))
+        : parseIntSafe(runner.total_books, 0);
+      const completed = mode === 'postrun'
+        ? parseIntSafe(status.latest_run_completed_books, parseIntSafe(runner.completed_books, 0))
+        : parseIntSafe(runner.completed_books, 0);
+      const success = mode === 'postrun'
+        ? parseIntSafe(status.latest_run_success_books, parseIntSafe(runner.success_books, 0))
+        : parseIntSafe(runner.success_books, 0);
+      const failed = mode === 'postrun'
+        ? parseIntSafe(status.latest_run_failed_books, parseIntSafe(runner.failed_books, 0))
+        : parseIntSafe(runner.failed_books, 0);
+      const remaining = Math.max(0, total - completed);
+      const progress = mode === 'running' && Number.isFinite(Number(status.progress_pct))
+        ? Math.max(0, Math.min(100, Number(status.progress_pct)))
+        : (total > 0 ? Math.max(0, Math.min(100, (completed / total) * 100)) : 0);
+      const updatedAgoText = formatUpdatedAgo(
+        mode === 'postrun' && status.latest_run_updated_ago_sec != null
+          ? status.latest_run_updated_ago_sec
+          : status.updated_ago_sec
+      );
+      const latestFinishedAtText = formatRunMoment(
+        mode === 'postrun'
+          ? (status.latest_run_finished_at || status.latest_run_started_at)
+          : null,
+        true
+      );
+      const currentStage = String((mode === 'postrun' ? (status.latest_run_stage || runner.current_stage) : runner.current_stage) || '-');
+      const latestRunError = String(
+        mode === 'postrun'
+          ? (status.latest_run_last_error || status.last_error || '')
+          : (runner.last_error || status.last_error || '')
+      ).trim();
+      const latestRunIssue = summarizeRunIssue(latestRunError, currentStage);
+      const runId = String(mode === 'running' ? (status.run_id || '-') : (latestRunId || '-'));
+      const stateLabel = localizeState(mode === 'running' ? state : latestState);
+      const elapsedDisplaySec = mode === 'postrun'
+        ? (status.latest_run_elapsed_sec != null ? status.latest_run_elapsed_sec : status.elapsed_sec)
+        : status.elapsed_sec;
+      const exitCodeDisplay = mode === 'postrun' && status.latest_run_exit_code != null
+        ? status.latest_run_exit_code
+        : status.exit_code;
+
+      const liveSection = byId('overview_monitor_live');
+      const idleSection = byId('overview_monitor_idle');
+      if (liveSection) liveSection.hidden = mode !== 'running';
+      if (idleSection) idleSection.hidden = mode === 'running';
+
+      const titleNode = byId('overview_monitor_summary_title');
+      const copyNode = byId('overview_monitor_summary_copy');
+      const primaryLabelNode = byId('overview_monitor_side_label_primary');
+      const primaryValueNode = byId('overview_monitor_side_primary');
+      const secondaryLabelNode = byId('overview_monitor_side_label_secondary');
+      const secondaryValueNode = byId('overview_monitor_side_secondary');
+
+      let summaryTitle = t('overview.monitor.summary.ready', 'Ready for the next run');
+      let summaryCopy = t('overview.monitor.copy.ready', 'Adjust the composer on the left, then start or queue a run.');
+      let primaryLabel = t('overview.monitor.side.queue', 'Queue');
+      let primaryValue = String(parseIntSafe(status.queue_depth, 0));
+      let secondaryLabel = t('overview.field.model_plan', 'Model Plan');
+      let secondaryValue = modelPlanLabel(health && health.selectedPlan ? health.selectedPlan : 'auto');
+
+      if (mode === 'running') {
+        summaryTitle = t('overview.monitor.summary.running', 'Run in progress');
+        summaryCopy = t(
+          'overview.monitor.copy.running_compact',
+          'Review the active book, stage, and pre-evaluation below.'
+        );
+        primaryLabel = t('overview.meta.run_id', 'Run ID');
+        primaryValue = runId;
+        secondaryLabel = t('overview.metric.eta', 'ETA');
+        secondaryValue = formatDuration(status.eta_sec);
+      } else if (parseIntSafe(status.queue_depth, 0) > 0 && mode === 'idle') {
+        summaryTitle = t('overview.monitor.summary.queued', 'Queue pending');
+        summaryCopy = tf(
+          'overview.monitor.copy.queued',
+          {count: String(parseIntSafe(status.queue_depth, 0))},
+          'No active run right now. {count} job(s) remain in queue.'
+        );
+        primaryLabel = t('overview.monitor.side.queue', 'Queue');
+        primaryValue = String(parseIntSafe(status.queue_depth, 0));
+        secondaryLabel = t('overview.field.model_plan', 'Model Plan');
+        secondaryValue = modelPlanLabel(health && health.selectedPlan ? health.selectedPlan : 'auto');
+      } else if (mode === 'postrun') {
+        summaryTitle = tf(
+          'overview.monitor.summary.postrun',
+          {state: stateLabel},
+          'Last run {state}'
+        );
+        summaryCopy = latestState === 'failed' || latestState === 'error' || latestState === 'stopped'
+          ? suggestedFailureAction(latestRunError, currentStage)
+          : t(
+              'overview.monitor.copy.postrun_compact',
+              'Review the latest run summary below before starting again.'
+            );
+        primaryLabel = t('overview.meta.run_id', 'Run ID');
+        primaryValue = runId;
+        secondaryLabel = t('detail.summary.finished_at', 'Finished At');
+        secondaryValue = latestFinishedAtText !== '-' ? latestFinishedAtText : updatedAgoText;
+      }
+
+      if (titleNode) titleNode.textContent = summaryTitle;
+      if (copyNode) copyNode.textContent = summaryCopy;
+      if (primaryLabelNode) primaryLabelNode.textContent = primaryLabel;
+      if (primaryValueNode) primaryValueNode.textContent = primaryValue;
+      if (secondaryLabelNode) secondaryLabelNode.textContent = secondaryLabel;
+      if (secondaryValueNode) secondaryValueNode.textContent = secondaryValue;
+
+      const lastRunTitleNode = byId('overview_last_run_title');
+      const nextStepTitleNode = byId('overview_next_step_title');
+      const lastRunIdLabelNode = byId('overview_last_run_label_id');
+      const lastRunResultLabelNode = byId('overview_last_run_label_result');
+      const lastRunBooksLabelNode = byId('overview_last_run_label_books');
+      const lastRunElapsedLabelNode = byId('overview_last_run_label_elapsed');
+      if (lastRunTitleNode) lastRunTitleNode.textContent = t('overview.monitor.last_run.title', 'Latest Run');
+      if (nextStepTitleNode) nextStepTitleNode.textContent = t('overview.monitor.next.title', 'Next Step');
+      if (lastRunIdLabelNode) lastRunIdLabelNode.textContent = t('overview.meta.run_id', 'Run ID');
+      if (lastRunResultLabelNode) lastRunResultLabelNode.textContent = t('overview.monitor.last_run.result', 'Result');
+      if (lastRunBooksLabelNode) lastRunBooksLabelNode.textContent = t('overview.monitor.last_run.books', 'Books');
+      if (lastRunElapsedLabelNode) lastRunElapsedLabelNode.textContent = t('overview.metric.elapsed', 'Elapsed');
+
+      const hasRecentRun = mode === 'postrun' || Boolean(latestRunId) || total > 0 || Number(elapsedDisplaySec || 0) > 0;
+      const lastRunStateNode = byId('overview_last_run_state');
+      if (lastRunStateNode) {
+        setPillTone(
+          lastRunStateNode,
+          hasRecentRun ? (mode === 'running' ? state : latestState) : 'info',
+          hasRecentRun ? stateLabel : t('overview.monitor.result.ready', 'Ready')
+        );
+      }
+      const lastRunIdNode = byId('overview_last_run_id');
+      const lastRunResultNode = byId('overview_last_run_result');
+      const lastRunBooksNode = byId('overview_last_run_books');
+      const lastRunElapsedNode = byId('overview_last_run_elapsed');
+      const lastRunHintNode = byId('overview_last_run_hint');
+      if (lastRunIdNode) lastRunIdNode.textContent = hasRecentRun ? runId : '-';
+      if (lastRunResultNode) lastRunResultNode.textContent = hasRecentRun ? stateLabel : t('overview.monitor.result.ready', 'Ready');
+      if (lastRunBooksNode) {
+        lastRunBooksNode.textContent = total > 0
+          ? (String(completed) + '/' + String(total))
+          : '-';
+      }
+      if (lastRunElapsedNode) lastRunElapsedNode.textContent = hasRecentRun ? formatDuration(elapsedDisplaySec) : '-';
+      if (lastRunHintNode) {
+        if (!hasRecentRun) {
+          lastRunHintNode.textContent = t('overview.monitor.last_run.none', 'No recent run summary yet.');
+        } else {
+          const hintParts = [];
+          if (latestRunIssue) {
+            hintParts.push('Issue ' + latestRunIssue);
+          }
+          if (exitCodeDisplay != null) {
+            hintParts.push(t('overview.meta.exit_code', 'Exit Code') + ' ' + String(exitCodeDisplay));
+          }
+          if (currentStage && currentStage !== '-' && String(currentStage).trim().toLowerCase() !== 'done') {
+            hintParts.push(t('overview.process.stage', 'Stage') + ' ' + currentStage);
+          }
+          if (failed > 0) {
+            hintParts.push(t('overview.metric.failed', 'Failed') + ' ' + String(failed));
+          }
+          if (!hintParts.length && latestFinishedAtText !== '-') {
+            hintParts.push(t('detail.summary.finished_at', 'Finished At') + ' ' + formatRunMoment(status.latest_run_finished_at || status.latest_run_started_at, false));
+          }
+          lastRunHintNode.textContent = hintParts.length ? hintParts.join(' | ') : t('overview.monitor.last_run.none', 'No recent run summary yet.');
+        }
+      }
+
+      const nextSummaryNode = byId('overview_next_step_summary');
+      const hasPlanOverride = Boolean(
+        health &&
+        health.selectedPlan &&
+        health.recommendedPlan &&
+        String(health.selectedPlan) !== String(health.recommendedPlan)
+      );
+      const nextItems = [];
+      let nextSummary = t('overview.monitor.next.ready', 'Configure the next run from the composer on the left.');
+
+      if (parseIntSafe(status.queue_depth, 0) > 0 && mode !== 'running') {
+        nextSummary = 'Queued jobs are waiting. Open Ops if you need to reprioritize or cancel them.';
+        nextItems.push('Open Ops to reprioritize or cancel queued jobs.');
+        if (parseIntSafe(status.queue_depth, 0) > 1) {
+          nextItems.push('Queued jobs: ' + String(parseIntSafe(status.queue_depth, 0)));
+        }
+      } else if (mode === 'postrun') {
+        if (latestState === 'failed' || latestState === 'error' || latestState === 'stopped') {
+          nextSummary = suggestedFailureAction(latestRunError, currentStage);
+          if (failed > 0 && total > 0) {
+            nextItems.push('Failed books: ' + String(failed) + '/' + String(total));
+          }
+          if (latestRunIssue) {
+            nextItems.push('Last issue: ' + latestRunIssue);
+          }
+          nextItems.push('Open Run Detail and select the failed book to inspect its log.');
+        } else {
+          nextSummary = 'Review the generated outputs, then start the next batch.';
+          nextItems.push('Open Gallery to spot-check images and covers.');
+          nextItems.push('Open Evaluation to review the latest score.');
+        }
+      } else {
+        nextSummary = 'Set story scope and voice on the left, then start a new run.';
+        nextItems.push('Choose the book count and story preset.');
+        nextItems.push('If using a custom voice, select it from the voice panel first.');
+      }
+
+      if (hasPlanOverride) {
+        nextItems.push(
+          'Plan override: ' +
+          modelPlanLabel(health.selectedPlan) +
+          ' | Auto recommends ' +
+          modelPlanLabel(health.recommendedPlan)
+        );
+      }
+
+      if (nextSummaryNode) {
+        nextSummaryNode.textContent = nextSummary;
+      }
+
+      const nextListNode = byId('overview_next_step_list');
+      if (nextListNode) {
+        nextListNode.hidden = !nextItems.length;
+        nextListNode.innerHTML = nextItems.map(function (text) {
+          return '<div class="list-item advisory-info">' + escapeHtml(String(text)) + '</div>';
+        }).join('');
+      }
+    }
+
+    function renderModelPlanStatus(data) {
+      const selectedValue = byId('model_plan') ? (byId('model_plan').value || 'auto') : 'auto';
+      const payload = data && data.model_plan ? data.model_plan : {};
+      const hardware = payload.hardware || {};
+      const acceleratorRaw = String(hardware.accelerator || '').trim();
+      const accelerator = acceleratorRaw ? acceleratorRaw.toUpperCase() : t('overview.model_plan.unknown', 'Unknown');
+      const recommendedValue = String(payload.recommended_plan || '').trim().toLowerCase() || 'auto';
+      const selectedNode = byId('model_plan_selected');
+      const recommendedNode = byId('model_plan_recommended');
+      const hardwareNode = byId('model_plan_hardware');
+      const descriptionNode = byId('model_plan_description');
+      if (selectedNode) {
+        selectedNode.textContent = tf('overview.model_plan.selected', {plan: modelPlanLabel(selectedValue)}, 'Selected: {plan}');
+      }
+      if (recommendedNode) {
+        recommendedNode.textContent = tf('overview.model_plan.recommended', {plan: modelPlanLabel(recommendedValue)}, 'Auto recommends: {plan}');
+      }
+      if (hardwareNode) {
+        const hasHardware = acceleratorRaw || Number(hardware.system_ram_gb || 0) > 0 || Number(hardware.gpu_vram_gb || 0) > 0;
+        hardwareNode.textContent = hasHardware
+          ? tf(
+              'overview.model_plan.hardware',
+              {
+                accelerator: accelerator,
+                vram: String(Number(hardware.gpu_vram_gb || 0).toFixed(1)),
+                ram: String(Number(hardware.system_ram_gb || 0).toFixed(1)),
+              },
+              '{accelerator} | VRAM {vram} GB | RAM {ram} GB'
+            )
+          : t('overview.model_plan.hardware_unknown', 'Hardware detection unavailable');
+      }
+      if (descriptionNode) {
+        descriptionNode.textContent = String(payload.description || '').trim();
+      }
+    }
+
+    function renderSystemTelemetry(data) {
+      const payload = data || ui.lastSystemStatus || {};
+      syncCapabilitiesFromPayload(payload);
+      const cpu = payload && payload.cpu ? payload.cpu : {};
+      const ram = payload && payload.ram ? payload.ram : {};
+      const gpus = Array.isArray(payload && payload.gpus) ? payload.gpus : [];
+      const primaryGpu = gpus.length ? (gpus[0] || {}) : null;
+      const modelPlanPayload = payload && payload.model_plan ? payload.model_plan : {};
+      const hardware = modelPlanPayload.hardware || {};
+      const acceleratorRaw = String(hardware.accelerator || '').trim();
+      const accelerator = acceleratorRaw ? acceleratorRaw.toUpperCase() : t('overview.model_plan.unknown', 'Unknown');
+      const gpuNames = gpus.length
+        ? gpus.map(function (g) { return String(g.name || 'GPU'); }).join(' | ')
+        : t('overview.resource.gpu_na', 'n/a');
+      const hasCpuTelemetry = parseIntSafe(cpu.logical_count, 0) > 0;
+      const cpuPercent = Number(cpu.percent || 0);
+      const ramPercent = Number(ram.percent || 0);
+      const vramPercent = primaryGpu ? Number(primaryGpu.vram_percent || 0) : null;
+
+      const cpuNode = byId('overview_resource_cpu');
+      if (cpuNode) {
+        const logicalCount = parseIntSafe(cpu.logical_count, 0);
+        cpuNode.textContent = logicalCount > 0
+          ? tf(
+              'overview.resource.cpu_value',
+              {
+                value: String(cpuPercent.toFixed(1)),
+                count: String(logicalCount),
+              },
+              '{value}% of {count} threads'
+            )
+          : t('overview.resource.metric_unavailable', 'n/a');
+      }
+
+      const ramNode = byId('overview_resource_ram');
+      if (ramNode) {
+        ramNode.textContent = tf(
+          'overview.resource.ram_value',
+          {
+            used: formatGiBFromBytes(ram.used),
+            total: formatGiBFromBytes(ram.total),
+            pct: String(ramPercent.toFixed(1)),
+          },
+          '{used} / {total} GB ({pct}%)'
+        );
+      }
+
+      const gpuNode = byId('overview_resource_gpu');
+      if (gpuNode) {
+        gpuNode.textContent = primaryGpu
+          ? tf(
+              'overview.resource.gpu_value',
+              {
+                value: String(Number(primaryGpu.gpu_util || 0).toFixed(1)),
+                name: String(primaryGpu.name || 'GPU0'),
+              },
+              '{value}% | {name}'
+            )
+          : t('overview.resource.gpu_na', 'n/a');
+      }
+
+      const vramNode = byId('overview_resource_vram');
+      if (vramNode) {
+        vramNode.textContent = primaryGpu
+          ? tf(
+              'overview.resource.vram_value',
+              {
+                used: formatGiBFromBytes(primaryGpu.vram_used),
+                total: formatGiBFromBytes(primaryGpu.vram_total),
+                pct: String(Number(primaryGpu.vram_percent || 0).toFixed(1)),
+              },
+              '{used} / {total} GB ({pct}%)'
+            )
+          : t('overview.resource.gpu_na', 'n/a');
+      }
+
+      const detailNode = byId('overview_resource_detail');
+      if (detailNode) {
+        const hasLimitedTelemetry = Boolean(
+          acceleratorRaw ||
+          gpuNames !== t('overview.resource.gpu_na', 'n/a') ||
+          ram.total ||
+          ram.used
+        );
+        detailNode.textContent = payload.sampled_at
+          ? tf(
+              'overview.resource.detail',
+              {
+                accelerator: accelerator,
+                time: formatSampledTime(payload.sampled_at),
+              },
+              '{accelerator} | updated {time}'
+            )
+          : hasLimitedTelemetry
+            ? tf(
+                'overview.resource.detail_limited',
+                {
+                  accelerator: accelerator,
+                },
+                '{accelerator} | limited telemetry'
+              )
+            : t('overview.resource.detail_na', 'System telemetry unavailable.');
+      }
+
+      renderDashboardHealth(payload, ui.latestStatus);
     }
 
     function escapeHtml(value) {
@@ -1740,6 +3208,72 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       const value = String(stateValue || '').toLowerCase();
       if (!value) return '-';
       return t('state.' + value, value);
+    }
+
+    function syncCapabilitiesFromPayload(payload) {
+      if (!payload || typeof payload !== 'object') return;
+      if (payload.api_version) {
+        ui.apiVersion = String(payload.api_version);
+      }
+      const caps = payload.capabilities;
+      if (caps && typeof caps === 'object') {
+        const names = Object.keys(ui.apiCapabilities || {});
+        for (let i = 0; i < names.length; i += 1) {
+          const name = names[i];
+          if (Object.prototype.hasOwnProperty.call(caps, name)) {
+            ui.apiCapabilities[name] = !!caps[name];
+          }
+        }
+        return;
+      }
+
+      const looksLikeSystemPayload = (
+        Object.prototype.hasOwnProperty.call(payload, 'ram') ||
+        Object.prototype.hasOwnProperty.call(payload, 'gpus') ||
+        Object.prototype.hasOwnProperty.call(payload, 'processes') ||
+        Object.prototype.hasOwnProperty.call(payload, 'model_plan')
+      );
+      if (!looksLikeSystemPayload) return;
+
+      if (!Object.prototype.hasOwnProperty.call(payload, 'cpu') || parseIntSafe(payload.cpu && payload.cpu.logical_count, 0) <= 0) {
+        ui.apiCapabilities.system_cpu = false;
+      }
+      if (!Object.prototype.hasOwnProperty.call(payload, 'processes')) {
+        ui.apiCapabilities.system_processes = false;
+      }
+      if (!Object.prototype.hasOwnProperty.call(payload, 'sampled_at') || !payload.sampled_at) {
+        ui.apiCapabilities.system_sampled_at = false;
+      }
+      if (!Object.prototype.hasOwnProperty.call(payload, 'model_cache')) {
+        ui.apiCapabilities.system_model_cache = false;
+      }
+    }
+
+    function hasCapability(name, fallback) {
+      if (!name) return fallback !== false;
+      const value = ui.apiCapabilities ? ui.apiCapabilities[name] : null;
+      if (value === true) return true;
+      if (value === false) return false;
+      return fallback !== false;
+    }
+
+    function isMissingEndpointError(err) {
+      const text = String((err && err.message) || err || '').toLowerCase();
+      return text.indexOf('not found') >= 0 || text.indexOf('404') >= 0;
+    }
+
+    async function runCapabilityTask(capabilityName, taskFn, fallbackValue) {
+      if (capabilityName && !hasCapability(capabilityName, true)) {
+        return fallbackValue;
+      }
+      try {
+        return await taskFn();
+      } catch (err) {
+        if (capabilityName && isMissingEndpointError(err)) {
+          ui.apiCapabilities[capabilityName] = false;
+        }
+        throw err;
+      }
     }
 
     async function apiGet(path) {
@@ -1816,6 +3350,35 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       el.textContent = text || '';
       el.className = 'message subtle';
       if (mode) el.classList.add(mode);
+    }
+
+    function capabilityLabel(name) {
+      const key = String(name || '').trim().toLowerCase();
+      if (key === 'queue_api') return t('msg.capability.queue', 'queue');
+      if (key === 'alerts_api') return t('msg.capability.alerts', 'alerts');
+      if (key === 'capacity_api') return t('msg.capability.capacity', 'capacity');
+      if (key === 'configs_api') return t('msg.capability.configs', 'config versions');
+      if (key === 'system_processes' || key === 'system_cpu' || key === 'system_sampled_at') {
+        return t('msg.capability.process_telemetry', 'process telemetry');
+      }
+      return key;
+    }
+
+    function composeCompatibilityMessage() {
+      const disabled = Object.keys(ui.apiCapabilities || {}).filter(function (name) {
+        return ui.apiCapabilities[name] === false;
+      });
+      if (!disabled.length) return '';
+      const visible = [];
+      for (let i = 0; i < disabled.length; i += 1) {
+        const label = capabilityLabel(disabled[i]);
+        if (visible.indexOf(label) < 0) visible.push(label);
+      }
+      return tf(
+        'msg.compatibility_limited',
+        {items: visible.join(', ')},
+        'Compatibility mode: {items} unavailable in the current backend. Restart dashboard after the current run.'
+      );
     }
 
     function setImageMessage(text, mode) {
@@ -2153,6 +3716,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
     }
 
     function renderModuleJobs(data) {
+      ui.lastModuleJobsData = data || null;
       const body = byId('module_jobs_body');
       const active = data && data.active_job ? data.active_job : null;
       const pending = Array.isArray(data && data.pending_jobs) ? data.pending_jobs : [];
@@ -2200,6 +3764,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
           renderModuleJobDetail({job: null});
         }
       }
+      renderModuleSummary(data);
     }
 
     function renderModuleJobDetail(data) {
@@ -2212,6 +3777,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         meta.textContent = t('msg.no_module_job_selected', 'No module job selected.');
         eventsBox.innerHTML = '<div class="event-item">' + escapeHtml(t('msg.no_events', 'No events.')) + '</div>';
         logsBox.textContent = t('msg.no_module_logs', 'No module logs.');
+        renderModuleSummary(null);
         return;
       }
 
@@ -2248,6 +3814,50 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         blob += '[' + ts + '] ' + String(line.text || '') + '\n';
       }
       logsBox.textContent = blob || t('msg.no_module_logs', 'No module logs.');
+      renderModuleSummary(data);
+    }
+
+    function renderModuleSummary(data) {
+      const activeNode = byId('module_summary_active');
+      const pendingNode = byId('module_summary_pending');
+      const historyNode = byId('module_summary_history');
+      const selectedNode = byId('module_summary_selected');
+      const hintNode = byId('module_summary_hint');
+      const jobsData = data && typeof data === 'object' && (data.active_job || data.pending_jobs || data.history)
+        ? data
+        : (ui.lastModuleJobsData || null);
+
+      const active = jobsData && jobsData.active_job ? jobsData.active_job : null;
+      const pending = Array.isArray(jobsData && jobsData.pending_jobs) ? jobsData.pending_jobs : [];
+      const history = Array.isArray(jobsData && jobsData.history) ? jobsData.history : [];
+      const hiddenCount = Object.keys(ui.hiddenModuleJobs || {}).length;
+
+      if (activeNode) activeNode.textContent = active ? String(active.job_id || t('state.running', 'running')) : t('module.summary.none', 'None');
+      if (pendingNode) pendingNode.textContent = String(pending.length);
+      if (historyNode) historyNode.textContent = String(ui.moduleJobs.length);
+      if (selectedNode) selectedNode.textContent = ui.moduleSelectedJobId || t('module.summary.none', 'None');
+      if (hintNode) {
+        hintNode.textContent = tf(
+          'module.summary.hint_dynamic',
+          {
+            history: String(history.length),
+            hidden: String(hiddenCount),
+            type: String(active && active.job_type ? active.job_type : '-'),
+          },
+          'History {history} | Hidden {hidden} | Active type {type}'
+        );
+      }
+    }
+
+    function setTranslationTargetSelection(mode) {
+      const checks = document.querySelectorAll('#module_trans_target_list input[type="checkbox"][data-lang]');
+      for (let i = 0; i < checks.length; i += 1) {
+        const input = checks[i];
+        const code = String(input.getAttribute('data-lang') || '').toLowerCase();
+        if (mode === 'all') input.checked = true;
+        else if (mode === 'none') input.checked = false;
+        else input.checked = (code === 'zh' || code === 'ja' || code === 'ko');
+      }
     }
 
     async function fetchModuleJobs() {
@@ -2648,7 +4258,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       }
 
       if (!items.length) {
-        gallery.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_generated_images', 'No generated images yet.')) + '</div>';
+        gallery.innerHTML = renderImageGalleryEmptyState();
         populateImageDetail(null);
         return;
       }
@@ -2736,10 +4346,199 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       }
     }
 
+    function currentSpeakerSourceMode() {
+      const raw = byId('speaker_source_mode') ? String(byId('speaker_source_mode').value || '').trim().toLowerCase() : 'preset';
+      return raw === 'custom' ? 'custom' : 'preset';
+    }
+
+    function setSpeakerSourceMode(mode) {
+      const normalized = mode === 'custom' ? 'custom' : 'preset';
+      if (byId('speaker_source_mode')) byId('speaker_source_mode').value = normalized;
+      const presetPanel = byId('speaker_preset_panel');
+      const customPanel = byId('speaker_custom_panel');
+      if (presetPanel) presetPanel.hidden = normalized !== 'preset';
+      if (customPanel) customPanel.hidden = normalized !== 'custom';
+      const buttons = document.querySelectorAll('.speaker-source-btn');
+      for (let i = 0; i < buttons.length; i += 1) {
+        const button = buttons[i];
+        if (!(button instanceof HTMLButtonElement)) continue;
+        button.classList.toggle('active', String(button.dataset.sourceMode || '') === normalized);
+      }
+      syncSpeakerSelection();
+    }
+
+    function populateSelectOptions(selectId, items, emptyLabel, preferredValue) {
+      const node = byId(selectId);
+      if (!(node instanceof HTMLSelectElement)) return '';
+      const choices = Array.isArray(items) ? items : [];
+      const options = [];
+      if (!choices.length) {
+        options.push('<option value="">' + escapeHtml(emptyLabel) + '</option>');
+      } else {
+        for (let i = 0; i < choices.length; i += 1) {
+          const item = choices[i] || {};
+          const value = String(item.value || item.path || '');
+          const label = String(item.label || item.name || value || emptyLabel);
+          options.push('<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>');
+        }
+      }
+      node.innerHTML = options.join('');
+      if (preferredValue) node.value = preferredValue;
+      if (!node.value && choices.length) {
+        node.value = String((choices[0] && (choices[0].value || choices[0].path)) || '');
+      }
+      return String(node.value || '');
+    }
+
+    function syncSpeakerSelection() {
+      const speakerWavNode = byId('speaker_wav');
+      if (!speakerWavNode) return;
+      if (currentSpeakerSourceMode() === 'custom') {
+        const customWavSelect = byId('speaker_custom_wav_select');
+        speakerWavNode.value = customWavSelect ? String(customWavSelect.value || '').trim() : '';
+      } else {
+        speakerWavNode.value = '';
+      }
+    }
+
+    function renderPresetSpeakerSamples(data) {
+      const payload = data && typeof data === 'object' ? data : {};
+      const samples = Array.isArray(payload.samples) ? payload.samples : [];
+      ui.presetSpeakerSamples = samples;
+      const defaults = payload.auto_defaults && typeof payload.auto_defaults === 'object' ? payload.auto_defaults : {};
+      const autoTitle = byId('speaker_preset_auto_title');
+      const autoMeta = byId('speaker_preset_auto_meta');
+      const autoTags = byId('speaker_preset_auto_tags');
+      const autoHint = byId('speaker_preset_auto_hint');
+      const summaryEntries = Object.keys(defaults).map(function (language) {
+        const samplePath = String(defaults[language] || '');
+        const sampleName = samplePath ? samplePath.split('/').pop() : '';
+        return {language: language, sample: sampleName};
+      });
+      const preferredOrder = ['en', 'zh', 'zh-cn', 'ja', 'de', 'es', 'fr', 'pt', 'tr'];
+      summaryEntries.sort(function (a, b) {
+        const ai = preferredOrder.indexOf(String(a.language));
+        const bi = preferredOrder.indexOf(String(b.language));
+        const ar = ai >= 0 ? ai : preferredOrder.length + 1;
+        const br = bi >= 0 ? bi : preferredOrder.length + 1;
+        if (ar !== br) return ar - br;
+        return String(a.language).localeCompare(String(b.language));
+      });
+
+      if (autoTitle) {
+        if (summaryEntries.length) {
+          autoTitle.textContent = ui.language === 'zh-TW'
+            ? '已啟用自動語言匹配'
+            : 'Auto-match enabled';
+        } else {
+          autoTitle.textContent = ui.language === 'zh-TW'
+            ? '找不到可用的預設樣本'
+            : 'No preset samples available';
+        }
+      }
+      if (autoMeta) {
+        if (summaryEntries.length) {
+          autoMeta.textContent = ui.language === 'zh-TW'
+            ? '執行時會依語音語言自動選擇預設樣本。'
+            : 'Preset voices are selected automatically by voice language at runtime.';
+        } else {
+          autoMeta.textContent = ui.language === 'zh-TW'
+            ? '目前無法自動匹配語言樣本。'
+            : 'Language auto-matching is currently unavailable.';
+        }
+      }
+      if (autoTags) {
+        if (summaryEntries.length) {
+          autoTags.innerHTML = summaryEntries.map(function (entry) {
+            return '<span class="speaker-auto-tag">' + escapeHtml(String(entry.language)) + '</span>';
+          }).join('');
+          autoTags.hidden = false;
+        } else {
+          autoTags.innerHTML = '';
+          autoTags.hidden = true;
+        }
+      }
+      if (autoHint) {
+        const fallbackSample = String(payload.fallback_sample || '').split('/').pop() || '';
+        autoHint.textContent = summaryEntries.length
+          ? (ui.language === 'zh-TW'
+              ? '支援語言：' + summaryEntries.map(function (entry) { return String(entry.language); }).join(' / ')
+                + '；沒有匹配時會退回 ' + String(fallbackSample || 'en_sample.wav') + '。'
+              : 'Supported languages: ' + summaryEntries.map(function (entry) { return String(entry.language); }).join(' / ')
+                + '; fallback: ' + String(fallbackSample || 'en_sample.wav') + '.')
+          : (ui.language === 'zh-TW'
+              ? '目前沒有可自動匹配的預設樣本。'
+              : 'No auto-matched preset samples are available.');
+      }
+      const rootHint = byId('speaker_preset_root_hint');
+      if (rootHint) rootHint.textContent = 'Preset sample root: ' + String(payload.root || 'models/XTTS-v2/samples');
+      if (currentSpeakerSourceMode() === 'preset' && byId('speaker_wav')) byId('speaker_wav').value = '';
+    }
+
+    function renderCustomSpeakerLibrary(data, preferredWav) {
+      const payload = data && typeof data === 'object' ? data : {};
+      const directories = Array.isArray(payload.directories) ? payload.directories : [];
+      const files = Array.isArray(payload.files) ? payload.files : [];
+      ui.customSpeakerDirs = directories;
+      ui.customSpeakerFiles = files;
+
+      const selectedDir = populateSelectOptions(
+        'speaker_dir',
+        directories.map(function (item) {
+          const count = parseIntSafe(item.wav_count, 0);
+          const suffix = count > 0 ? ' (' + String(count) + ')' : '';
+          return {value: item.path, label: String(item.label || item.path || '') + suffix};
+        }),
+        'No custom folders',
+        String(payload.selected_dir || payload.default_dir || '')
+      );
+      const selectedWav = populateSelectOptions(
+        'speaker_custom_wav_select',
+        files.map(function (item) {
+          return {value: item.path, label: item.name};
+        }),
+        'No recordings yet',
+        preferredWav
+      );
+      const rootHint = byId('speaker_custom_root_hint');
+      if (rootHint) rootHint.textContent = 'Custom voice root: ' + String(payload.root || 'runs/voice_samples');
+      if (currentSpeakerSourceMode() === 'custom') {
+        if (byId('speaker_dir')) byId('speaker_dir').value = selectedDir;
+        if (byId('speaker_wav')) byId('speaker_wav').value = selectedWav;
+      }
+    }
+
+    async function refreshOverviewSpeakerLibraries(preferred) {
+      const hints = preferred && typeof preferred === 'object' ? preferred : {};
+      const desiredDir = String(
+        hints.dir != null
+          ? hints.dir
+          : ((byId('speaker_dir') && byId('speaker_dir').value) || '')
+      ).trim();
+      const desiredWav = String(
+        hints.wav != null
+          ? hints.wav
+          : ((byId('speaker_wav') && byId('speaker_wav').value) || '')
+      ).trim();
+      try {
+        const [presetData, customData] = await Promise.all([
+          apiGet('/api/voice/preset-samples'),
+          apiGet('/api/voice/custom-speakers?selected_dir=' + encodeURIComponent(desiredDir)),
+        ]);
+        renderPresetSpeakerSamples(presetData);
+        renderCustomSpeakerLibrary(customData, currentSpeakerSourceMode() === 'custom' ? desiredWav : '');
+        syncSpeakerSelection();
+      } catch (err) {
+        setMessage(String((err && err.message) || err || 'Failed to load speaker library.'), 'warn');
+      }
+    }
+
     function payloadFromForm() {
       const seedRaw = byId('seed').value.trim();
       const inputMode = byId('story_input_mode').value || 'preset';
       const isCustom = inputMode === 'custom';
+      const speakerMode = currentSpeakerSourceMode();
+      syncSpeakerSelection();
       return {
         count: parseIntSafe(byId('count').value, 1),
         max_retries: parseIntSafe(byId('max_retries').value, 1),
@@ -2757,8 +4556,12 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         seed: seedRaw ? parseIntSafe(seedRaw, 0) : null,
         story_prompt: isCustom ? (byId('story_prompt').value || '').trim() : '',
         story_materials: isCustom ? (byId('story_materials').value || '').trim() : '',
+        speaker_source_mode: speakerMode,
         speaker_wav: (byId('speaker_wav').value || '').trim() || null,
-        speaker_dir: (byId('speaker_dir').value || '').trim() || null,
+        speaker_dir: speakerMode === 'custom'
+          ? ((byId('speaker_dir').value || '').trim() || null)
+          : null,
+        model_plan: byId('model_plan').value || 'auto',
         photo_enabled: byId('photo_enabled').checked,
         translation_enabled: byId('translation_enabled').checked,
         voice_enabled: byId('voice_enabled').checked,
@@ -2792,8 +4595,16 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       byId('seed').value = p.seed == null ? '' : String(parseIntSafe(p.seed, 0));
       byId('story_prompt').value = p.story_prompt || '';
       byId('story_materials').value = p.story_materials || '';
-      byId('speaker_wav').value = p.speaker_wav || '';
-      byId('speaker_dir').value = p.speaker_dir || '';
+      const inferredSpeakerMode = p.speaker_source_mode
+        || (String(p.speaker_dir || '').replace(/\\/g, '/').startsWith('runs/voice_samples')
+          || String(p.speaker_wav || '').replace(/\\/g, '/').startsWith('runs/voice_samples')
+          ? 'custom'
+          : 'preset');
+      byId('speaker_wav').value = inferredSpeakerMode === 'custom' ? (p.speaker_wav || '') : '';
+      if (byId('speaker_source_mode')) {
+        byId('speaker_source_mode').value = inferredSpeakerMode;
+      }
+      byId('model_plan').value = p.model_plan || 'auto';
       byId('photo_enabled').checked = p.photo_enabled !== false;
       byId('translation_enabled').checked = p.translation_enabled !== false;
       byId('voice_enabled').checked = p.voice_enabled !== false;
@@ -2801,7 +4612,52 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       byId('low_vram').checked = p.low_vram !== false;
       byId('strict_translation').checked = p.strict_translation !== false;
       byId('strict_voice').checked = p.strict_voice !== false;
+      renderModelPlanStatus(ui.lastSystemStatus);
+      renderSystemTelemetry(ui.lastSystemStatus);
+      syncStrictOptionAvailability();
       syncStoryInputMode();
+      setSpeakerSourceMode(currentSpeakerSourceMode());
+      refreshOverviewSpeakerLibraries({
+        dir: p.speaker_dir || '',
+        wav: inferredSpeakerMode === 'custom' ? (p.speaker_wav || '') : '',
+      });
+    }
+
+    function extractActiveRunPayload(status) {
+      const active = status && typeof status === 'object' ? status.active_job : null;
+      if (active && typeof active === 'object' && active.payload && typeof active.payload === 'object') {
+        return active.payload;
+      }
+      const lastConfig = status && typeof status === 'object' ? status.last_config : null;
+      if (lastConfig && typeof lastConfig === 'object') {
+        return lastConfig;
+      }
+      return null;
+    }
+
+    function syncFormWithActiveRun(status) {
+      const runId = String(status && status.run_id ? status.run_id : '').trim();
+      const running = !!(status && status.running && runId);
+      if (!running) {
+        ui.formHydratedRunId = '';
+        return;
+      }
+
+      if (ui.formHydratedRunId === runId) {
+        return;
+      }
+
+      const payload = extractActiveRunPayload(status);
+      if (!payload || typeof payload !== 'object' || !Object.keys(payload).length) {
+        return;
+      }
+
+      setFormFromPayload(payload);
+      ui.formHydratedRunId = runId;
+      try {
+        localStorage.setItem(STORE_KEY, JSON.stringify(payload));
+      } catch (_err) {
+      }
     }
 
     function syncStoryInputMode() {
@@ -2935,19 +4791,28 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         setMessage(t('msg.no_recording_available', 'No recording available.'), 'warn');
         return;
       }
+      setSpeakerSourceMode('custom');
       const reader = new FileReader();
       reader.onload = async function () {
         try {
           const dataUrl = String(reader.result || '');
           const base64 = dataUrl.split(',')[1] || '';
           const scriptText = (byId('voice_script').value || '').trim();
+          const speakerDir = (byId('speaker_dir') && byId('speaker_dir').value)
+            ? String(byId('speaker_dir').value || '').trim()
+            : '';
           const result = await apiPost('/api/voice/recordings/save', {
             wav_base64: base64,
             sample_rate: ui.recordSampleRate || 16000,
             script_text: scriptText,
+            speaker_dir: speakerDir || null,
           });
           if (result && result.path) {
             byId('speaker_wav').value = String(result.path);
+            await refreshOverviewSpeakerLibraries({
+              dir: String(result.dir || speakerDir || ''),
+              wav: String(result.path),
+            });
             setMessage(tf('msg.speaker_sample_saved', {path: String(result.path)}, 'Speaker sample saved: {path}'), 'ok');
           }
         } catch (err) {
@@ -3034,8 +4899,12 @@ const STORE_KEY = 'genai.dashboard.form.v4';
             wav_base64: base64,
             sample_rate: ui.moduleRecordSampleRate || 16000,
             script_text: scriptText,
+            speaker_dir: ((byId('module_voice_speaker_dir') && byId('module_voice_speaker_dir').value) || '').trim() || null,
           });
           if (result && result.path) {
+            if (result.dir && byId('module_voice_speaker_dir')) {
+              byId('module_voice_speaker_dir').value = String(result.dir);
+            }
             byId('module_voice_speaker_wav').value = String(result.path);
             setModuleMessage('module_voice_message', tf('msg.speaker_sample_saved', {path: String(result.path)}, 'Speaker sample saved: {path}'), 'ok');
           }
@@ -3066,6 +4935,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       if (name === 'speed') {
         payload.max_retries = 0;
         payload.priority = 'normal';
+        payload.model_plan = 'portable';
         payload.translation_enabled = false;
         payload.voice_enabled = false;
         payload.verify_enabled = true;
@@ -3075,6 +4945,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       } else if (name === 'quality') {
         payload.max_retries = 2;
         payload.priority = 'high';
+        payload.model_plan = 'quality';
         payload.translation_enabled = true;
         payload.voice_enabled = true;
         payload.verify_enabled = true;
@@ -3084,6 +4955,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       } else {
         payload.max_retries = 1;
         payload.priority = 'normal';
+        payload.model_plan = 'balanced';
         payload.translation_enabled = true;
         payload.voice_enabled = true;
         payload.verify_enabled = true;
@@ -3092,7 +4964,14 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         payload.strict_voice = true;
       }
       setFormFromPayload(payload);
-      setMessage(tf('msg.preset_applied', {name: name}, 'Preset applied: {name}'), 'ok');
+      setMessage(
+        tf(
+          'msg.preset_applied',
+          {name: t('overview.preset.' + name, name)},
+          'Preset applied: {name}',
+        ),
+        'ok',
+      );
     }
 
     function setStatePill(text, state) {
@@ -3102,9 +4981,23 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       if (state) el.classList.add(state);
     }
 
+    function syncStrictOptionAvailability() {
+      const translationEnabled = !!(byId('translation_enabled') && byId('translation_enabled').checked);
+      const voiceEnabled = !!(byId('voice_enabled') && byId('voice_enabled').checked);
+      const strictTranslation = byId('strict_translation');
+      const strictVoice = byId('strict_voice');
+      const strictTranslationChip = byId('strict_translation_chip');
+      const strictVoiceChip = byId('strict_voice_chip');
+
+      if (strictTranslation) strictTranslation.disabled = !translationEnabled;
+      if (strictVoice) strictVoice.disabled = !voiceEnabled;
+      if (strictTranslationChip) strictTranslationChip.classList.toggle('disabled', !translationEnabled);
+      if (strictVoiceChip) strictVoiceChip.classList.toggle('disabled', !voiceEnabled);
+    }
+
     function updatePreEvalPanel(preEvaluation, currentStage) {
       const panel = byId('pre_eval_panel');
-      if (!panel) return;
+      if (!panel) return {visible: false, state: 'idle'};
 
       const payload = preEvaluation && typeof preEvaluation === 'object' ? preEvaluation : {};
       const metrics = payload.metrics && typeof payload.metrics === 'object' ? payload.metrics : {};
@@ -3125,6 +5018,14 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       const overallScore = Number(payload.overall_score);
       const coherenceScore = Number(metrics.coherence);
       const entityScore = Number(metrics.entity_consistency);
+      const hasPayloadData = Number.isFinite(overallScore) ||
+        Number.isFinite(coherenceScore) ||
+        Number.isFinite(entityScore) ||
+        !!payload.policy ||
+        !!payload.gate_message ||
+        !!payload.error;
+      const visible = state === 'running' || state === 'completed' || state === 'degraded' || state === 'blocked' || hasPayloadData;
+      panel.hidden = !visible;
 
       const scoreEl = byId('pre_eval_score');
       if (scoreEl) scoreEl.textContent = Number.isFinite(overallScore) ? overallScore.toFixed(2) : '-';
@@ -3156,34 +5057,62 @@ const STORE_KEY = 'genai.dashboard.form.v4';
           gateEl.textContent = t('msg.pre_eval_waiting', 'Waiting for pre-evaluation...');
         }
       }
+
+      return {visible: visible, state: state};
     }
 
     function updateHeaderKpis(statusData, capacityData) {
+      const stateNode = byId('kpi_system_state');
+      const queueNode = byId('kpi_queue_depth');
+      const progressNode = byId('kpi_success_rate');
+      const elapsedNode = byId('kpi_avg_duration');
+      const updatedNode = byId('kpi_gpu_cost');
+      if (!stateNode || !queueNode || !progressNode || !elapsedNode || !updatedNode) return;
+
       const runner = statusData && statusData.runner ? statusData.runner : {};
-      const state = String(runner.state || (statusData && statusData.running ? 'running' : 'idle'));
-      byId('kpi_system_state').textContent = localizeState(state);
-      byId('kpi_queue_depth').textContent = String(statusData && Number.isFinite(Number(statusData.queue_depth)) ? statusData.queue_depth : 0);
-      byId('kpi_success_rate').textContent = toPercent(capacityData ? capacityData.success_rate_pct : 0);
-      byId('kpi_avg_duration').textContent = formatDuration(capacityData ? capacityData.avg_duration_sec : null);
-      const usd = capacityData ? parseFloatSafe(capacityData.gpu_cost_usd, 0) : 0;
-      byId('kpi_gpu_cost').textContent = '$' + usd.toFixed(2);
+      const state = Boolean(statusData && statusData.running)
+        ? 'running'
+        : String(runner.state || 'idle');
+      stateNode.textContent = localizeState(state);
+      queueNode.textContent = String(statusData && Number.isFinite(Number(statusData.queue_depth)) ? statusData.queue_depth : 0);
+      progressNode.textContent = Number.isFinite(Number(statusData && statusData.progress_pct))
+        ? (Number(statusData.progress_pct).toFixed(1) + '%')
+        : '-';
+      elapsedNode.textContent = formatDuration(statusData ? statusData.elapsed_sec : null);
+      updatedNode.textContent = statusData && statusData.updated_ago_sec != null
+        ? (String(Math.round(Number(statusData.updated_ago_sec || 0))) + 's')
+        : '-';
     }
 
     function renderStatus(data) {
+      syncFormWithActiveRun(data);
+      syncCapabilitiesFromPayload(data);
       ui.latestStatus = data;
+      updateHeaderKpis(data, ui.lastCapacity || {});
+      renderOpsSummary();
+      function setNodeText(id, value) {
+        const node = byId(id);
+        if (node) node.textContent = value;
+      }
       const runner = data.runner || {};
       const state = String(runner.state || (data.running ? 'running' : 'idle')).toLowerCase();
-      setStatePill(state, state);
-      updatePreEvalPanel(runner.pre_evaluation, runner.current_stage);
-
-      byId('pill_book').textContent = t('meta.book', 'book') + ': ' + String(runner.current_book == null ? '-' : runner.current_book);
-      byId('pill_stage').textContent = t('meta.stage', 'stage') + ': ' + String(runner.current_stage || '-');
-
       const total = parseIntSafe(runner.total_books, 0);
       const completed = parseIntSafe(runner.completed_books, 0);
       const success = parseIntSafe(runner.success_books, 0);
       const failed = parseIntSafe(runner.failed_books, 0);
       const remaining = Math.max(0, total - completed);
+      setStatePill(state, state);
+      const health = renderDashboardHealth(ui.lastSystemStatus, data);
+      updatePreEvalPanel(runner.pre_evaluation, runner.current_stage);
+
+      const bookPillLabel = Boolean(data.running)
+        ? t('meta.book', 'book')
+        : t('overview.monitor.last_run.books', 'books');
+      const bookPillValue = Boolean(data.running)
+        ? String(runner.current_book == null ? '-' : runner.current_book)
+        : (total > 0 ? (String(completed) + '/' + String(total)) : '-');
+      byId('pill_book').textContent = bookPillLabel + ': ' + bookPillValue;
+      byId('pill_stage').textContent = t('meta.stage', 'stage') + ': ' + String(runner.current_stage || '-');
       const stageText = String(runner.current_stage || '-');
       const successRate = completed > 0 ? ((success / completed) * 100) : 0;
 
@@ -3193,8 +5122,8 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       }
       progress = Math.max(0, Math.min(100, progress));
       byId('progress_fill').style.width = String(progress) + '%';
-      byId('progress_label').textContent = progress.toFixed(1) + '%';
-      byId('progress_detail').textContent = tf(
+      setNodeText('progress_label', progress.toFixed(1) + '%');
+      let progressDetail = tf(
         'overview.progress.detail',
         {
           done: String(completed),
@@ -3203,43 +5132,43 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         },
         '{done}/{total} completed | {remaining} remaining'
       );
-      byId('progress_badge_books').textContent = tf(
-        'overview.progress.books',
-        {done: String(completed), total: String(total)},
-        'Books {done}/{total}'
-      );
-      byId('progress_badge_remaining').textContent = tf(
-        'overview.progress.remaining',
-        {count: String(remaining)},
-        'Remaining {count}'
-      );
-      byId('progress_badge_success').textContent = tf(
-        'overview.progress.success_rate',
-        {pct: successRate.toFixed(1)},
-        'Success {pct}%'
-      );
-      byId('progress_badge_stage').textContent = tf(
-        'overview.progress.stage',
-        {stage: stageText},
-        'Stage {stage}'
-      );
+      const stageProgress = (runner && runner.stage_progress && typeof runner.stage_progress === 'object')
+        ? runner.stage_progress
+        : ((data && data.stage_progress && typeof data.stage_progress === 'object') ? data.stage_progress : null);
+      const stageDetail = String((data && data.stage_detail) || (runner && runner.stage_detail) || '').trim();
+      if (stageProgress) {
+        const phase = String(stageProgress.phase || stageText || '').trim();
+        const current = Number.isFinite(Number(stageProgress.completed)) ? Number(stageProgress.completed) : 0;
+        const totalStage = Number.isFinite(Number(stageProgress.total)) ? Number(stageProgress.total) : 0;
+        const taskLabel = String(stageProgress.task_label || stageDetail || '').trim();
+        const taskIndex = Number.isFinite(Number(stageProgress.task_index)) ? Number(stageProgress.task_index) : 0;
+        const taskTotal = Number.isFinite(Number(stageProgress.task_total)) ? Number(stageProgress.task_total) : 0;
+        const stageParts = [];
+        if (totalStage > 0) {
+          stageParts.push(`${current}/${totalStage}`);
+        }
+        if (phase) {
+          stageParts.push(phase.toUpperCase());
+        }
+        if (taskTotal > 0) {
+          stageParts.push(`${taskIndex}/${taskTotal}`);
+        }
+        if (taskLabel) {
+          stageParts.push(taskLabel);
+        }
+        if (stageParts.length > 0) {
+          progressDetail += ' | ' + stageParts.join(' | ');
+        }
+      }
+      setNodeText('progress_detail', progressDetail);
 
-      const updatedAgo = data.updated_ago_sec;
-      byId('updated_label').textContent = updatedAgo == null
-        ? (t('meta.updated', 'updated') + ': -')
-        : (t('meta.updated', 'updated') + ': ' + String(Math.round(updatedAgo)) + 's ago');
+      setNodeText('metric_success', String(success));
+      setNodeText('metric_failed', String(failed));
+      setNodeText('metric_eta', formatDuration(data.eta_sec));
 
-      byId('metric_total').textContent = String(total);
-      byId('metric_completed').textContent = String(completed);
-      byId('metric_success').textContent = String(success);
-      byId('metric_failed').textContent = String(failed);
-      byId('metric_elapsed').textContent = formatDuration(data.elapsed_sec);
-      byId('metric_eta').textContent = formatDuration(data.eta_sec);
-
-      byId('meta_run_id').textContent = String(data.run_id || '-');
-      byId('meta_pid').textContent = data.pid == null ? '-' : String(data.pid);
-      byId('meta_exit_code').textContent = data.exit_code == null ? '-' : String(data.exit_code);
-      byId('meta_queue_depth').textContent = String(data.queue_depth || 0);
+      setNodeText('meta_run_id', String(data.run_id || '-'));
+      setNodeText('meta_exit_code', data.exit_code == null ? '-' : String(data.exit_code));
+      renderOverviewMonitor(data, health);
 
       byId('raw_status').textContent = JSON.stringify(data, null, 2);
 
@@ -3250,8 +5179,6 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       const currentRunId = data.run_id || null;
       if (currentRunId !== ui.activeLogRunId) {
         ui.activeLogRunId = currentRunId;
-        const opsLogs = byId('log_output');
-        if (opsLogs) opsLogs.textContent = '';
         const overviewLogs = byId('overview_log_output');
         if (overviewLogs) {
           overviewLogs.textContent = currentRunId ? '' : t('msg.no_live_logs', 'No active run logs yet.');
@@ -3266,9 +5193,9 @@ const STORE_KEY = 'genai.dashboard.form.v4';
 
     function appendLogs(lines) {
       if (!Array.isArray(lines) || !lines.length) return;
-      const box = byId('log_output');
+      ui.lastLogReceiptTs = Date.now();
       const overviewBox = byId('overview_log_output');
-      if (!box && !overviewBox) return;
+      if (!overviewBox) return;
       let chunk = '';
       for (let i = 0; i < lines.length; i += 1) {
         const line = lines[i] || {};
@@ -3276,26 +5203,12 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         const txt = line.text ? String(line.text) : '';
         chunk += '[' + ts + '] ' + txt + '\n';
       }
-      if (box) {
-        box.textContent += chunk;
-        if (box.textContent.length > 400000) {
-          box.textContent = box.textContent.slice(-260000);
-        }
+      overviewBox.textContent += chunk;
+      const rows = overviewBox.textContent.split('\n');
+      if (rows.length > 260) {
+        overviewBox.textContent = rows.slice(rows.length - 260).join('\n');
       }
-
-      if (overviewBox) {
-        overviewBox.textContent += chunk;
-        const rows = overviewBox.textContent.split('\n');
-        if (rows.length > 260) {
-          overviewBox.textContent = rows.slice(rows.length - 260).join('\n');
-        }
-        overviewBox.scrollTop = overviewBox.scrollHeight;
-      }
-
-      const autoScroll = byId('log_autoscroll');
-      if (box && autoScroll && autoScroll.checked) {
-        box.scrollTop = box.scrollHeight;
-      }
+      overviewBox.scrollTop = overviewBox.scrollHeight;
     }
 
     function renderHistory(items) {
@@ -3567,6 +5480,42 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       }
     }
 
+    function syncEvaluationAdvancedControls() {
+      const toggle = byId('btn_eval_advanced');
+      const panel = byId('eval_advanced_panel');
+      const branchNode = byId('evaluation_branch');
+      if (!toggle || !panel || !branchNode) return;
+
+      const branch = String(branchNode.value || ui.evaluation.branch || 'canonical').trim() || 'canonical';
+      const isDefaultBranch = branch.toLowerCase() === 'canonical';
+      const expanded = !isDefaultBranch || !!ui.evaluation.showAdvanced;
+
+      panel.hidden = !expanded;
+      toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      toggle.classList.toggle('active', expanded);
+      toggle.textContent = isDefaultBranch
+        ? t(expanded ? 'eval.advanced.hide' : 'eval.advanced.show', expanded ? 'Hide advanced' : 'Advanced options')
+        : tf('eval.advanced.custom', {value: branch}, 'Advanced: {value}');
+    }
+
+    function evaluationRequestKey(source, runId, book, storyRoot, branch) {
+      return [
+        String(source || 'latest').trim(),
+        String(runId || '').trim(),
+        String(book || '').trim(),
+        String(storyRoot || '').trim(),
+        String(branch || 'canonical').trim().toLowerCase(),
+      ].join('||');
+    }
+
+    function evaluationRenderSignature(payload) {
+      try {
+        return JSON.stringify(payload || {});
+      } catch (_err) {
+        return String(Date.now());
+      }
+    }
+
     function renderEvaluation(data, options) {
       const opts = options && typeof options === 'object' ? options : {};
       const preserveStatus = !!opts.preserveStatus;
@@ -3590,6 +5539,9 @@ const STORE_KEY = 'genai.dashboard.form.v4';
 
       if (!payload || payload.ok === false) {
         clearEvaluationChart();
+        setEvaluationChartPlaceholder(true);
+        renderEvaluationInsights(null, null);
+        const localizedErrorText = localizeBackendMessage(payload.error || t('msg.eval_no_data', 'No evaluation loaded.'));
 
         if (scoreNode) scoreNode.textContent = '-';
         if (scopeNode) scopeNode.textContent = '-';
@@ -3605,17 +5557,17 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         }
 
         if (logsNode) {
-          const errorText = String(payload.error || t('msg.eval_no_data', 'No evaluation loaded.'));
-          logsNode.textContent = errorText;
+          logsNode.textContent = String(localizedErrorText);
         }
 
         if (!preserveStatus) {
-          setEvaluationStatus(String(payload.error || t('msg.eval_fetch_failed', 'Failed to load evaluation report.')), 'warn');
+          setEvaluationStatus(String(localizedErrorText || t('msg.eval_fetch_failed', 'Failed to load evaluation report.')), 'warn');
         }
         return;
       }
 
       const diagnostics = payload.diagnostics && typeof payload.diagnostics === 'object' ? payload.diagnostics : {};
+      renderEvaluationInsights(diagnostics, payloadSelectedBook);
       const meta = payload.meta && typeof payload.meta === 'object' ? payload.meta : {};
       const overall = parseFloatSafe(diagnostics.overall_score, Number.NaN);
       const scope = String(diagnostics.evaluation_scope || '-');
@@ -3650,7 +5602,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       const scoreMap = diagnostics.dimension_scores && typeof diagnostics.dimension_scores === 'object'
         ? diagnostics.dimension_scores
         : {};
-      const dimensionOrder = ['readability', 'factuality', 'emotional_impact', 'completeness', 'entity_consistency', 'coherence'];
+      const dimensionOrder = ['readability', 'factuality', 'emotional_impact', 'completeness', 'entity_consistency', 'coherence', 'multimodal_alignment'];
       const dimensions = [];
       for (let i = 0; i < dimensionOrder.length; i += 1) {
         const key = dimensionOrder[i];
@@ -3673,6 +5625,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         completeness: '完整度',
         entity_consistency: '實體一致性',
         coherence: '連貫性',
+        multimodal_alignment: '文圖一致性',
       };
       const dimensionLabelsEn = {
         readability: 'Readability',
@@ -3681,8 +5634,19 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         completeness: 'Completeness',
         entity_consistency: 'Entity Consistency',
         coherence: 'Coherence',
+        multimodal_alignment: 'Multimodal Alignment',
       };
-      const dimensionMap = ui.language === 'zh-TW' ? dimensionLabelsZh : dimensionLabelsEn;
+      const dimensionMap = ui.language === 'zh-TW'
+        ? {
+            readability: '可讀性',
+            factuality: '事實性',
+            emotional_impact: '情感影響',
+            completeness: '完整性',
+            entity_consistency: '角色一致性',
+            coherence: '連貫性',
+            multimodal_alignment: '文圖一致性',
+          }
+        : dimensionLabelsEn;
       const chartLabels = [];
       const values = [];
       for (let i = 0; i < dimensions.length; i += 1) {
@@ -3693,7 +5657,9 @@ const STORE_KEY = 'genai.dashboard.form.v4';
 
       clearEvaluationChart();
       const chartCanvas = byId('evalRadarChart');
+      setEvaluationChartPlaceholder(!(chartCanvas && dimensions.length && window.Chart));
       if (chartCanvas && dimensions.length && window.Chart) {
+        setEvaluationChartPlaceholder(false);
         const ctx = chartCanvas.getContext('2d');
         const gradient = ctx
           ? (function () {
@@ -3814,8 +5780,94 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       }
     }
 
-    async function fetchEvaluation(force) {
+    function renderEvaluationInsights(diagnostics, selectedBook) {
+      const summaryNode = byId('eval_dimension_summary');
+      const findingsNode = byId('eval_findings_list');
+      if (!summaryNode || !findingsNode) return;
+
+      const scoreMap = diagnostics && diagnostics.dimension_scores && typeof diagnostics.dimension_scores === 'object'
+        ? diagnostics.dimension_scores
+        : {};
+      const entries = Object.keys(scoreMap).map(function (key) {
+        return {
+          key: key,
+          value: parseFloatSafe(scoreMap[key], 0),
+        };
+      }).sort(function (a, b) {
+        return b.value - a.value;
+      });
+
+      if (!entries.length) {
+        summaryNode.innerHTML = '<div class="mini">' + escapeHtml(t('eval.insight.empty_summary', 'No evaluation loaded.')) + '</div>';
+        findingsNode.innerHTML = '<div class="list-item">' + escapeHtml(t('eval.insight.empty_findings', 'Key findings will appear here.')) + '</div>';
+        return;
+      }
+
+      summaryNode.innerHTML = entries.map(function (item) {
+        const label = String(item.key || '').replace(/_/g, ' ');
+        return '<div class="mini">' +
+          '<span>' + escapeHtml(label) + '</span>' +
+          '<strong>' + escapeHtml(item.value.toFixed(1)) + '</strong>' +
+          '</div>';
+      }).join('');
+
+      const strongest = entries[0];
+      const weakest = entries[entries.length - 1];
+      const findings = [];
+      findings.push({
+        title: t('eval.insight.strongest', 'Strongest dimension'),
+        detail: tf('eval.insight.strongest_detail', {name: String(strongest.key).replace(/_/g, ' '), score: strongest.value.toFixed(1)}, '{name} scored {score}.'),
+        level: 'info',
+      });
+      findings.push({
+        title: t('eval.insight.weakest', 'Weakest dimension'),
+        detail: tf('eval.insight.weakest_detail', {name: String(weakest.key).replace(/_/g, ' '), score: weakest.value.toFixed(1)}, '{name} scored {score}.'),
+        level: weakest.value < 65 ? 'warning' : 'info',
+      });
+
+      if (selectedBook && selectedBook.story_root) {
+        findings.push({
+          title: t('eval.insight.scope', 'Selected evaluation scope'),
+          detail: tf(
+            'eval.insight.scope_detail',
+            {book: formatBookOptionLabel(selectedBook, parseIntSafe(selectedBook.book_index, 1)), story_root: String(selectedBook.story_root)},
+            'Book {book} from {story_root}'
+          ),
+          level: 'info',
+        });
+      }
+
+      const listFields = ['issues', 'warnings', 'findings', 'recommendations'];
+      for (let i = 0; i < listFields.length; i += 1) {
+        const key = listFields[i];
+        const value = diagnostics ? diagnostics[key] : null;
+        if (!Array.isArray(value) || !value.length) continue;
+        for (let j = 0; j < value.length && findings.length < 6; j += 1) {
+          const titleMap = {
+            issues: t('eval.insight.issues', 'Issues'),
+            warnings: t('eval.insight.warnings', 'Warnings'),
+            findings: t('eval.insight.findings', 'Findings'),
+            recommendations: t('eval.insight.recommendations', 'Recommendations'),
+          };
+          findings.push({
+            title: titleMap[key] || key,
+            detail: String(value[j]),
+            level: key === 'issues' || key === 'warnings' ? 'warning' : 'info',
+          });
+        }
+      }
+
+      findingsNode.innerHTML = findings.map(function (item) {
+        return '<div class="list-item advisory-' + escapeHtml(item.level || 'info') + '">' +
+          '<strong>' + escapeHtml(item.title || 'Finding') + '</strong>' +
+          '<div class="meta">' + escapeHtml(item.detail || '') + '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function fetchEvaluation(force, options) {
       if (!force && ui.activeTab !== 'evaluation') return null;
+      const opts = options && typeof options === 'object' ? options : {};
 
       const sourceControl = byId('evaluation_source');
       const runControl = byId('eval_run_select');
@@ -3834,6 +5886,21 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       ui.evaluation.book = ui.evaluation.source === 'run' ? book : '';
       ui.evaluation.storyRoot = storyRoot;
       ui.evaluation.branch = branch || 'canonical';
+
+      const requestKey = evaluationRequestKey(
+        ui.evaluation.source,
+        ui.evaluation.runId,
+        ui.evaluation.book,
+        ui.evaluation.storyRoot,
+        ui.evaluation.branch
+      );
+      const showLoading = Object.prototype.hasOwnProperty.call(opts, 'showLoading')
+        ? !!opts.showLoading
+        : !!force;
+      const preserveStatus = Object.prototype.hasOwnProperty.call(opts, 'preserveStatus')
+        ? !!opts.preserveStatus
+        : !showLoading;
+      const minBackgroundRefreshMs = Math.max(2500, parseIntSafe(opts.minRefreshMs, 6000));
 
       if (ui.evaluation.source === 'run' && !ui.evaluation.runId) {
         setEvaluationStatus(t('msg.eval_run_required', 'Please select a run ID first.'), 'warn');
@@ -3857,23 +5924,65 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         params.set('story_root', ui.evaluation.storyRoot);
       }
 
-      setEvaluationStatus(t('msg.eval_loading', 'Loading evaluation report...'), 'ok');
-      try {
-        const data = await apiGet('/api/evaluation?' + params.toString());
-        renderEvaluation(data);
-        return data;
-      } catch (err) {
-        const message = String((err && err.message) || err || t('msg.eval_fetch_failed', 'Failed to load evaluation report.'));
-        setEvaluationStatus(message, 'bad');
-        renderEvaluation({ok: false, error: message});
-        return null;
+      if (!force && ui.evaluation.pendingPromise && ui.evaluation.pendingKey === requestKey) {
+        return ui.evaluation.pendingPromise;
       }
+      if (!force && ui.evaluation.lastFetchKey === requestKey && (Date.now() - Number(ui.evaluation.lastFetchAt || 0)) < minBackgroundRefreshMs) {
+        return ui.evaluation.lastResponse || null;
+      }
+
+      if (showLoading) {
+        setEvaluationStatus(t('msg.eval_loading', 'Loading evaluation report...'), 'ok');
+      }
+
+      const requestPromise = (async function () {
+        try {
+          const data = await apiGet('/api/evaluation?' + params.toString());
+          ui.evaluation.lastFetchAt = Date.now();
+          ui.evaluation.lastFetchKey = requestKey;
+          const signature = evaluationRenderSignature(data);
+          if (!showLoading) {
+            setEvaluationStatus('', '');
+          }
+          const shouldRender = signature !== ui.evaluation.renderSignature;
+          if (shouldRender) {
+            ui.evaluation.renderSignature = signature;
+            renderEvaluation(data, {preserveStatus: preserveStatus});
+          } else if (!preserveStatus) {
+            setEvaluationStatus('', '');
+          }
+          ui.evaluation.lastResponse = data;
+          return data;
+        } catch (err) {
+          const message = String((err && err.message) || err || t('msg.eval_fetch_failed', 'Failed to load evaluation report.'));
+          setEvaluationStatus(message, 'bad');
+          renderEvaluation({ok: false, error: message}, {preserveStatus: false});
+          return null;
+        } finally {
+          if (ui.evaluation.pendingKey === requestKey) {
+            ui.evaluation.pendingPromise = null;
+            ui.evaluation.pendingKey = '';
+          }
+        }
+      })();
+
+      ui.evaluation.pendingKey = requestKey;
+      ui.evaluation.pendingPromise = requestPromise;
+      return requestPromise;
     }
 
     function renderQueue(data) {
+      const unavailable = data == null && !hasCapability('queue_api', true);
+      ui.lastQueue = unavailable ? {} : (data || {});
       const body = byId('queue_body');
-      const active = data.active_job;
-      const pending = Array.isArray(data.pending_jobs) ? data.pending_jobs : [];
+      if (unavailable) {
+        body.innerHTML = '<tr><td colspan="7">' + escapeHtml(t('msg.queue_unavailable', 'Queue data is unavailable in the current backend.')) + '</td></tr>';
+        renderOpsSummary();
+        return;
+      }
+      const payload = data || {};
+      const active = payload.active_job;
+      const pending = Array.isArray(payload.pending_jobs) ? payload.pending_jobs : [];
       const rows = [];
 
       if (active) {
@@ -3920,12 +6029,21 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       } else {
         body.innerHTML = rows.join('');
       }
+      renderOpsSummary();
     }
 
     function renderAlerts(items) {
+      const unavailable = items == null && !hasCapability('alerts_api', true);
+      ui.lastAlerts = unavailable ? [] : (Array.isArray(items) ? items : []);
       const list = byId('alert_list');
+      if (unavailable) {
+        list.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.alerts_unavailable', 'Alert data is unavailable in the current backend.')) + '</div>';
+        renderOpsSummary();
+        return;
+      }
       if (!Array.isArray(items) || !items.length) {
         list.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_alerts', 'No alerts.')) + '</div>';
+        renderOpsSummary();
         return;
       }
       const rows = [];
@@ -3942,18 +6060,37 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         );
       }
       list.innerHTML = rows.join('');
+      renderOpsSummary();
     }
 
     function renderCapacity(data) {
-      byId('cap_runs').textContent = String(data.window_runs || 0);
-      byId('cap_success_rate').textContent = toPercent(data.success_rate_pct || 0);
-      byId('cap_throughput').textContent = String(parseFloatSafe(data.books_per_hour, 0).toFixed(2));
-      byId('cap_queue_delay').textContent = formatDuration(data.avg_queue_delay_sec || 0);
-      byId('cap_gpu_hours').textContent = String(parseFloatSafe(data.gpu_hours, 0).toFixed(2));
-      byId('cap_gpu_cost').textContent = '$' + parseFloatSafe(data.gpu_cost_usd, 0).toFixed(2);
+      const unavailable = data == null && !hasCapability('capacity_api', true);
+      ui.lastCapacity = unavailable ? {} : (data || {});
+      updateHeaderKpis(ui.latestStatus || {}, ui.lastCapacity || {});
+      if (unavailable) {
+        byId('cap_runs').textContent = '-';
+        byId('cap_success_rate').textContent = '-';
+        byId('cap_throughput').textContent = '-';
+        byId('cap_queue_delay').textContent = '-';
+        byId('cap_gpu_hours').textContent = '-';
+        byId('cap_gpu_cost').textContent = '-';
+        const unavailableTrend = byId('capacity_trend');
+        if (unavailableTrend) {
+          unavailableTrend.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.capacity_unavailable', 'Capacity analytics are unavailable in the current backend.')) + '</div>';
+        }
+        renderOpsSummary();
+        return;
+      }
+      const payload = data || {};
+      byId('cap_runs').textContent = String(payload.window_runs || 0);
+      byId('cap_success_rate').textContent = toPercent(payload.success_rate_pct || 0);
+      byId('cap_throughput').textContent = String(parseFloatSafe(payload.books_per_hour, 0).toFixed(2));
+      byId('cap_queue_delay').textContent = formatDuration(payload.avg_queue_delay_sec || 0);
+      byId('cap_gpu_hours').textContent = String(parseFloatSafe(payload.gpu_hours, 0).toFixed(2));
+      byId('cap_gpu_cost').textContent = '$' + parseFloatSafe(payload.gpu_cost_usd, 0).toFixed(2);
 
       const trend = byId('capacity_trend');
-      const rows = Array.isArray(data.trend) ? data.trend : [];
+      const rows = Array.isArray(payload.trend) ? payload.trend : [];
       if (!rows.length) {
         trend.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_trend_data', 'No trend data yet.')) + '</div>';
       } else {
@@ -3973,12 +6110,88 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         }
         trend.innerHTML = html.join('');
       }
+      renderOpsSummary();
+    }
+
+    function renderOpsSummary() {
+      const queueData = ui.lastQueue || {};
+      const alerts = Array.isArray(ui.lastAlerts) ? ui.lastAlerts : [];
+      const capacity = ui.lastCapacity || {};
+      const queueAvailable = hasCapability('queue_api', true);
+      const alertsAvailable = hasCapability('alerts_api', true);
+      const capacityAvailable = hasCapability('capacity_api', true);
+      const configsAvailable = hasCapability('configs_api', true);
+      const active = queueData && queueData.active_job ? queueData.active_job : null;
+      const pending = Array.isArray(queueData && queueData.pending_jobs) ? queueData.pending_jobs : [];
+      const status = ui.latestStatus || {};
+      const hasCritical = alerts.some(function (item) {
+        const level = String((item && item.level) || '').toLowerCase();
+        return level === 'critical' || level === 'error';
+      });
+      const hasWarning = alerts.some(function (item) {
+        return String((item && item.level) || '').toLowerCase() === 'warning';
+      });
+      let opsHealth = 'Stable';
+      if (hasCritical) opsHealth = healthLabel('critical');
+      else if (hasWarning || pending.length >= 4) opsHealth = healthLabel('warning');
+      else if (!queueAvailable || !alertsAvailable || !capacityAvailable || !configsAvailable) opsHealth = t('ops.summary.health_limited', 'Limited');
+      else opsHealth = healthLabel('stable');
+
+      const activeNode = byId('ops_summary_active');
+      if (activeNode) {
+        activeNode.textContent = active
+          ? tf('ops.summary.running_job', {job: String(active.job_id || '')}, 'Running {job}')
+          : (Boolean(status.running) ? t('state.running', 'running') : t('state.idle', 'idle'));
+      }
+      const queueNode = byId('ops_summary_queue');
+      if (queueNode) {
+        queueNode.textContent = queueAvailable
+          ? String(pending.length)
+          : (status.queue_depth == null ? '-' : String(status.queue_depth));
+      }
+      const alertsNode = byId('ops_summary_alerts');
+      if (alertsNode) {
+        alertsNode.textContent = alertsAvailable
+          ? String(alerts.filter(function (item) { return !item.acknowledged; }).length)
+          : '-';
+      }
+      const modulesNode = byId('ops_summary_modules');
+      if (modulesNode) {
+        const activeModule = status && status.module_active_job ? 1 : 0;
+        const moduleQueue = parseIntSafe(status.module_queue_depth, 0);
+        modulesNode.textContent = String(activeModule + moduleQueue);
+      }
+      const healthNode = byId('ops_summary_health');
+      if (healthNode) healthNode.textContent = opsHealth;
+      const hintNode = byId('ops_summary_hint');
+      if (hintNode) {
+        if (!capacityAvailable) {
+          hintNode.textContent = t('ops.summary.hint_unavailable', 'Historical capacity metrics are unavailable in the current backend.');
+        } else {
+          hintNode.textContent = tf(
+            'ops.summary.hint_dynamic',
+            {
+              success: toPercent(capacity.success_rate_pct || 0),
+              delay: formatDuration(capacity.avg_queue_delay_sec || 0),
+              cost: '$' + parseFloatSafe(capacity.gpu_cost_usd, 0).toFixed(2),
+            },
+            'Success {success} | Avg queue delay {delay} | GPU cost {cost}'
+          );
+        }
+      }
     }
 
     function renderConfigVersions(items) {
       const body = byId('config_versions_body');
+      const unavailable = items == null && !hasCapability('configs_api', true);
+      if (unavailable) {
+        body.innerHTML = '<tr><td colspan="5">' + escapeHtml(t('msg.configs_unavailable', 'Config versions are unavailable in the current backend.')) + '</td></tr>';
+        renderOpsSummary();
+        return;
+      }
       if (!Array.isArray(items) || !items.length) {
         body.innerHTML = '<tr><td colspan="5">' + escapeHtml(t('msg.no_saved_versions', 'No saved versions.')) + '</td></tr>';
+        renderOpsSummary();
         return;
       }
 
@@ -3997,12 +6210,22 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         );
       }
       body.innerHTML = rows.join('');
+      renderOpsSummary();
     }
 
     function renderRunDetail(data) {
       const run = data.run || {};
       const runId = String(run.run_id || ui.selectedRunId || '').trim();
       const selectedBook = updateDetailBookSelect(data, runId);
+      const selectedBookLabel = selectedBook ? formatBookOptionLabel(selectedBook, parseIntSafe(selectedBook.book_index, 1)) : '-';
+      const artifactRun = String((selectedBook && selectedBook.artifact_run) || '').trim();
+      const storyRootValue = String((selectedBook && selectedBook.story_root) || run.story_root || '-');
+      const lastStageValue = String(run.current_stage || '-');
+      const evalReadyValue = run.evaluation_ready
+        ? t('detail.artifact.eval_ready', 'Ready')
+        : t('detail.artifact.eval_pending', 'Not ready');
+      const logsScope = String(data.logs_scope || 'run').trim().toLowerCase();
+      const logsSource = String(data.logs_source || artifactRun || '').trim();
 
       byId('detail_state').textContent = localizeState(run.state || '-');
       byId('detail_duration').textContent = formatDuration(run.duration_sec);
@@ -4014,7 +6237,26 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       byId('detail_queue_delay').textContent = formatDuration(run.queued_delay_sec || 0);
       byId('detail_started').textContent = isoToLocal(run.started_at);
       byId('detail_finished').textContent = isoToLocal(run.finished_at);
+      byId('detail_artifact_story_root').textContent = storyRootValue;
+      byId('detail_artifact_book').textContent = selectedBookLabel;
+      byId('detail_artifact_stage').textContent = artifactRun || lastStageValue;
+      byId('detail_artifact_eval').textContent = evalReadyValue;
       byId('detail_json').textContent = JSON.stringify(data, null, 2);
+      byId('detail_artifact_label_stage').textContent = artifactRun
+        ? t('detail.artifact.run_capture', 'Log Capture')
+        : t('detail.artifact.stage', 'Last Stage');
+      byId('detail_timeline_title').textContent = t('detail.timeline.run_title', 'Run Timeline and Alerts');
+      byId('detail_timeline_sub').textContent = selectedBook
+        ? t('detail.timeline.run_sub', 'Timeline and alerts remain run-level for the whole batch.')
+        : t('detail.timeline.sub', 'Run-level events and alerts for the whole batch.');
+      byId('detail_logs_title').textContent = logsScope === 'book' && selectedBook
+        ? tf('detail.logs.book_title', {book: selectedBookLabel}, '{book} Logs')
+        : t('detail.logs.title', 'Run Logs');
+      byId('detail_logs_sub').textContent = logsScope === 'book'
+        ? (logsSource
+            ? tf('detail.logs.book_sub_source', {source: logsSource}, 'Showing the latest captured terminal log for this book: {source}')
+            : t('detail.logs.book_sub', 'Showing the latest captured terminal log for this book.'))
+        : t('detail.logs.run_sub', 'Showing the merged run log across the whole batch.');
 
       if (ui.evaluation.source === 'run' && ui.evaluation.runId === runId && selectedBook) {
         ui.evaluation.book = String(selectedBook.book_id || '').trim();
@@ -4085,6 +6327,15 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       byId('detail_queue_delay').textContent = '-';
       byId('detail_started').textContent = '-';
       byId('detail_finished').textContent = '-';
+      byId('detail_artifact_story_root').textContent = '-';
+      byId('detail_artifact_book').textContent = '-';
+      byId('detail_artifact_stage').textContent = '-';
+      byId('detail_artifact_eval').textContent = '-';
+      byId('detail_artifact_label_stage').textContent = t('detail.artifact.stage', 'Last Stage');
+      byId('detail_timeline_title').textContent = t('detail.timeline.title', 'Timeline and Alerts');
+      byId('detail_timeline_sub').textContent = t('detail.timeline.sub', 'Run-level events and alerts for the whole batch.');
+      byId('detail_logs_title').textContent = t('detail.logs.title', 'Run Logs');
+      byId('detail_logs_sub').textContent = t('detail.logs.sub', 'Select a book to inspect its captured terminal log.');
       byId('detail_json').textContent = '{}';
       byId('detail_events').innerHTML = '<div class="event-item">' + escapeHtml(t('msg.no_events', 'No events.')) + '</div>';
       byId('detail_alerts').innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_related_alerts', 'No related alerts.')) + '</div>';
@@ -4133,7 +6384,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
     }
 
     async function fetchCapacity() {
-      const data = await apiGet('/api/capacity?window=' + String("" + 40));
+      const data = await apiGet('/api/capacity?window=40');
       renderCapacity(data);
       return data;
     }
@@ -4175,8 +6426,6 @@ const STORE_KEY = 'genai.dashboard.form.v4';
 
         if (data.started) {
           setMessage(tf('msg.run_started', {id: String(data.run_id || '')}, 'Run started: {id}'), 'ok');
-          const opsLogs = byId('log_output');
-          if (opsLogs) opsLogs.textContent = '';
           const overviewLogs = byId('overview_log_output');
           if (overviewLogs) overviewLogs.textContent = '';
           ui.activeLogRunId = data.run_id || null;
@@ -4258,8 +6507,6 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ui.activeLogRunId = null;
         ui.logCursor = 0;
 
-        const opsLogs = byId('log_output');
-        if (opsLogs) opsLogs.textContent = '';
         const overviewLogOutput = byId('overview_log_output');
         if (overviewLogOutput) {
           overviewLogOutput.textContent = t('msg.no_live_logs', 'No active run logs yet.');
@@ -4342,18 +6589,20 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ui.refreshTick += 1;
         const status = await fetchStatus();
         const logsPromise = fetchLogs();
-        const queuePromise = fetchQueue();
-        const alertsPromise = fetchAlerts();
-        const capacityPromise = fetchCapacity();
+        const queuePromise = runCapabilityTask('queue_api', fetchQueue, null);
+        const alertsPromise = runCapabilityTask('alerts_api', fetchAlerts, null);
+        const capacityPromise = runCapabilityTask('capacity_api', fetchCapacity, null);
         const historyPromise = fetchHistory();
-        const imagesPromise = (forceAll || ui.refreshTick % 3 === 0 || ui.activeTab === 'modules') ? fetchImages() : Promise.resolve(null);
-        const configsPromise = (forceAll || ui.refreshTick % 3 === 0) ? fetchConfigVersions() : Promise.resolve(null);
-        const modulesPromise = (forceAll || ui.refreshTick % 2 === 0 || ui.activeTab === 'modules') ? fetchModuleJobs() : Promise.resolve(null);
-        const galleryPromise = (forceAll || ui.activeTab === 'gallery') ? fetchGallery(true) : Promise.resolve(null);
-        const systemPromise = (forceAll || (ui.activeTab === 'gallery' && ui.refreshTick % 3 === 0)) ? pollSystemStatus(true) : Promise.resolve(null);
+        const imagesPromise = ui.activeTab === 'modules' ? fetchImages() : Promise.resolve(null);
+        const configsPromise = ui.activeTab === 'ops'
+          ? runCapabilityTask('configs_api', fetchConfigVersions, null)
+          : Promise.resolve(null);
+        const modulesPromise = ui.activeTab === 'modules' ? fetchModuleJobs() : Promise.resolve(null);
+        const galleryPromise = ui.activeTab === 'gallery' ? fetchGallery(true) : Promise.resolve(null);
+        const systemPromise = pollSystemStatus(true);
         const evaluationPromise = ui.activeTab === 'evaluation' ? fetchEvaluation(false) : Promise.resolve(null);
 
-        const results = await Promise.all([
+        const results = await Promise.allSettled([
           logsPromise,
           queuePromise,
           alertsPromise,
@@ -4367,9 +6616,25 @@ const STORE_KEY = 'genai.dashboard.form.v4';
           evaluationPromise,
         ]);
 
-        const capacityData = results[3] || {};
+        const queueData = results[1] && results[1].status === 'fulfilled' ? (results[1].value || null) : null;
+        const alertsData = results[2] && results[2].status === 'fulfilled' ? (results[2].value || null) : null;
+        const capacityData = results[3] && results[3].status === 'fulfilled' ? (results[3].value || null) : null;
+        const configsData = results[6] && results[6].status === 'fulfilled' ? (results[6].value || null) : null;
+        renderQueue(queueData);
+        renderAlerts(alertsData && alertsData.items ? alertsData.items : alertsData);
+        renderCapacity(capacityData);
+        if (ui.activeTab === 'ops') {
+          renderConfigVersions(configsData && configsData.items ? configsData.items : configsData);
+        }
         updateHeaderKpis(status, capacityData);
-        setBackgroundMessage('', '');
+        const refreshErrors = results
+          .filter(function (item) { return item && item.status === 'rejected'; })
+          .map(function (item) { return String((item.reason && item.reason.message) || item.reason || 'refresh error'); })
+          .filter(function (message) { return !isMissingEndpointError(message); });
+        const compatibilityMessage = composeCompatibilityMessage();
+        const backgroundText = refreshErrors.length ? refreshErrors[0] : compatibilityMessage;
+        const backgroundTone = refreshErrors.length || compatibilityMessage ? 'warn' : '';
+        setBackgroundMessage(backgroundText, backgroundTone);
 
         if (ui.activeTab === 'detail') {
           await fetchRunDetail();
@@ -4404,8 +6669,12 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         if (panels[i].name === tabName) panel.classList.add('active');
         else panel.classList.remove('active');
       }
+      renderPageHeader();
       if (tabName === 'detail') {
         fetchRunDetail();
+      }
+      if (tabName === 'overview' || tabName === 'ops') {
+        refreshOverview(true);
       }
       if (tabName === 'modules') {
         fetchModuleJobs();
@@ -4439,6 +6708,12 @@ const STORE_KEY = 'genai.dashboard.form.v4';
     function bindEvents() {
       byId('btn_start').addEventListener('click', startRun);
       byId('btn_stop').addEventListener('click', stopRun);
+      byId('translation_enabled').addEventListener('change', syncStrictOptionAvailability);
+      byId('voice_enabled').addEventListener('change', syncStrictOptionAvailability);
+      byId('model_plan').addEventListener('change', function () {
+        renderModelPlanStatus(ui.lastSystemStatus);
+        renderDashboardHealth(ui.lastSystemStatus, ui.latestStatus);
+      });
       byId('btn_save_template').addEventListener('click', saveTemplate);
       byId('btn_save_local').addEventListener('click', saveLocalForm);
       byId('btn_load_local').addEventListener('click', function () {
@@ -4456,17 +6731,6 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       const clearHistoryBtn = byId('btn_clear_history');
       if (clearHistoryBtn) {
         clearHistoryBtn.addEventListener('click', clearRunHistory);
-      }
-      const clearLogsBtn = byId('btn_clear_logs');
-      if (clearLogsBtn) {
-        clearLogsBtn.addEventListener('click', function () {
-          const opsLogs = byId('log_output');
-          if (opsLogs) opsLogs.textContent = '';
-          const overviewLogOutput = byId('overview_log_output');
-          if (overviewLogOutput) {
-            overviewLogOutput.textContent = t('msg.no_live_logs', 'No active run logs yet.');
-          }
-        });
       }
       byId('btn_detail_refresh').addEventListener('click', function () {
         fetchRunDetail();
@@ -4530,9 +6794,20 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       if (evalBranch) {
         evalBranch.addEventListener('change', function () {
           ui.evaluation.branch = String(evalBranch.value || 'canonical').trim() || 'canonical';
+          if (ui.evaluation.branch.toLowerCase() !== 'canonical') {
+            ui.evaluation.showAdvanced = true;
+          }
+          syncEvaluationAdvancedControls();
           if (ui.activeTab === 'evaluation') {
             fetchEvaluation(true);
           }
+        });
+      }
+      const evalAdvancedBtn = byId('btn_eval_advanced');
+      if (evalAdvancedBtn) {
+        evalAdvancedBtn.addEventListener('click', function () {
+          ui.evaluation.showAdvanced = !ui.evaluation.showAdvanced;
+          syncEvaluationAdvancedControls();
         });
       }
 
@@ -4559,6 +6834,15 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       byId('btn_module_story_run').addEventListener('click', runStoryModuleJob);
       byId('btn_module_translation_run').addEventListener('click', runTranslationModuleJob);
       byId('btn_module_voice_run').addEventListener('click', runVoiceModuleJob);
+      byId('btn_module_trans_target_recommended').addEventListener('click', function () {
+        setTranslationTargetSelection('recommended');
+      });
+      byId('btn_module_trans_target_all').addEventListener('click', function () {
+        setTranslationTargetSelection('all');
+      });
+      byId('btn_module_trans_target_none').addEventListener('click', function () {
+        setTranslationTargetSelection('none');
+      });
       byId('btn_module_trans_story_refresh').addEventListener('click', function () {
         fetchTranslatableStories();
       });
@@ -4573,6 +6857,36 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       byId('btn_general_voice_run').addEventListener('click', runGeneralVoiceTool);
       byId('module_story_input_mode').addEventListener('change', syncModuleStoryInputMode);
       byId('story_input_mode').addEventListener('change', syncStoryInputMode);
+      byId('btn_speaker_mode_preset').addEventListener('click', function () {
+        setSpeakerSourceMode('preset');
+        syncSpeakerSelection();
+      });
+      byId('btn_speaker_mode_custom').addEventListener('click', function () {
+        setSpeakerSourceMode('custom');
+        refreshOverviewSpeakerLibraries({
+          dir: (byId('speaker_dir') && byId('speaker_dir').value) ? byId('speaker_dir').value : '',
+          wav: (byId('speaker_wav') && byId('speaker_wav').value) ? byId('speaker_wav').value : '',
+        });
+      });
+      byId('speaker_custom_wav_select').addEventListener('change', syncSpeakerSelection);
+      byId('speaker_dir').addEventListener('change', function () {
+        refreshOverviewSpeakerLibraries({
+          dir: (byId('speaker_dir') && byId('speaker_dir').value) ? byId('speaker_dir').value : '',
+          wav: '',
+        });
+      });
+      byId('btn_refresh_preset_speakers').addEventListener('click', function () {
+        refreshOverviewSpeakerLibraries({
+          dir: (byId('speaker_dir') && byId('speaker_dir').value) ? byId('speaker_dir').value : '',
+          wav: (byId('speaker_wav') && byId('speaker_wav').value) ? byId('speaker_wav').value : '',
+        });
+      });
+      byId('btn_refresh_custom_speakers').addEventListener('click', function () {
+        refreshOverviewSpeakerLibraries({
+          dir: (byId('speaker_dir') && byId('speaker_dir').value) ? byId('speaker_dir').value : '',
+          wav: (byId('speaker_wav') && byId('speaker_wav').value) ? byId('speaker_wav').value : '',
+        });
+      });
       byId('btn_record_start').addEventListener('click', startRecording);
       byId('btn_record_stop').addEventListener('click', stopRecording);
       byId('btn_record_save').addEventListener('click', saveRecordingAsSpeaker);
@@ -4757,12 +7071,13 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         const cont = byId('gallery_container');
         if (!cont) return null;
 
-        try {
-          const data = await apiGet('/api/gallery');
-          const images = Array.isArray(data && data.images) ? data.images : [];
-          if (!images.length) {
-            cont.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_images_found', 'No images found.')) + '</div>';
-            return data;
+      try {
+        const data = await apiGet('/api/gallery');
+        renderGallerySnapshot(data);
+        const images = Array.isArray(data && data.images) ? data.images : [];
+        if (!images.length) {
+          cont.innerHTML = renderGalleryEmptyState();
+          return data;
           }
 
           const cards = [];
@@ -4797,25 +7112,19 @@ const STORE_KEY = 'genai.dashboard.form.v4';
           cont.innerHTML = cards.join('');
           return data;
         } catch (_err) {
-          cont.innerHTML = '<div class="list-item">' + escapeHtml(t('msg.no_images_found', 'No images found.')) + '</div>';
+          cont.innerHTML = renderGalleryEmptyState();
+          renderGallerySnapshot({images: []});
           return null;
         }
       }
 
       async function pollSystemStatus(force) {
-        if (!force && ui.activeTab !== 'gallery') return null;
         try {
           const data = await apiGet('/api/system');
-          const st = byId('sys-status');
-          if (!st) return data;
-          const ram = data && data.ram ? data.ram : {percent: 0};
-          const gpus = Array.isArray(data && data.gpus) ? data.gpus : [];
-          const gpuText = gpus.length
-            ? gpus.map(function (g, i) { return 'GPU' + i + ': ' + String(g.gpu_util || 0) + '%'; }).join(' | ')
-            : t('gallery.system.gpu_na', 'GPU: n/a');
-          st.textContent = tf('gallery.system.status', {ram: String(ram.percent || 0), gpu: gpuText}, 'RAM: {ram}% | {gpu}');
-          if (Number(ram.percent || 0) > 85) st.style.color = 'var(--danger)';
-          else st.style.color = 'var(--accent)';
+          ui.lastSystemStatus = data;
+          syncCapabilitiesFromPayload(data);
+          renderModelPlanStatus(data);
+          renderSystemTelemetry(data);
           return data;
         } catch (_err) {
           return null;
@@ -4928,6 +7237,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       ui.language = getPreferredLanguage();
       applyLanguage();
       loadLocalForm();
+      setSpeakerSourceMode(currentSpeakerSourceMode());
       syncStoryInputMode();
       syncModuleStoryInputMode();
       fetchTemplates();
@@ -4936,9 +7246,14 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       loadHiddenModuleJobs();
       bindEvents();
       syncEvaluationSourceControls();
+      syncEvaluationAdvancedControls();
       updateEvaluationRunSelect();
       syncTranslationSourceLangByFolder();
       fetchTranslatableStories();
+      refreshOverviewSpeakerLibraries({
+        dir: (byId('speaker_dir') && byId('speaker_dir').value) ? byId('speaker_dir').value : '',
+        wav: (byId('speaker_wav') && byId('speaker_wav').value) ? byId('speaker_wav').value : '',
+      });
       restartTimer();
       refreshOverview(true);
       if (ui.activeTab === 'gallery') {
