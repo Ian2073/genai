@@ -19,10 +19,15 @@
 - **自動融合結局**：不同選擇的分支可自然匯聚到共同的溫馨結局
 
 ### 🎨 多模態資產生成
-- **文本**：Qwen2.5-14B-Instruct-GPTQ-Int4（預設主模型） + Qwen3-8B（備援） - 大綱、正文、旁白、對話
-- **圖像**：Stable Diffusion XL - 封面、角色肖像、場景插圖、自動去背
+- **文本**：Qwen2.5-14B-Instruct-GPTQ-Int4 - 大綱、正文、旁白、對話
+- **圖像**：FLUX.1-schnell（預設 FP8） - 封面、角色、Unity 可組裝素材、場景頁預覽
 - **語音**：XTTS-v2 - 多語言自然語音合成（支援自訂說話人）
 - **翻譯**：NLLB-200-3.3B - 200 種語言神經機器翻譯
+
+### 🧪 正式評估主線
+- **文字評估**：Qwen2.5-14B-Instruct-GPTQ-Int4 - 六維度理解、推理與建議生成
+- **評估輔助模型**：bge-large-zh-v1.5、roberta-base-go_emotions、gliner_large-v2.1
+- **文圖一致性**：預設以 heuristic 檢查為主；若本地存在 Gemma 4 checkpoint，才額外啟用多模態 reviewer
 
 ### 🔬 企業級可觀測性
 - **記憶體監控**：即時追蹤 GPU/CPU/RAM 使用量、碎片化率
@@ -39,11 +44,16 @@
 
 | 任務 | 主要模型 | 預設路徑 | 備註 |
 |------|---------|---------|------|
-| 文本生成 | Qwen2.5-14B-Instruct-GPTQ-Int4 | `models/Qwen2.5-14B-Instruct-GPTQ-Int4` | 主線預設 |
-| 文本備援 | Qwen3-8B | `models/Qwen3-8B` | GPTQ 不可用時備援 |
-| 圖像生成 | FLUX.1-schnell | `models/FLUX.1-schnell` | 插圖與封面 |
+| 文本生成 | Qwen2.5-14B-Instruct-GPTQ-Int4 | `models/Qwen2.5-14B-Instruct-GPTQ-Int4` | 故事生成主線 |
+| 圖像生成 | FLUX.1-schnell | `models/FLUX.1-schnell` | `diffusers_flux`，預設 FP8 |
 | 翻譯 | NLLB-200-3.3B | `models/nllb-200-3.3B` | 多語翻譯 |
 | 語音 | XTTS-v2 | `models/XTTS-v2` | 多語語音合成 |
+| 評估 LLM | Qwen2.5-14B-Instruct-GPTQ-Int4 | `models/Qwen2.5-14B-Instruct-GPTQ-Int4` | 六維度文字評估 |
+| 評估語義 | bge-large-zh-v1.5 | `models/bge-large-zh-v1.5` | 相似度 / 語義比對 |
+| 評估情感 | roberta-base-go_emotions | `models/roberta-base-go_emotions` | 情感影響力 |
+| 評估實體 | gliner_large-v2.1 | `models/gliner_large-v2.1` | 角色 / 地點抽取 |
+
+> 共指解析由 `fastcoref` backend / `coref-service` 提供；文圖一致性預設不要求額外固定 checkpoint。
 
 ---
 
@@ -214,27 +224,30 @@ pip install -r requirements.txt
 
 #### 4️⃣ 下載模型
 
-系統需要以下模型 (總計約 80GB)：
+系統主線需要以下模型（總計約 51GB，不含 XTTS 說話人 samples）：
 
 ```plaintext
 models/
 ├── Qwen2.5-14B-Instruct-GPTQ-Int4/  # ~9GB  | 預設文本生成
-├── Qwen3-8B/                        # ~16GB | 備援 / 非 GPTQ 相容路徑
-├── nllb-200-3.3B/                   # ~13GB | 翻譯
 ├── FLUX.1-schnell/                  # ~23GB | 預設圖像生成
-├── stable-diffusion-xl-base-1.0/    # ~7GB  | SDXL 備援圖像生成
-├── stable-diffusion-xl-refiner-1.0/ # ~6GB  | SDXL 精煉器（僅 SDXL 使用）
-└── XTTS-v2/                         # ~2GB  | 語音合成
-    └── samples/                     # 說話人樣本 (自備)
+├── nllb-200-3.3B/                   # ~13GB | 翻譯
+├── XTTS-v2/                         # ~2GB  | 語音合成
+│   └── samples/                     # 說話人樣本 (自備)
+├── bge-large-zh-v1.5/               # ~1.2GB | 評估語義比對
+├── roberta-base-go_emotions/        # ~0.9GB | 評估情感分析
+└── gliner_large-v2.1/               # ~1.7GB | 評估實體抽取
 ```
 
 **模型來源**:
 - Qwen2.5-14B-Instruct-GPTQ-Int4: https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4
-- Qwen3-8B: https://huggingface.co/Qwen/Qwen3-8B
-- NLLB: https://huggingface.co/facebook/nllb-200-3.3B
 - FLUX.1-schnell: https://huggingface.co/black-forest-labs/FLUX.1-schnell
-- SDXL: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0
+- NLLB: https://huggingface.co/facebook/nllb-200-3.3B
 - XTTS: https://huggingface.co/coqui/XTTS-v2
+- bge-large-zh-v1.5: https://huggingface.co/BAAI/bge-large-zh-v1.5
+- roberta-base-go_emotions: https://huggingface.co/SamLowe/roberta-base-go_emotions
+- gliner_large-v2.1: https://huggingface.co/urchade/gliner_large-v2.1
+
+> 評估端的共指解析使用 `fastcoref` backend；文圖一致性主線預設以 heuristic 檢查為主，因此這兩者不需要額外手動下載固定 `models/` checkpoint。
 
 #### 5️⃣ 驗證安裝
 
@@ -430,6 +443,8 @@ python scripts/check_root_layout.py --workspace-root . --strict
 評測模組已納入主線路徑 `evaluation/`，並由主線入口統一調度：
 
 - `Build_GenAI.bat` 會先安裝生成主線，再把 `evaluation/requirements.txt` 當 extras 併入同一 `genai_env`。預設會先套用 root `requirements.txt` constraint（生成版本優先）；若與 GPU profile 的 torch 組合衝突，會自動重試為不套 constraints。
+- 主線評估模型目前為 `Qwen2.5-14B-Instruct-GPTQ-Int4`、`bge-large-zh-v1.5`、`roberta-base-go_emotions`、`gliner_large-v2.1`。
+- `entity_consistency` 另外搭配 `fastcoref` backend；`multimodal_alignment` 預設以 heuristic 檢查為主，若本地存在 Gemma 4 checkpoint 才會額外加權 reviewer。
 
 ```bash
 Build_GenAI.bat
@@ -516,18 +531,15 @@ python image.py
 # 指定故事
 python image.py --story-root "output/Educational/6-8/My_Story"
 
-# 跳過精煉 (2倍速度)
-python image.py --skip-refiner
-
 # 低顯存模式
 python image.py --low-vram
 ```
 
 **技術細節**:
-- Base Model: 8 steps @ 1024x1024
-- Refiner: 4 steps (可選)
-- DPM++ SDE Karras scheduler
-- VAE 分塊處理 (記憶體優化)
+- FLUX.1-schnell: 4 steps @ 1024x1024
+- Guidance: 0.0
+- 預設量化: FP8 transformer + BF16 runtime
+- 單階段生成（不使用 refiner）
 
 #### 🌍 多語言翻譯
 
@@ -679,13 +691,13 @@ python chief.py --low-vram --story-quantization 4bit
 
 # 個別模組
 python story.py  # 自動啟用 4-bit 量化
-python image.py --low-vram --skip-refiner
+python image.py --low-vram
 python trans.py --quantize
 ```
 
 **優化策略**:
 - LLM: 4-bit 量化 + CPU Offload
-- SDXL: 跳過 Refiner + VAE 分塊
+- FLUX.1-schnell: FP8 量化 + 單階段生成
 - NLLB: 8-bit 量化
 - 激進式 CUDA 快取清理
 
@@ -704,8 +716,9 @@ DEFAULT_CHIEF_OPTIONS = ChiefOptions(
     # === 圖像生成 ===
     photo_steps=4,                # FLUX.1-schnell 建議 1-4 步
     photo_guidance=0.0,           # FLUX.1-schnell 建議 0 guidance
-    photo_refiner_steps=4,        # 精煉步數
-    photo_skip_refiner=True,      # FLUX 為單階段生成，不使用 refiner
+    photo_quantization="fp8",     # 預設量化模式
+    photo_refiner_steps=4,        # 相容欄位；FLUX 主線不使用
+    photo_skip_refiner=True,      # FLUX 主線固定不使用 refiner
     
     # === 翻譯 ===
     translation_beam_size=5,      # Beam Search 寬度
@@ -887,10 +900,8 @@ docker compose run --rm genai --count 1
 
 ### 模型授權
 
-- **Qwen3-8B**: Apache 2.0 (商用友善)
-- **NLLB**: CC-BY-NC 4.0 (非商用)
-- **SDXL**: CreativeML Open RAIL++-M (限制生成內容)
-- **XTTS**: Coqui Public Model License (研究/個人使用)
+- 主線模型目前為 `Qwen2.5-14B-Instruct-GPTQ-Int4`、`FLUX.1-schnell`、`NLLB-200-3.3B`、`XTTS-v2`、`bge-large-zh-v1.5`、`roberta-base-go_emotions`、`gliner_large-v2.1`。
+- 各模型授權條款不同，商用前請逐一確認 Hugging Face / 官方模型卡與使用限制。
 
 **商業使用須知**: 部分模型有非商用限制，商用前請檢查授權條款。
 
