@@ -38,6 +38,10 @@ KEY_PACKAGES = [
     "diffusers",
     "TTS",
     "sentencepiece",
+    "fastapi",
+    "fastcoref",
+    "pydantic",
+    "ultralytics",
 ]
 
 
@@ -245,65 +249,20 @@ def apply_safe_fixes(workspace_root: Path, *, install_missing_packages: bool) ->
     return applied
 
 
-def check_qwen3_transformers_compat(workspace_root: Path) -> Optional[CheckResult]:
-    model_dir = workspace_root / "models" / "Qwen3-8B"
-    config_path = model_dir / "config.json"
-    if not config_path.exists():
-        return None
-
-    try:
-        config_data = json.loads(config_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        return CheckResult(
-            "WARN",
-            "Qwen3 runtime compatibility",
-            f"Could not read models/Qwen3-8B/config.json: {exc}",
-        )
-
-    if config_data.get("model_type") != "qwen3":
-        return None
-
-    transformers_ver = _pkg_version("transformers")
-    if _parse_version_tuple(transformers_ver) >= (4, 51, 0):
-        return CheckResult(
-            "PASS",
-            "Qwen3 runtime compatibility",
-            f"transformers=={transformers_ver} provides native Qwen3 support.",
-        )
-
-    attention_bias = config_data.get("attention_bias")
-    detail = (
-        f"models/Qwen3-8B is a native Qwen3 checkpoint, but installed transformers=={transformers_ver or 'missing'} "
-        "is older than 4.51 and will use a legacy Qwen2 fallback path. "
-        "This can initialize unsupported bias weights and degrade generation quality."
-    )
-    if attention_bias is False:
-        detail += " The checkpoint explicitly sets attention_bias=false, which old Qwen2 runtimes do not model correctly."
-    detail += " Recommended: upgrade transformers to 4.51+ for native Qwen3 support, or use a Qwen2.5-compatible fallback model."
-    return CheckResult("WARN", "Qwen3 runtime compatibility", detail)
-
-
 def check_model_dirs(workspace_root: Path) -> CheckResult:
     preferred_flux_schnell = workspace_root / "models" / "FLUX.1-schnell"
-    preferred_flux_dev = workspace_root / "models" / "FLUX.1-dev"
-    sdxl_image_model = workspace_root / "models" / "stable-diffusion-xl-base-1.0"
-    legacy_image_model = workspace_root / "models" / "dreamshaperXL_lightningDPMSDE.safetensors"
-    base_model_ok = any(
-        path.exists()
-        for path in (preferred_flux_schnell, preferred_flux_dev, sdxl_image_model, legacy_image_model)
-    )
     preferred_text_model = workspace_root / "models" / "Qwen2.5-14B-Instruct-GPTQ-Int4"
-    fallback_text_model = workspace_root / "models" / "Qwen3-8B"
+    cpu_text_model = workspace_root / "models" / "Qwen3-8B"
     required_dirs = [
         workspace_root / "models" / "nllb-200-3.3B",
         workspace_root / "models" / "XTTS-v2",
     ]
     missing = [str(p.relative_to(workspace_root)) for p in required_dirs if not p.exists()]
-    if not base_model_ok:
-        missing.append("models/FLUX.1-schnell or models/FLUX.1-dev or models/stable-diffusion-xl-base-1.0")
-    if not preferred_text_model.exists() and not fallback_text_model.exists():
+    if not preferred_flux_schnell.exists():
+        missing.append("models/FLUX.1-schnell")
+    if not preferred_text_model.exists() and not cpu_text_model.exists():
         missing.append(
-            "models/Qwen2.5-14B-Instruct-GPTQ-Int4 or models/Qwen3-8B"
+            "models/Qwen2.5-14B-Instruct-GPTQ-Int4 or models/Qwen3-8B (cpu-only)"
         )
     if missing:
         return CheckResult("WARN", "Model directories", "Missing: " + ", ".join(missing))
@@ -311,16 +270,10 @@ def check_model_dirs(workspace_root: Path) -> CheckResult:
     detail = "All required model directories exist."
     if preferred_flux_schnell.exists():
         detail += " Preferred image model found: models/FLUX.1-schnell."
-    elif preferred_flux_dev.exists():
-        detail += " Preferred image model found: models/FLUX.1-dev."
-    elif sdxl_image_model.exists():
-        detail += " FLUX.1 checkpoint missing, but SDXL base exists as an image fallback."
-    if legacy_image_model.exists() and not sdxl_image_model.exists():
-        detail += " Legacy DreamShaper Lightning is present, but it is no longer the recommended default image checkpoint."
     if preferred_text_model.exists():
         detail += " Preferred text model found: models/Qwen2.5-14B-Instruct-GPTQ-Int4."
-    elif fallback_text_model.exists():
-        detail += " Preferred GPTQ model missing, but fallback text model exists: models/Qwen3-8B."
+    elif cpu_text_model.exists():
+        detail += " GPU primary text model missing, but CPU-only text model exists: models/Qwen3-8B."
     return CheckResult("PASS", "Model directories", detail)
 
 
@@ -452,24 +405,6 @@ def check_gptq_runtime(workspace_root: Path, expect_cuda: bool, gpu_names: List[
         else:
             results.append(CheckResult("PASS", "GPTQ build toolchain", "cl.exe and nvcc found."))
 
-    fallback_model = workspace_root / "models" / "Qwen3-8B"
-    if fallback_model.exists():
-        results.append(
-            CheckResult(
-                "PASS",
-                "Non-GPTQ fallback model",
-                "models/Qwen3-8B exists (recommended fallback for non-GPTQ hardware).",
-            )
-        )
-    else:
-        results.append(
-            CheckResult(
-                "WARN",
-                "Non-GPTQ fallback model",
-                "models/Qwen3-8B not found. Recommend adding a non-GPTQ model for portability.",
-            )
-        )
-
     return results
 
 
@@ -490,9 +425,6 @@ def collect_results(workspace_root: Path, expect_cuda_mode: str) -> List[CheckRe
 
     results.extend(check_torch(expect_cuda=expect_cuda, gpu_names=gpu_names))
     results.extend(check_key_packages())
-    qwen3_compat = check_qwen3_transformers_compat(workspace_root)
-    if qwen3_compat is not None:
-        results.append(qwen3_compat)
     results.extend(check_gptq_runtime(workspace_root=workspace_root, expect_cuda=expect_cuda, gpu_names=gpu_names))
     results.append(check_model_dirs(workspace_root))
     plan_result = check_recommended_model_plan(workspace_root)

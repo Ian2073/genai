@@ -136,8 +136,8 @@ Start_GenAI.bat --eval-only --input output --post-process none
 
 本地模式重點：
 - ✅ 單一環境：`genai_env`
-- ✅ 先安裝 root 生成主線 `requirements.txt`（生成優先）
-- ✅ 再安裝 evaluation `requirements.txt`（評測專屬 extras）
+- ✅ 單一 requirements：root `requirements.txt`
+- ✅ 生成與評測共用同一套依賴，不再維護子目錄獨立 requirements
 - ✅ 評測命令由 `Start_GenAI.bat --eval-only ...` 直接執行
 - ✅ 避免雙環境漂移，確保執行環境一致
 
@@ -510,7 +510,7 @@ python main.py --input output
 │   ├── score_policy.py  # 共識融合與跨維度硬約束策略
 │   └── __init__.py
 ├── aspects_sources.yaml # 文檔權重配置
-├── requirements.txt     # Python 依賴
+├── ../requirements.txt  # 共用 Python 依賴（repo root）
 ├── Dockerfile           # 主容器映像
 ├── Dockerfile.coref     # 共指服務映像
 ├── (由 root 入口統一管理)

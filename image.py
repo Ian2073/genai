@@ -58,7 +58,7 @@ class Config:
 	base_model_dir: Path = Path("models/FLUX.1-schnell")
 	refiner_model_dir: Path = Path("models/__disabled_refiner__")
 	device: str = "auto"
-	dtype: Any = getattr(torch, "bfloat16", torch.float16)
+	dtype: torch.dtype = getattr(torch, "bfloat16", torch.float16)
 	quantization_mode: Optional[str] = "fp8"
 	output_mode: str = "dual"
 	asset_granularity: str = "page_bundle"
@@ -291,34 +291,7 @@ def _load_visual_story_context(resources_dir: Path) -> Dict[str, Any]:
 
 
 def _classify_image_model(config: Config) -> str:
-	model_token = str(getattr(config, "base_model_dir", "") or "").strip().lower()
-	if not model_token:
-		return "unknown"
-	if "flux.1-schnell" in model_token or "flux-1-schnell" in model_token or "schnell" in model_token:
-		return "flux_schnell"
-	if "flux" in model_token:
-		return "flux"
-	if ("stable-diffusion-3.5" in model_token and "turbo" in model_token) or ("sd3" in model_token and "turbo" in model_token):
-		return "sd3_turbo"
-	if "stable-diffusion-3.5" in model_token or "sd3" in model_token:
-		return "sd3"
-	if "sana_1600m" in model_token or "sana-1600m" in model_token:
-		return "sana_1600m"
-	if "sana_600m" in model_token or "sana-600m" in model_token:
-		return "sana_600m"
-	if "sana" in model_token:
-		return "sana_600m"
-	if "pixart-sigma" in model_token or "pixart" in model_token:
-		return "pixart_sigma"
-	if "lightning" in model_token or "turbo" in model_token:
-		return "distilled_fast"
-	if "stable-diffusion-xl-base" in model_token:
-		return "sdxl_base"
-	if "dreamshaper" in model_token:
-		return "sdxl_finetune"
-	if "sdxl" in model_token:
-		return "sdxl_like"
-	return "generic"
+	return "flux_schnell"
 
 
 def _default_style_anchor(task_type: str) -> str:
@@ -355,31 +328,13 @@ def _prompt_word_budget(task_type: str, model_family: str) -> int:
 		if task_type == "character":
 			return 38
 		return 52
-	if model_family == "flux":
-		if task_type == "cover":
-			return 72
-		if task_type == "character":
-			return 60
-		return 80
-	if model_family == "sd3_turbo":
-		if task_type == "cover":
-			return 58
-		if task_type == "character":
-			return 52
-		return 64
-	if model_family in {"sd3", "pixart_sigma", "sana_1600m", "sana_600m"}:
-		if task_type == "cover":
-			return 78
-		if task_type == "character":
-			return 68
-		return 86
 	if task_type == "character":
 		return 72
 	return 84
 
 
 def _family_suffix(suffix: str, task_type: str, model_family: str) -> str:
-	if model_family in {"flux_schnell", "flux", "sd3_turbo", "sd3", "pixart_sigma", "sana_1600m", "sana_600m"}:
+	if model_family == "flux_schnell":
 		if task_type == "cover":
 			return "children's picture-book cover illustration, readable thumbnail, clear focal subject, no text lettering"
 		if task_type == "character":
@@ -389,18 +344,10 @@ def _family_suffix(suffix: str, task_type: str, model_family: str) -> str:
 
 
 def _resolve_negative_prompt(config: Config, task_type: str) -> str:
-	task_role = _task_prompt_role(task_type)
 	model_family = _classify_image_model(config)
-	base_negative = str(config.negative_prompt or "").strip()
-	if model_family in {"flux_schnell", "flux"}:
+	if model_family == "flux_schnell":
 		return ""
-	if model_family in {"sd3_turbo", "sd3", "pixart_sigma", "sana_1600m", "sana_600m"}:
-		if task_role == "cover":
-			return "text, letters, watermark, logo, signature, blurry, deformed hands, extra fingers, cropped"
-		if task_role == "character":
-			return "text, watermark, logo, bad anatomy, deformed hands, extra fingers, extra limbs, cropped, blurry"
-		return "text, watermark, logo, blurry, deformed face, bad hands, extra fingers, cropped, border"
-	return base_negative
+	return str(config.negative_prompt or "").strip()
 
 
 def _trim_prompt_words(text: str, max_words: int) -> str:
@@ -427,109 +374,17 @@ def _compose_descriptive_prompt(base_prompt: str, extras: Sequence[str]) -> str:
 
 
 def _resolve_task_render_settings(task: Dict[str, Any], config: Config) -> TaskRenderSettings:
-	task_type = str(task.get("type") or "").strip().lower()
-	task_role = _task_prompt_role(task_type)
 	model_family = _classify_image_model(config)
-	refiner_path = getattr(config, "refiner_model_dir", None)
-	refiner_available = bool(refiner_path and Path(refiner_path).exists())
 	steps = max(1, int(config.steps))
 	guidance = float(config.guidance)
 	skip_refiner = bool(config.skip_refiner)
 	refiner_steps = config.refiner_steps
 
-	if task_role == "cover":
-		if model_family == "flux_schnell":
-			steps = min(max(steps, 4), 4)
-			guidance = 0.0
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family in {"distilled_fast", "sd3_turbo"}:
-			steps = min(max(steps + 1, 4), 8)
-			guidance = min(max(guidance, 1.0), 2.2)
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family == "flux":
-			steps = max(steps, 28)
-			guidance = max(guidance, 3.5)
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family in {"sd3", "pixart_sigma", "sana_1600m", "sana_600m"}:
-			steps = max(steps + 4, 20)
-			guidance = max(
-				guidance,
-				4.0 if model_family == "sd3" else
-				4.5 if model_family in {"pixart_sigma", "sana_1600m"} else
-				4.0
-			)
-			skip_refiner = True
-			refiner_steps = None
-		else:
-			steps += 2 if model_family == "sdxl_base" else 1
-			guidance += 0.8 if model_family == "sdxl_base" else 0.5
-		if model_family == "sdxl_base" and refiner_available:
-			skip_refiner = False
-			refiner_steps = max(4, refiner_steps or 0)
-	elif task_role == "character":
-		if model_family == "flux_schnell":
-			steps = min(max(steps, 4), 4)
-			guidance = 0.0
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family == "sd3_turbo":
-			steps = min(max(steps, 4), 8)
-			guidance = min(max(guidance, 1.0), 2.0)
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family == "flux":
-			steps = max(steps, 24)
-			guidance = max(guidance, 3.5)
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family in {"sd3", "pixart_sigma", "sana_1600m", "sana_600m"}:
-			steps = max(steps, 20)
-			guidance = max(
-				guidance,
-				4.0 if model_family == "sd3" else
-				4.5 if model_family in {"pixart_sigma", "sana_1600m"} else
-				4.0
-			)
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family not in {"distilled_fast", "flux", "sd3", "pixart_sigma", "sana_1600m", "sana_600m"}:
-			steps += 2 if model_family == "sdxl_base" else 1
-			guidance += 0.6 if model_family == "sdxl_base" else 0.4
-	elif task_role == "page":
-		if model_family == "sdxl_base":
-			steps += 1
-			guidance += 0.4
-		elif model_family == "sdxl_finetune":
-			steps += 1
-			guidance += 0.3
-		elif model_family == "flux_schnell":
-			steps = min(max(steps, 4), 4)
-			guidance = 0.0
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family in {"distilled_fast", "sd3_turbo"}:
-			steps = min(max(steps, 4), 8)
-			guidance = min(max(guidance, 1.0), 2.2)
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family == "flux":
-			steps = max(steps, 28)
-			guidance = max(guidance, 3.5)
-			skip_refiner = True
-			refiner_steps = None
-		elif model_family in {"sd3", "pixart_sigma", "sana_1600m", "sana_600m"}:
-			steps = max(steps, 18)
-			guidance = max(
-				guidance,
-				4.0 if model_family == "sd3" else
-				4.5 if model_family in {"pixart_sigma", "sana_1600m"} else
-				4.0
-			)
-			skip_refiner = True
-			refiner_steps = None
+	if model_family == "flux_schnell":
+		steps = min(max(steps, 1), 4)
+		guidance = 0.0
+		skip_refiner = True
+		refiner_steps = None
 
 	return TaskRenderSettings(
 		steps=steps,
@@ -2117,5 +1972,4 @@ def main(config: RunConfig = DEFAULT_IMAGE_RUN) -> None:
 
 if __name__ == "__main__":
 	main()
-
 

@@ -9,7 +9,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'hero.title': 'Chief Control Plane',
         'hero.sub': 'Operate runs, inspect alerts, manage queue priority, and audit production history from one dashboard.',
         'page.overview.title': 'Generate',
-        'page.overview.sub': 'Compose story runs, monitor execution health, and control the main pipeline from one screen.',
+        'page.overview.sub': 'Compare KG-guided and user-controlled generation, then capture live evidence from one screen.',
         'page.ops.title': 'Operations',
         'page.ops.sub': 'Inspect queue pressure, alert activity, capacity, and saved config versions.',
         'page.detail.title': 'Run Detail',
@@ -56,7 +56,46 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'gallery.empty.copy': 'Generated covers and story cards will appear here after the first successful run.',
         'gallery.system.status_limited': 'CPU: n/a | RAM: {ram}% | {gpu}',
         'overview.composer.title': 'Run Composer',
-        'overview.composer.sub': 'Product mode supports queueing with priority and versioned run profiles.',
+        'overview.composer.sub': 'Configure the thesis demo from left to right: scope, KG or user control, pipeline strategy, and launch.',
+        'demo.storyline.title': 'Demo Storyline',
+        'demo.storyline.sub': 'Use this order for a concise thesis demo: baseline, controlled generation, modular rerun, then evaluation.',
+        'demo.storyline.focus.step1': 'Step 1',
+        'demo.storyline.focus.step2': 'Step 2',
+        'demo.storyline.focus.step3': 'Step 3',
+        'demo.storyline.focus.step4': 'Step 4',
+        'demo.storyline.hint': 'Recommended recording flow: preset run, custom rerun, one module-only regeneration, then evaluation summary.',
+        'demo.step1.title': 'KG baseline',
+        'demo.step1.copy': 'Stay in preset mode to show how age, category, theme, and subcategory are filled by KG defaults.',
+        'demo.step2.title': 'Controlled generation',
+        'demo.step2.copy': 'Switch to custom mode, add prompt and materials, then explain that user intent is normalized under KG constraints.',
+        'demo.step3.title': 'Module proof',
+        'demo.step3.copy': 'Use Text, Image, Translation, or Voice Studio to rerun only one layer instead of the whole pipeline.',
+        'demo.step4.title': 'Evaluation evidence',
+        'demo.step4.copy': 'Finish in Evaluation to discuss quality metrics, findings, and how changes affected the final output.',
+        'btn.demo_generate': 'Focus Generate',
+        'btn.demo_modules': 'Open Modules',
+        'btn.demo_evaluation': 'Open Evaluation',
+        'kg.summary.title': 'Generation Logic Snapshot',
+        'kg.summary.sub': 'Summarize how KG defaults, user control, runtime strategy, and saved artifacts will shape the current run.',
+        'kg.summary.label.mode': 'Input Mode',
+        'kg.summary.label.source': 'Control Source',
+        'kg.summary.label.scope': 'Story Scope',
+        'kg.summary.label.plan': 'Model Plan',
+        'kg.summary.mode_preset': 'Preset',
+        'kg.summary.mode_custom': 'Custom',
+        'kg.summary.source_preset': 'KG defaults',
+        'kg.summary.source_custom': 'KG + normalized user intent',
+        'kg.summary.scope': '{age} / {category}',
+        'kg.summary.hint': 'Keep the full graph as supporting evidence. In the main dashboard, show only the logic summary that directly affects the generated story.',
+        'kg.summary.point.preset': 'Preset mode exposes the KG prior directly. Highlight the selected age, category, theme, and subcategory as the baseline condition.',
+        'kg.summary.point.custom': 'Custom mode keeps KG safety and age appropriateness, but merges normalized prompt and materials intent into the final guidelines.',
+        'kg.summary.point.outputs': 'Enabled output chain: {outputs}. Use this to explain which stages are expected to appear in the final demo artifact.',
+        'kg.summary.point.evidence_preset': 'Evidence files to mention after generation: kg_profile.json, character_bible.json, world_style_lock.json, and story_meta.json.',
+        'kg.summary.point.evidence_custom': 'Evidence files to mention after generation: kg_guidelines.txt, normalized user intent, and the final story_meta.json.',
+        'kg.summary.point.scope_preset': 'Theme: {theme} | Subcategory: {subcategory} | Preset mode bypasses prompt conversion.',
+        'kg.summary.point.scope_custom': 'Theme: {theme} | Subcategory: {subcategory} | Prompts: {prompts} | Materials: {materials}',
+        'kg.summary.pill_preset': 'KG',
+        'kg.summary.pill_custom': 'KG + User',
         'overview.telemetry.title': 'Live Telemetry',
         'overview.resource.cpu': 'CPU',
         'overview.resource.ram': 'RAM',
@@ -229,6 +268,16 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'module.job_logs.title': 'Logs',
         'module.workbenches.title': 'Module Workbenches',
         'module.workbenches.sub': 'Run text, image, translation, and voice independently without executing the full pipeline.',
+        'module.demo.sub': 'Use this area to prove that the system supports local regeneration: change one layer, keep the rest of the pipeline intact.',
+        'btn.module_focus_story': 'Text proof',
+        'btn.module_focus_image': 'Image proof',
+        'btn.module_focus_eval': 'Open Evaluation',
+        'module.demo.story.title': '1. Freeze the story draft',
+        'module.demo.story.copy': 'Run Text Studio first to create the baseline story, then use the resulting story root as the anchor for later comparisons.',
+        'module.demo.image.title': '2. Regenerate one modality only',
+        'module.demo.image.copy': 'Move to Image, Translation, or Voice Studio and rerun only the weak layer to show controllability without recomputing everything.',
+        'module.demo.eval.title': '3. Close the loop with evidence',
+        'module.demo.eval.copy': 'After a module rerun, open Evaluation or Gallery to compare whether the edited layer actually improved the final artifact.',
         'module.tab.story': 'Text Studio',
         'module.tab.image': 'Image Studio',
         'module.tab.translation': 'Translation Studio',
@@ -635,7 +684,46 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'gallery.system.gpu_na': 'GPU：無資料',
         'gallery.system.status': 'CPU?{cpu}% | RAM?{ram}% | {gpu}',
         'overview.composer.title': '主流程生成設定',
-        'overview.composer.sub': '主介面用於一般故事生成流程，支援排隊、優先序與版本化設定。',
+        'overview.composer.sub': '依照論文 demo 的敘事順序設定：範圍、KG 或使用者控制、流程策略，最後啟動。',
+        'demo.storyline.title': 'Demo 腳本',
+        'demo.storyline.sub': '建議用這個順序完成論文展示：基準版、可控生成、模組重生成，最後進入評估。',
+        'demo.storyline.focus.step1': '步驟 1',
+        'demo.storyline.focus.step2': '步驟 2',
+        'demo.storyline.focus.step3': '步驟 3',
+        'demo.storyline.focus.step4': '步驟 4',
+        'demo.storyline.hint': '建議錄影流程：先跑 preset 基準版，再跑 custom 控制版，接著做一次模組單層重生成，最後用評估頁收尾。',
+        'demo.step1.title': 'KG 基準版',
+        'demo.step1.copy': '先停留在預設模式，說明年齡、類別、主題與子類別如何由 KG 預設驅動。',
+        'demo.step2.title': '可控生成',
+        'demo.step2.copy': '切換到自訂模式，加入 prompt 與 materials，說明使用者需求會在 KG 約束下被正規化後合併。',
+        'demo.step3.title': '模組化證明',
+        'demo.step3.copy': '進入 Text、Image、Translation 或 Voice Studio，只重跑單一層，證明不必整條 pipeline 重算。',
+        'demo.step4.title': '評估證據',
+        'demo.step4.copy': '最後切到 Evaluation，用品質分數與觀察結果說明修改如何影響最終輸出。',
+        'btn.demo_generate': '回到生成頁',
+        'btn.demo_modules': '打開模組頁',
+        'btn.demo_evaluation': '打開評估頁',
+        'kg.summary.title': '生成邏輯摘要',
+        'kg.summary.sub': '用這張卡片快速說明：目前這次生成是如何同時受到 KG 預設、使用者控制、執行策略與輸出證據影響。',
+        'kg.summary.label.mode': '輸入模式',
+        'kg.summary.label.source': '控制來源',
+        'kg.summary.label.scope': '故事範圍',
+        'kg.summary.label.plan': '模型計畫',
+        'kg.summary.mode_preset': '預設',
+        'kg.summary.mode_custom': '自訂',
+        'kg.summary.source_preset': '僅 KG 預設',
+        'kg.summary.source_custom': 'KG + 正規化使用者意圖',
+        'kg.summary.scope': '{age} / {category}',
+        'kg.summary.hint': '完整圖譜建議保留在輔助畫面。主 dashboard 只顯示會直接影響故事生成的邏輯摘要即可。',
+        'kg.summary.point.preset': '預設模式最適合展示 KG 先驗。請強調目前選到的年齡、類別、主題與子類別就是基準條件。',
+        'kg.summary.point.custom': '自訂模式仍保留 KG 的安全性與年齡適配，但會把 prompt 與 materials 正規化後合併進最終 guidelines。',
+        'kg.summary.point.outputs': '目前啟用的輸出鏈：{outputs}。可用來說明最後 demo 會展示哪些模組結果。',
+        'kg.summary.point.evidence_preset': '生成後可展示的證據檔案：kg_profile.json、character_bible.json、world_style_lock.json、story_meta.json。',
+        'kg.summary.point.evidence_custom': '生成後可展示的證據檔案：kg_guidelines.txt、正規化後的使用者意圖，以及最終 story_meta.json。',
+        'kg.summary.point.scope_preset': '主題：{theme} | 子類別：{subcategory} | 預設模式不會經過 prompt 轉換層。',
+        'kg.summary.point.scope_custom': '主題：{theme} | 子類別：{subcategory} | Prompt 數：{prompts} | 素材數：{materials}',
+        'kg.summary.pill_preset': 'KG',
+        'kg.summary.pill_custom': 'KG + 使用者',
         'overview.telemetry.title': '即時執行監控',
         'overview.resource.cpu': 'CPU',
         'overview.resource.ram': 'RAM',
@@ -767,7 +855,17 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         'module.job_events.title': '事件',
         'module.job_logs.title': '日誌',
         'module.workbenches.title': '獨立模組工作台',
-        'module.workbenches.sub': '文字、圖像、翻譯、語音可分別獨立執行，不必跑完整主流程。',
+        'module.workbenches.sub': '在不執行整條主流程的情況下，獨立重跑文字、圖片、翻譯與語音模組。',
+        'module.demo.sub': '這一區用來證明系統支援局部重生成：只改一層，其他流程保持不變。',
+        'btn.module_focus_story': '文字證明',
+        'btn.module_focus_image': '圖片證明',
+        'btn.module_focus_eval': '打開評估頁',
+        'module.demo.story.title': '1. 先固定故事草稿',
+        'module.demo.story.copy': '先用 Text Studio 生成基準故事，再把得到的 story root 當作後續比較的錨點。',
+        'module.demo.image.title': '2. 只重生單一模態',
+        'module.demo.image.copy': '切到 Image、Translation 或 Voice Studio，只重跑較弱的那一層，展示可控性與效率。',
+        'module.demo.eval.title': '3. 用證據收尾',
+        'module.demo.eval.copy': '模組重跑後，切到 Evaluation 或 Gallery，比較局部修改是否真的改善最終成品。',
         'module.tab.story': '文字工作台',
         'module.tab.image': '圖像工作台',
         'module.tab.translation': '翻譯工作台',
@@ -1251,7 +1349,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
 
     Object.assign(I18N['zh-TW'], {
       'page.overview.title': '故事生成',
-      'page.overview.sub': '在同一個頁面完成主流程設定、即時監控與執行控制。',
+      'page.overview.sub': '在同一個頁面比較 KG 引導與使用者控制生成，並同步蒐集 demo 證據。',
       'page.ops.title': '營運中心',
       'page.ops.sub': '集中查看佇列、警示、容量與設定版本，適合排程與營運管理。',
       'page.detail.title': '執行明細',
@@ -1630,6 +1728,24 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['gallery_empty_copy', 'gallery.empty.copy', 'Generated covers and story cards will appear here after the first successful run.'],
         ['overview_composer_title', 'overview.composer.title', 'Run Composer'],
         ['overview_composer_sub', 'overview.composer.sub', 'Product mode supports queueing with priority and versioned run profiles.'],
+        ['demo_storyline_title', 'demo.storyline.title', 'Demo Storyline'],
+        ['demo_storyline_sub', 'demo.storyline.sub', 'Use this order for a concise thesis demo: baseline, controlled generation, modular rerun, then evaluation.'],
+        ['demo_step_1_title', 'demo.step1.title', 'KG baseline'],
+        ['demo_step_1_copy', 'demo.step1.copy', 'Stay in preset mode to show how age, category, theme, and subcategory are filled by KG defaults.'],
+        ['demo_step_2_title', 'demo.step2.title', 'Controlled generation'],
+        ['demo_step_2_copy', 'demo.step2.copy', 'Switch to custom mode, add prompt and materials, then explain that user intent is normalized under KG constraints.'],
+        ['demo_step_3_title', 'demo.step3.title', 'Module proof'],
+        ['demo_step_3_copy', 'demo.step3.copy', 'Use Text, Image, Translation, or Voice Studio to rerun only one layer instead of the whole pipeline.'],
+        ['demo_step_4_title', 'demo.step4.title', 'Evaluation evidence'],
+        ['demo_step_4_copy', 'demo.step4.copy', 'Finish in Evaluation to discuss quality metrics, findings, and how changes affected the final output.'],
+        ['demo_storyline_hint', 'demo.storyline.hint', 'Recommended recording flow: preset run, custom rerun, one module-only regeneration, then evaluation summary.'],
+        ['kg_summary_title', 'kg.summary.title', 'Generation Logic Snapshot'],
+        ['kg_summary_sub', 'kg.summary.sub', 'Summarize how KG defaults, user control, runtime strategy, and saved artifacts will shape the current run.'],
+        ['kg_summary_label_mode', 'kg.summary.label.mode', 'Input Mode'],
+        ['kg_summary_label_source', 'kg.summary.label.source', 'Control Source'],
+        ['kg_summary_label_scope', 'kg.summary.label.scope', 'Story Scope'],
+        ['kg_summary_label_plan', 'kg.summary.label.plan', 'Model Plan'],
+        ['kg_summary_hint', 'kg.summary.hint', 'Keep the full graph as supporting evidence. In the main dashboard, show only the logic summary that directly affects the generated story.'],
         ['overview_telemetry_title', 'overview.telemetry.title', 'Live Telemetry'],
         ['quick_profile_label', 'overview.quick_profile.label', 'Workflow Preset'],
         ['overview_system_panel_title', 'overview.system.title', 'System Resources'],
@@ -1715,6 +1831,13 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['module_summary_label_pending', 'module.summary.pending', 'Pending Jobs'],
         ['module_summary_label_history', 'module.summary.history', 'Visible Records'],
         ['module_summary_label_selected', 'module.summary.selected', 'Selected Job'],
+        ['module_demo_sub', 'module.demo.sub', 'Use this area to prove that the system supports local regeneration: change one layer, keep the rest of the pipeline intact.'],
+        ['module_demo_story_title', 'module.demo.story.title', '1. Freeze the story draft'],
+        ['module_demo_story_copy', 'module.demo.story.copy', 'Run Text Studio first to create the baseline story, then use the resulting story root as the anchor for later comparisons.'],
+        ['module_demo_image_title', 'module.demo.image.title', '2. Regenerate one modality only'],
+        ['module_demo_image_copy', 'module.demo.image.copy', 'Move to Image, Translation, or Voice Studio and rerun only the weak layer to show controllability without recomputing everything.'],
+        ['module_demo_eval_title', 'module.demo.eval.title', '3. Close the loop with evidence'],
+        ['module_demo_eval_copy', 'module.demo.eval.copy', 'After a module rerun, open Evaluation or Gallery to compare whether the edited layer actually improved the final artifact.'],
         ['module_workbenches_title', 'module.workbenches.title', 'Module Workbenches'],
         ['module_workbenches_sub', 'module.workbenches.sub', 'Run text, image, translation, and voice independently without executing the full pipeline.'],
         ['module_tab_story', 'module.tab.story', 'Text Studio'],
@@ -1744,6 +1867,9 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['btn_refresh_now', 'btn.refresh_now', 'Refresh now'],
         ['btn_save_template', 'btn.save_template', 'Save Template'],
         ['btn_gallery_refresh', 'btn.gallery_refresh', 'Refresh Gallery'],
+        ['btn_demo_jump_generate', 'btn.demo_generate', 'Focus Generate'],
+        ['btn_demo_jump_modules', 'btn.demo_modules', 'Open Modules'],
+        ['btn_demo_jump_evaluation', 'btn.demo_evaluation', 'Open Evaluation'],
         ['btn_start', 'btn.start', 'Start / Queue'],
         ['btn_stop', 'btn.stop', 'Stop Active'],
         ['btn_save_local', 'btn.save_local', 'Save Local'],
@@ -1760,6 +1886,9 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         ['btn_module_clear_view', 'btn.clear_module_view', 'Clear View'],
         ['btn_module_show_all', 'btn.show_all', 'Show All'],
         ['btn_module_job_stop', 'btn.stop_selected', 'Stop Selected'],
+        ['btn_module_focus_story', 'btn.module_focus_story', 'Text proof'],
+        ['btn_module_focus_image', 'btn.module_focus_image', 'Image proof'],
+        ['btn_module_focus_eval', 'btn.module_focus_eval', 'Open Evaluation'],
         ['btn_images_refresh', 'btn.refresh_images', 'Refresh Images'],
         ['btn_module_trans_target_recommended', 'btn.recommended', 'Recommended'],
         ['btn_module_trans_target_all', 'btn.select_all', 'Select All'],
@@ -1965,6 +2094,8 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       }
       renderModelPlanStatus(ui.lastSystemStatus);
       renderSystemTelemetry(ui.lastSystemStatus);
+      renderKgSummary();
+      renderDemoStoryline();
       updateHeaderKpis(ui.latestStatus || {}, ui.lastCapacity || {});
       syncStrictOptionAvailability();
 
@@ -4678,6 +4809,112 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         byId('story_prompt').placeholder = t('placeholder.story_prompt_custom', 'Use concise requirements: mood, values, characters, conflict, ending style.');
         byId('story_materials').placeholder = t('placeholder.story_materials_custom', 'Paste notes, outlines, facts, classroom material, or family context.');
       }
+      renderKgSummary();
+      renderDemoStoryline();
+    }
+
+    function currentDemoStep() {
+      if (ui.activeTab === 'modules') return 3;
+      if (ui.activeTab === 'evaluation') return 4;
+      const mode = (byId('story_input_mode') && byId('story_input_mode').value) || 'preset';
+      return mode === 'custom' ? 2 : 1;
+    }
+
+    function renderDemoStoryline() {
+      const step = currentDemoStep();
+      const focusNode = byId('demo_storyline_focus');
+      if (focusNode) {
+        setPillTone(focusNode, step >= 3 ? 'warning' : 'info', t('demo.storyline.focus.step' + String(step), 'Step ' + String(step)));
+      }
+
+      const cards = document.querySelectorAll('.demo-step-card[data-step]');
+      for (let i = 0; i < cards.length; i += 1) {
+        const card = cards[i];
+        const cardStep = parseIntSafe(card.getAttribute('data-step'), 0);
+        if (cardStep === step) card.classList.add('is-active');
+        else card.classList.remove('is-active');
+      }
+    }
+
+    function renderKgSummary() {
+      const autoText = t('module.option.auto', 'Auto');
+      const mode = (byId('story_input_mode') && byId('story_input_mode').value) || 'preset';
+      const isCustom = mode === 'custom';
+      const age = ((byId('age') && byId('age').value) || '').trim() || autoText;
+      const category = ((byId('category') && byId('category').value) || '').trim() || autoText;
+      const theme = (isCustom
+        ? ((byId('theme_custom') && byId('theme_custom').value) || '')
+        : ((byId('theme') && byId('theme').value) || '')
+      ).trim() || autoText;
+      const subcategory = (isCustom
+        ? ((byId('subcategory_custom') && byId('subcategory_custom').value) || '')
+        : ((byId('subcategory') && byId('subcategory').value) || '')
+      ).trim() || autoText;
+      const promptText = ((byId('story_prompt') && byId('story_prompt').value) || '').trim();
+      const materialsText = ((byId('story_materials') && byId('story_materials').value) || '').trim();
+      const promptCount = promptText ? 1 : 0;
+      const materialCount = materialsText
+        ? materialsText.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean).length
+        : 0;
+      const selectedPlan = ((byId('model_plan') && byId('model_plan').value) || 'auto').trim() || 'auto';
+      const recommendedPlan = String(
+        (((ui.lastSystemStatus || {}).model_plan || {}).recommended_plan) || selectedPlan || 'auto'
+      ).trim() || 'auto';
+      const outputs = [];
+      if (byId('photo_enabled') && byId('photo_enabled').checked) outputs.push(t('overview.toggle.photo', 'Photo'));
+      if (byId('translation_enabled') && byId('translation_enabled').checked) outputs.push(t('overview.toggle.translation', 'Translation'));
+      if (byId('voice_enabled') && byId('voice_enabled').checked) outputs.push(t('overview.toggle.voice', 'Voice'));
+      if (byId('verify_enabled') && byId('verify_enabled').checked) outputs.push(t('overview.toggle.verify', 'Verify'));
+
+      const modeNode = byId('kg_summary_mode');
+      const sourceNode = byId('kg_summary_source');
+      const scopeNode = byId('kg_summary_scope');
+      const planNode = byId('kg_summary_plan');
+      const pillNode = byId('kg_summary_mode_pill');
+      if (modeNode) modeNode.textContent = t(isCustom ? 'kg.summary.mode_custom' : 'kg.summary.mode_preset', isCustom ? 'Custom' : 'Preset');
+      if (sourceNode) sourceNode.textContent = t(isCustom ? 'kg.summary.source_custom' : 'kg.summary.source_preset', isCustom ? 'KG + normalized user intent' : 'KG defaults');
+      if (scopeNode) scopeNode.textContent = tf('kg.summary.scope', {age: age, category: category}, age + ' / ' + category);
+      if (planNode) {
+        const selectedLabel = modelPlanLabel(selectedPlan);
+        const recommendedLabel = modelPlanLabel(recommendedPlan);
+        planNode.textContent = selectedPlan === 'auto' || selectedLabel === recommendedLabel
+          ? selectedLabel
+          : (selectedLabel + ' | Auto: ' + recommendedLabel);
+      }
+      if (pillNode) {
+        setPillTone(
+          pillNode,
+          isCustom ? 'warning' : 'info',
+          t(isCustom ? 'kg.summary.pill_custom' : 'kg.summary.pill_preset', isCustom ? 'KG + User' : 'KG')
+        );
+      }
+
+      const points = [
+        t(isCustom ? 'kg.summary.point.custom' : 'kg.summary.point.preset', ''),
+        t(isCustom ? 'kg.summary.point.evidence_custom' : 'kg.summary.point.evidence_preset', ''),
+        tf(
+          'kg.summary.point.outputs',
+          {outputs: outputs.length ? outputs.join(' / ') : t('module.summary.none', 'None')},
+          'Enabled output chain: ' + (outputs.length ? outputs.join(' / ') : t('module.summary.none', 'None'))
+        ),
+        tf(
+          isCustom ? 'kg.summary.point.scope_custom' : 'kg.summary.point.scope_preset',
+          {
+            theme: theme,
+            subcategory: subcategory,
+            prompts: String(promptCount),
+            materials: String(materialCount),
+          },
+          ''
+        )
+      ].filter(Boolean);
+
+      const pointsNode = byId('kg_summary_points');
+      if (pointsNode) {
+        pointsNode.innerHTML = points.map(function (text) {
+          return '<div class="list-item advisory-info">' + escapeHtml(String(text)) + '</div>';
+        }).join('');
+      }
     }
 
     function mergeFloat32(chunks) {
@@ -6642,6 +6879,8 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         if (ui.activeTab === 'modules' && ui.moduleSelectedJobId) {
           await fetchModuleJobDetail(ui.moduleSelectedJobId);
         }
+        renderKgSummary();
+        renderDemoStoryline();
       } catch (err) {
         setBackgroundMessage(String((err && err.message) || err || t('msg.refresh_failed', 'Refresh failed.')), 'warn');
       }
@@ -6670,6 +6909,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         else panel.classList.remove('active');
       }
       renderPageHeader();
+      renderDemoStoryline();
       if (tabName === 'detail') {
         fetchRunDetail();
       }
@@ -6713,6 +6953,7 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       byId('model_plan').addEventListener('change', function () {
         renderModelPlanStatus(ui.lastSystemStatus);
         renderDashboardHealth(ui.lastSystemStatus, ui.latestStatus);
+        renderKgSummary();
       });
       byId('btn_save_template').addEventListener('click', saveTemplate);
       byId('btn_save_local').addEventListener('click', saveLocalForm);
@@ -6857,6 +7098,28 @@ const STORE_KEY = 'genai.dashboard.form.v4';
       byId('btn_general_voice_run').addEventListener('click', runGeneralVoiceTool);
       byId('module_story_input_mode').addEventListener('change', syncModuleStoryInputMode);
       byId('story_input_mode').addEventListener('change', syncStoryInputMode);
+      [
+        'age',
+        'category',
+        'theme',
+        'subcategory',
+        'theme_custom',
+        'subcategory_custom',
+        'story_prompt',
+        'story_materials',
+        'photo_enabled',
+        'translation_enabled',
+        'voice_enabled',
+        'verify_enabled',
+        'model_plan'
+      ].forEach(function (id) {
+        const node = byId(id);
+        if (!node) return;
+        node.addEventListener('change', renderKgSummary);
+        if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') {
+          node.addEventListener('input', renderKgSummary);
+        }
+      });
       byId('btn_speaker_mode_preset').addEventListener('click', function () {
         setSpeakerSourceMode('preset');
         syncSpeakerSelection();
@@ -6988,10 +7251,25 @@ const STORE_KEY = 'genai.dashboard.form.v4';
         });
       });
 
+      const demoJumpButtons = document.querySelectorAll('[data-target-tab]');
+      demoJumpButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const targetTab = String(btn.getAttribute('data-target-tab') || 'overview');
+          switchTab(targetTab);
+        });
+      });
+
       const moduleTabButtons = document.querySelectorAll('.module-tab-btn');
       moduleTabButtons.forEach(function (btn) {
         btn.addEventListener('click', function () {
           switchModuleStudio(String(btn.getAttribute('data-module-tab') || 'story'));
+        });
+      });
+
+      const moduleJumpButtons = document.querySelectorAll('[data-module-tab-jump]');
+      moduleJumpButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          switchModuleStudio(String(btn.getAttribute('data-module-tab-jump') || 'story'));
         });
       });
 

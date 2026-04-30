@@ -119,11 +119,77 @@
     </section>
 <section class="tab-panel active" id="tab_overview">
 <div class="overview-grid">
+<div class="overview-storyline-grid">
+<section class="card section demo-storyline-card">
+<div class="demo-storyline-head">
+<div>
+<h2 class="section-title" id="demo_storyline_title">Demo Storyline</h2>
+<p class="subtle" id="demo_storyline_sub">Use this order for a concise thesis demo: baseline, controlled generation, modular rerun, then evaluation.</p>
+</div>
+<span class="pill info" id="demo_storyline_focus">Step 1</span>
+</div>
+<div class="demo-step-grid">
+<button class="demo-step-card is-active" data-target-tab="overview" data-step="1" type="button">
+<span class="demo-step-index">1</span>
+<strong id="demo_step_1_title">KG baseline</strong>
+<span id="demo_step_1_copy">Stay in preset mode to show how age, category, theme, and subcategory are filled by KG defaults.</span>
+</button>
+<button class="demo-step-card" data-target-tab="overview" data-step="2" type="button">
+<span class="demo-step-index">2</span>
+<strong id="demo_step_2_title">Controlled generation</strong>
+<span id="demo_step_2_copy">Switch to custom mode, add prompt and materials, then explain that user intent is normalized under KG constraints.</span>
+</button>
+<button class="demo-step-card" data-target-tab="modules" data-step="3" type="button">
+<span class="demo-step-index">3</span>
+<strong id="demo_step_3_title">Module proof</strong>
+<span id="demo_step_3_copy">Use Text, Image, Translation, or Voice Studio to rerun only one layer instead of the whole pipeline.</span>
+</button>
+<button class="demo-step-card" data-target-tab="evaluation" data-step="4" type="button">
+<span class="demo-step-index">4</span>
+<strong id="demo_step_4_title">Evaluation evidence</strong>
+<span id="demo_step_4_copy">Finish in Evaluation to discuss quality metrics, findings, and how changes affected the final output.</span>
+</button>
+</div>
+<div class="demo-storyline-foot">
+<div class="hint" id="demo_storyline_hint">Recommended recording flow: preset run, custom rerun, one module-only regeneration, then evaluation summary.</div>
+<div class="actions" style="margin-top:0">
+<button class="btn ghost mini" data-target-tab="overview" type="button" id="btn_demo_jump_generate">Focus Generate</button>
+<button class="btn ghost mini" data-target-tab="modules" type="button" id="btn_demo_jump_modules">Open Modules</button>
+<button class="btn ghost mini" data-target-tab="evaluation" type="button" id="btn_demo_jump_evaluation">Open Evaluation</button>
+</div>
+</div>
+</section>
+<section class="card section kg-summary-card">
+<div class="kg-summary-head">
+<div>
+<h2 class="section-title" id="kg_summary_title">Generation Logic Snapshot</h2>
+<p class="subtle" id="kg_summary_sub">Summarize how KG defaults, user control, runtime strategy, and saved artifacts will shape the current run.</p>
+</div>
+<span class="pill" id="kg_summary_mode_pill">KG</span>
+</div>
+<div class="mini-grid kg-summary-grid">
+<div class="mini"><span id="kg_summary_label_mode">Input Mode</span><strong id="kg_summary_mode">Preset</strong></div>
+<div class="mini"><span id="kg_summary_label_source">Control Source</span><strong id="kg_summary_source">KG defaults</strong></div>
+<div class="mini"><span id="kg_summary_label_scope">Story Scope</span><strong id="kg_summary_scope">Auto / Auto</strong></div>
+<div class="mini"><span id="kg_summary_label_plan">Model Plan</span><strong id="kg_summary_plan">Auto</strong></div>
+</div>
+<div class="block-list compact" id="kg_summary_points">
+<div class="list-item advisory-info">Switch between preset and custom mode to compare KG-only guidance with KG plus normalized user intent.</div>
+</div>
+<div class="artifact-strip">
+<span class="artifact-pill">kg_profile.json</span>
+<span class="artifact-pill">kg_guidelines.txt</span>
+<span class="artifact-pill">character_bible.json</span>
+<span class="artifact-pill">story_meta.json</span>
+</div>
+<div class="hint" id="kg_summary_hint">Keep the full graph as supporting evidence. In the main dashboard, show only the logic summary that directly affects the generated story.</div>
+</section>
+</div>
 <div class="row-split layout-overview">
 <section class="card section overview-composer-card">
 <div class="overview-composer-head">
 <h2 class="section-title" id="overview_composer_title">Run Composer</h2>
-<p class="subtle" id="overview_composer_sub">Product mode supports queueing with priority and versioned run profiles.</p>
+<p class="subtle" id="overview_composer_sub">Configure the thesis demo from left to right: scope, KG or user control, pipeline strategy, and launch.</p>
 </div>
 <section class="composer-group composer-group-core">
 <div class="composer-group-head">
@@ -735,6 +801,40 @@ rainy night"></textarea>
 </section>
 <section class="tab-panel" id="tab_modules">
 <div class="detail-grid">
+<section class="card section module-proof-card">
+<div class="module-proof-head">
+<div>
+<h2 class="section-title" id="module_summary_title">Module Snapshot</h2>
+<p class="subtle" id="module_demo_sub">Use this area to prove that the system supports local regeneration: change one layer, keep the rest of the pipeline intact.</p>
+</div>
+<div class="actions" style="margin-top:0">
+<button class="btn ghost mini" data-module-tab-jump="story" type="button" id="btn_module_focus_story">Text proof</button>
+<button class="btn ghost mini" data-module-tab-jump="image" type="button" id="btn_module_focus_image">Image proof</button>
+<button class="btn ghost mini" data-target-tab="evaluation" type="button" id="btn_module_focus_eval">Open Evaluation</button>
+</div>
+</div>
+<div class="mini-grid module-proof-summary-grid">
+<div class="mini"><span id="module_summary_label_active">Active Job</span><strong id="module_summary_active">None</strong></div>
+<div class="mini"><span id="module_summary_label_pending">Pending Jobs</span><strong id="module_summary_pending">0</strong></div>
+<div class="mini"><span id="module_summary_label_history">Visible Records</span><strong id="module_summary_history">0</strong></div>
+<div class="mini"><span id="module_summary_label_selected">Selected Job</span><strong id="module_summary_selected">None</strong></div>
+</div>
+<div class="module-proof-grid">
+<div class="module-proof-item">
+<strong id="module_demo_story_title">1. Freeze the story draft</strong>
+<span id="module_demo_story_copy">Run Text Studio first to create the baseline story, then use the resulting `story_root` as the anchor for later comparisons.</span>
+</div>
+<div class="module-proof-item">
+<strong id="module_demo_image_title">2. Regenerate one modality only</strong>
+<span id="module_demo_image_copy">Move to Image, Translation, or Voice Studio and rerun only the weak layer to show controllability without recomputing everything.</span>
+</div>
+<div class="module-proof-item">
+<strong id="module_demo_eval_title">3. Close the loop with evidence</strong>
+<span id="module_demo_eval_copy">After a module rerun, open Evaluation or Gallery to compare whether the edited layer actually improved the final artifact.</span>
+</div>
+</div>
+<div class="hint" id="module_summary_hint">History 0 | Hidden 0 | Active type -</div>
+</section>
 <div class="row-split layout-modules-primary">
 <section class="card section">
 <h2 class="section-title" id="module_jobs_title">Module Jobs</h2>

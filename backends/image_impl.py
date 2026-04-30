@@ -642,14 +642,14 @@ class DiffusersFluxBackend(_SingleStageDiffusersBackend):
         kwargs = super()._pipeline_call_kwargs(prompt, seed, width, height, steps, guidance, negative_prompt)
         kwargs.pop("negative_prompt", None)
         family = str(getattr(self.config, "model_family", "") or "").lower()
-        if family == "flux_schnell":
-            kwargs["guidance_scale"] = 0.0
-            kwargs["num_inference_steps"] = min(max(int(steps), 1), 4)
-            kwargs["max_sequence_length"] = 256
-        else:
+        if family == "flux":
             kwargs["guidance_scale"] = max(3.5, float(kwargs.get("guidance_scale", guidance)))
             kwargs["num_inference_steps"] = max(int(kwargs.get("num_inference_steps", steps)), 28)
             kwargs["max_sequence_length"] = 512
+        else:
+            kwargs["guidance_scale"] = 0.0
+            kwargs["num_inference_steps"] = min(max(int(steps), 1), 4)
+            kwargs["max_sequence_length"] = 256
         return kwargs
 
 
@@ -759,7 +759,7 @@ def available_image_providers() -> List[str]:
 
 
 def build_image_backend(config: Any) -> BaseImageBackend:
-    provider = (getattr(config, "provider", None) or "diffusers_sdxl").strip().lower()
+    provider = (getattr(config, "provider", None) or "diffusers_flux").strip().lower()
     canonical = _IMAGE_BACKEND_CANONICAL.get(provider, provider)
     builder = _IMAGE_BACKEND_BUILDERS.get(canonical)
     if builder is None:
@@ -770,34 +770,23 @@ def build_image_backend(config: Any) -> BaseImageBackend:
 
 
 register_image_provider(
-    "diffusers_sdxl",
-    DiffusersSDXLBackend,
-    aliases=("sdxl", "diffusers"),
-)
-
-register_image_provider(
     "diffusers_flux",
     DiffusersFluxBackend,
-    aliases=("flux",),
-)
-
-register_image_provider(
-    "diffusers_sd3",
-    DiffusersSD3Backend,
-    aliases=("sd3", "stable-diffusion-3"),
-)
-
-register_image_provider(
-    "diffusers_pixart",
-    DiffusersPixArtBackend,
-    aliases=("pixart", "pixart_sigma"),
-)
-
-register_image_provider(
-    "diffusers_sana",
-    DiffusersSanaBackend,
-    aliases=("sana",),
+    aliases=(
+        "flux",
+        "diffusers",
+        "sdxl",
+        "diffusers_sdxl",
+        "sd3",
+        "stable-diffusion-3",
+        "diffusers_sd3",
+        "pixart",
+        "pixart_sigma",
+        "diffusers_pixart",
+        "sana",
+        "diffusers_sana",
+    ),
 )
 
 
-Generator = DiffusersSDXLBackend
+Generator = DiffusersFluxBackend

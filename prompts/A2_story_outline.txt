@@ -47,9 +47,10 @@ Now, generate the outline for the following story:
 
 Story Information:
 Age: {age_group}
-Theme: {theme} ({category})
+Theme: {theme} ({category} / {subcategory})
 Characters: {characters_csv}
 Context: {kg_scenes}
+Story Moral: {kg_moral}
 
 Task: Write the {min_page}-chapter outline.
 

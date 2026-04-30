@@ -122,128 +122,28 @@ class ResolvedModelPlan:
         return " | ".join(parts)
 
 
-_TEXT_QUALITY_CHAIN: Tuple[StoryModelOption, ...] = (
-    StoryModelOption("Qwen3-14B-AWQ", "qwen3-14b-awq", None),
-    StoryModelOption("Qwen3-14B", "qwen3-14b", "4bit"),
-    StoryModelOption("Mistral-Small-3.1-24B-Instruct-2503", "mistral-small-3.1-24b-instruct-2503", "4bit"),
-    StoryModelOption("gemma-3-12b-it", "gemma-3-12b-it", "4bit"),
-    StoryModelOption("Qwen2.5-14B-Instruct-GPTQ-Int4", "qwen2.5-14b-instruct-gptq-int4", "gptq"),
-    StoryModelOption("Qwen3.5-9B", "qwen3.5-9b-instruct", "4bit"),
-    StoryModelOption("Qwen3-8B", "qwen3-8b-instruct", "4bit"),
-)
-
-_TEXT_BALANCED_CHAIN: Tuple[StoryModelOption, ...] = (
-    StoryModelOption("Qwen3-14B-AWQ", "qwen3-14b-awq", None),
-    StoryModelOption("Qwen3-14B", "qwen3-14b", "4bit"),
-    StoryModelOption("Qwen3.5-9B", "qwen3.5-9b-instruct", "4bit"),
-    StoryModelOption("gemma-3-12b-it", "gemma-3-12b-it", "4bit"),
-    StoryModelOption("Qwen2.5-14B-Instruct", "qwen2.5-14b-instruct", "4bit"),
-    StoryModelOption("Qwen3-8B", "qwen3-8b-instruct", "4bit"),
+_TEXT_GPU_PRIMARY_CHAIN: Tuple[StoryModelOption, ...] = (
     StoryModelOption("Qwen2.5-14B-Instruct-GPTQ-Int4", "qwen2.5-14b-instruct-gptq-int4", "gptq"),
 )
 
-_TEXT_PORTABLE_CHAIN: Tuple[StoryModelOption, ...] = (
-    StoryModelOption("Qwen3.5-9B", "qwen3.5-9b-instruct", "4bit"),
-    StoryModelOption("Qwen3-14B-AWQ", "qwen3-14b-awq", None),
-    StoryModelOption("gemma-3-12b-it", "gemma-3-12b-it", "4bit"),
-    StoryModelOption("Qwen3-8B", "qwen3-8b-instruct", "4bit"),
-    StoryModelOption("Qwen2.5-14B-Instruct-GPTQ-Int4", "qwen2.5-14b-instruct-gptq-int4", "gptq"),
-)
+_TEXT_QUALITY_CHAIN: Tuple[StoryModelOption, ...] = _TEXT_GPU_PRIMARY_CHAIN
+
+_TEXT_BALANCED_CHAIN: Tuple[StoryModelOption, ...] = _TEXT_GPU_PRIMARY_CHAIN
+
+_TEXT_PORTABLE_CHAIN: Tuple[StoryModelOption, ...] = _TEXT_GPU_PRIMARY_CHAIN
 
 _TEXT_CPU_CHAIN: Tuple[StoryModelOption, ...] = (
-    StoryModelOption("gemma-3-12b-it", "gemma-3-12b-it", None),
     StoryModelOption("Qwen3-8B", "qwen3-8b-instruct", None),
-    StoryModelOption("Qwen3.5-9B", "qwen3.5-9b-instruct", None),
-    StoryModelOption("Qwen3-14B", "qwen3-14b", None),
-    StoryModelOption("Qwen2.5-14B-Instruct-GPTQ-Int4", "qwen2.5-14b-instruct-gptq-int4", None),
 )
 
-SUPPORTED_IMAGE_PROVIDERS: Tuple[str, ...] = ("diffusers_sdxl", "diffusers_flux", "diffusers_sd3", "diffusers_pixart", "diffusers_sana")
+SUPPORTED_IMAGE_PROVIDERS: Tuple[str, ...] = ("diffusers_flux",)
 
 IMAGE_MODEL_REGISTRY: Tuple[ImageModelSpec, ...] = (
-    ImageModelSpec(
-        path="stable-diffusion-3.5-large",
-        provider="diffusers_sd3",
-        family="sd3",
-        label="Stable Diffusion 3.5 Large",
-        supports_refiner=False,
-    ),
-    ImageModelSpec(
-        path="stable-diffusion-3.5-large-turbo",
-        provider="diffusers_sd3",
-        family="sd3_turbo",
-        label="Stable Diffusion 3.5 Large Turbo",
-        supports_refiner=False,
-    ),
-    ImageModelSpec(
-        path="stable-diffusion-3.5-medium",
-        provider="diffusers_sd3",
-        family="sd3",
-        label="Stable Diffusion 3.5 Medium",
-        supports_refiner=False,
-    ),
-    ImageModelSpec(
-        path="FLUX.1-dev",
-        provider="diffusers_flux",
-        family="flux",
-        label="FLUX.1-dev",
-        supports_refiner=False,
-    ),
     ImageModelSpec(
         path="FLUX.1-schnell",
         provider="diffusers_flux",
         family="flux_schnell",
         label="FLUX.1-schnell",
-        supports_refiner=False,
-    ),
-    ImageModelSpec(
-        path="PixArt-Sigma-XL-2-1024-MS",
-        provider="diffusers_pixart",
-        family="pixart_sigma",
-        label="PixArt-Sigma XL 2 1024 MS",
-        supports_refiner=False,
-    ),
-    ImageModelSpec(
-        path="Sana_1600M_1024px_MultiLing_diffusers",
-        provider="diffusers_sana",
-        family="sana_1600m",
-        label="Sana 1600M 1024 MultiLing",
-        supports_refiner=False,
-    ),
-    ImageModelSpec(
-        path="Sana_600M_1024px_diffusers",
-        provider="diffusers_sana",
-        family="sana_600m",
-        label="Sana 600M 1024",
-        supports_refiner=False,
-    ),
-    ImageModelSpec(
-        path="stable-diffusion-xl-base-1.0",
-        provider="diffusers_sdxl",
-        family="sdxl_base",
-        label="Stable Diffusion XL Base 1.0",
-        supports_refiner=True,
-    ),
-    ImageModelSpec(
-        path="Mann-E_Art",
-        provider="diffusers_sdxl",
-        family="sdxl_finetune",
-        label="Mann-E Art",
-        supports_refiner=False,
-    ),
-    ImageModelSpec(
-        path="SSD-1B",
-        provider="diffusers_sdxl",
-        family="distilled_fast",
-        label="SSD-1B",
-        supports_refiner=False,
-    ),
-    ImageModelSpec(
-        path="dreamshaperXL_lightningDPMSDE.safetensors",
-        provider="diffusers_sdxl",
-        family="sdxl_distilled",
-        label="DreamShaper XL Lightning",
-        deprecated=True,
         supports_refiner=False,
     ),
 )
@@ -425,117 +325,27 @@ def _resolve_story_choice(
     return None, DEFAULT_CHIEF_OPTIONS.story_model_name, DEFAULT_CHIEF_OPTIONS.story_quantization, notes
 
 
-def _iter_installed_image_models(models_dir: Path) -> List[Tuple[ImageModelSpec, Path]]:
-    installed: List[Tuple[ImageModelSpec, Path]] = []
-    for spec in IMAGE_MODEL_REGISTRY:
-        path = models_dir / spec.path
-        if path.exists():
-            installed.append((spec, path))
-    return installed
-
-
-def _image_family_preference(plan_key: str, hardware: HardwareProfile) -> Tuple[str, ...]:
-    if plan_key == "quality" and hardware.has_cuda and hardware.gpu_vram_gb >= 20.0 and hardware.system_ram_gb >= 48.0:
-        return ("flux", "flux_schnell", "sd3", "sana_1600m", "pixart_sigma", "sd3_turbo", "sana_600m", "sdxl_finetune", "sdxl_base", "sdxl_like", "distilled_fast")
-    if plan_key == "quality":
-        return ("flux_schnell", "flux", "sana_1600m", "pixart_sigma", "sana_600m", "sd3_turbo", "sdxl_finetune", "sdxl_base", "sdxl_like", "distilled_fast", "sd3")
-    if plan_key == "portable":
-        return ("flux_schnell", "sana_600m", "distilled_fast", "pixart_sigma", "sdxl_finetune", "sdxl_base", "sdxl_like", "sd3_turbo", "sana_1600m", "flux", "sd3")
-    return ("flux_schnell", "flux", "sana_1600m", "pixart_sigma", "sana_600m", "sd3_turbo", "sdxl_finetune", "sdxl_base", "sdxl_like", "distilled_fast", "sd3")
-
-
 def _resolve_image_base(
     models_dir: Path,
     *,
     plan_key: str,
     hardware: HardwareProfile,
 ) -> Tuple[Optional[Path], Tuple[str, ...]]:
-    notes: List[str] = []
-    installed = _iter_installed_image_models(models_dir)
-    if not installed:
-        return None, tuple(notes)
-
-    unsupported_labels = [spec.label for spec, _ in installed if spec.provider not in SUPPORTED_IMAGE_PROVIDERS]
-    selected: Optional[Tuple[ImageModelSpec, Path]] = None
-    preferred_families = _image_family_preference(plan_key, hardware)
-
-    for family in preferred_families:
-        for spec, path in installed:
-            if spec.provider in SUPPORTED_IMAGE_PROVIDERS and spec.family == family and not spec.deprecated:
-                selected = (spec, path)
-                break
-        if selected is not None:
-            break
-    if selected is None:
-        for spec, path in installed:
-            if spec.provider in SUPPORTED_IMAGE_PROVIDERS:
-                selected = (spec, path)
-                if spec.deprecated:
-                    notes.append(f"using deprecated legacy image checkpoint as fallback: {spec.label}")
-                break
-
-    if unsupported_labels:
-        labels = ", ".join(unsupported_labels[:3])
-        if len(unsupported_labels) > 3:
-            labels += f" (+{len(unsupported_labels) - 3} more)"
-        notes.append(
-            "modern image checkpoints detected but skipped because their provider is not enabled in the current runtime: "
-            + labels
-        )
-
-    if selected is None:
-        return None, tuple(notes)
-    return selected[1], tuple(notes)
+    del plan_key, hardware
+    image_base = models_dir / "FLUX.1-schnell"
+    if image_base.exists():
+        return image_base, tuple()
+    return None, ("missing primary image model: models/FLUX.1-schnell",)
 
 
 def classify_image_model(image_base: Optional[Path]) -> str:
-    token = str(image_base or "").strip().lower()
-    if not token:
-        return "unknown"
-    if "ssd-1b" in token or "segmind" in token:
-        return "distilled_fast"
-    if "mann-e_art" in token or "mann-e" in token:
-        return "sdxl_finetune"
-    if "flux.1-schnell" in token or "flux-1-schnell" in token or "schnell" in token:
-        return "flux_schnell"
-    if "flux" in token:
-        return "flux"
-    if "stable-diffusion-3.5" in token and "turbo" in token:
-        return "sd3_turbo"
-    if "sd3" in token and "turbo" in token:
-        return "sd3_turbo"
-    if "stable-diffusion-3.5" in token or "sd3" in token:
-        return "sd3"
-    if "sana_1600m" in token or "sana-1600m" in token:
-        return "sana_1600m"
-    if "sana_600m" in token or "sana-600m" in token:
-        return "sana_600m"
-    if "sana" in token:
-        return "sana_600m"
-    if "pixart-sigma" in token or "pixart" in token:
-        return "pixart_sigma"
-    if "lightning" in token or "turbo" in token:
-        return "distilled_fast"
-    if "stable-diffusion-xl-base" in token:
-        return "sdxl_base"
-    if "dreamshaper" in token:
-        return "sdxl_finetune"
-    if "sdxl" in token:
-        return "sdxl_like"
-    return "generic"
+    del image_base
+    return "flux_schnell"
 
 
 def classify_image_provider(image_base: Optional[Path]) -> str:
-    family = classify_image_model(image_base)
-    if family.startswith("flux"):
-        return "diffusers_flux"
-    if family.startswith("sd3"):
-        return "diffusers_sd3"
-    if family.startswith("sana"):
-        return "diffusers_sana"
-    if family.startswith("pixart"):
-        return "diffusers_pixart"
-    return "diffusers_sdxl"
+    del image_base
+    return "diffusers_flux"
 
 
 def tune_image_profile(
@@ -543,66 +353,17 @@ def tune_image_profile(
     image_base: Optional[Path],
     image_refiner: Optional[Path],
 ) -> Tuple[ImageProfile, Tuple[str, ...]]:
-    family = classify_image_model(image_base)
-    tuned = image_profile
+    del image_base, image_refiner
+    tuned = replace(
+        image_profile,
+        steps=min(max(int(image_profile.steps), 1), 4),
+        guidance=0.0,
+        skip_refiner=True,
+        refiner_steps=None,
+    )
     notes: List[str] = []
-
-    if family == "sdxl_base":
-        tuned = replace(
-            tuned,
-            steps=max(tuned.steps, 12),
-            guidance=max(tuned.guidance, 4.6),
-            refiner_steps=max(4, tuned.refiner_steps or 0) if image_refiner is not None else tuned.refiner_steps,
-        )
-        if tuned != image_profile:
-            notes.append("vanilla SDXL base detected; using a higher-guidance SDXL profile instead of legacy lightning defaults")
-    elif family in {"sdxl_finetune", "sdxl_like"}:
-        tuned = replace(
-            tuned,
-            steps=max(tuned.steps, 11),
-            guidance=max(tuned.guidance, 4.2),
-        )
-        if tuned != image_profile:
-            notes.append("SDXL-compatible finetune detected; raised guidance and steps for cleaner children's-book renders")
-    elif family == "distilled_fast":
-        bounded_guidance = min(max(tuned.guidance, 1.0), 2.5)
-        bounded_steps = min(max(tuned.steps, 4), 8)
-        tuned = replace(tuned, steps=bounded_steps, guidance=bounded_guidance, skip_refiner=True, refiner_steps=None)
-        if tuned != image_profile:
-            notes.append("distilled/turbo image model detected; keeping a compact low-step profile and disabling refiner")
-    elif family == "flux_schnell":
-        tuned = replace(tuned, steps=min(max(tuned.steps, 4), 4), guidance=0.0, skip_refiner=True, refiner_steps=None)
-        if tuned != image_profile:
-            notes.append("FLUX.1-schnell detected; using the official 1-4 step zero-guidance single-stage profile")
-    elif family == "flux":
-        tuned = replace(tuned, steps=max(tuned.steps, 28), guidance=max(3.5, tuned.guidance), skip_refiner=True, refiner_steps=None)
-        if tuned != image_profile:
-            notes.append("FLUX.1-dev style checkpoint detected; using a 28-step 3.5-guidance single-stage profile without refiner")
-    elif family == "sd3_turbo":
-        tuned = replace(tuned, steps=min(max(tuned.steps, 6), 10), guidance=min(max(tuned.guidance, 1.5), 2.0), skip_refiner=True, refiner_steps=None)
-        if tuned != image_profile:
-            notes.append("SD3 turbo detected; using a short single-stage profile without refiner")
-    elif family == "sd3":
-        tuned = replace(tuned, steps=max(tuned.steps, 18), guidance=max(4.0, tuned.guidance), skip_refiner=True, refiner_steps=None)
-        if tuned != image_profile:
-            notes.append("SD3 detected; using a stronger single-stage profile without refiner")
-    elif family == "pixart_sigma":
-        tuned = replace(tuned, steps=max(tuned.steps, 16), guidance=max(4.5, tuned.guidance), skip_refiner=True, refiner_steps=None)
-        if tuned != image_profile:
-            notes.append("PixArt-Sigma detected; using a longer prompt-aware single-stage profile without refiner")
-    elif family == "sana_1600m":
-        tuned = replace(tuned, steps=max(tuned.steps, 18), guidance=max(4.5, tuned.guidance), skip_refiner=True, refiner_steps=None)
-        if tuned != image_profile:
-            notes.append("Sana 1600M detected; using a multilingual single-stage profile without refiner")
-    elif family == "sana_600m":
-        tuned = replace(tuned, steps=max(tuned.steps, 16), guidance=max(4.0, tuned.guidance), skip_refiner=True, refiner_steps=None)
-        if tuned != image_profile:
-            notes.append("Sana 600M detected; using an efficient single-stage profile without refiner")
-
-    if (not tuned.skip_refiner) and image_refiner is None:
-        tuned = replace(tuned, skip_refiner=True)
-        notes.append("image refiner missing; forcing skip_refiner for this host")
-
+    if tuned != image_profile:
+        notes.append("FLUX.1-schnell is the only supported image model; using the fixed single-stage profile")
     return tuned, tuple(notes)
 
 
@@ -616,9 +377,7 @@ def resolve_image_defaults(
     plan_key = choose_plan_key(requested_plan, hw)
     spec = MODEL_PLAN_SPECS[plan_key]
     image_base, discovery_notes = _resolve_image_base(models_dir, plan_key=plan_key, hardware=hw)
-    image_refiner = models_dir / "stable-diffusion-xl-refiner-1.0"
-    if not image_refiner.exists() or classify_image_model(image_base) not in {"sdxl_base", "sdxl_finetune", "sdxl_like"}:
-        image_refiner = None
+    image_refiner = None
     tuned_profile, tune_notes = tune_image_profile(spec.image_profile, image_base, image_refiner)
     return plan_key, image_base, image_refiner, tuned_profile, tuple(list(discovery_notes) + list(tune_notes))
 

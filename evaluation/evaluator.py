@@ -35,6 +35,7 @@ from .multimodal_alignment import MultimodalAlignmentChecker
 from .genre import GenreDetector
 from .shared.score_governance import build_score_governance
 from .shared.score_policy import apply_cross_dimension_constraints, compute_consensus_adjustment
+from .shared.story_contract import collect_story_bundle, summarize_story_bundle
 from .shared.story_data import collect_branch_story_paths, collect_full_story_paths, find_metadata_for_story
 from .shared.ai_safety import (
     build_dimension_fallback_payload,
@@ -301,6 +302,8 @@ class MultiAspectReport:
     alignment_details: Optional[Dict[str, Union[float, str, Dict[str, float], None]]] = None
     governance: Optional[Dict[str, Any]] = None
     dimension_summaries: Optional[Dict[str, Dict[str, Any]]] = None
+    story_bundle_summary: Optional[Dict[str, Any]] = None
+    quality_gate: Optional[Dict[str, Any]] = None
 
 class MultiAspectEvaluator:
     """六維度故事評估總控中心。
@@ -389,6 +392,7 @@ class MultiAspectEvaluator:
         # 人類評分對齊模型與上下文（延遲載入）
         self.calibration_model: Optional[Dict[str, Union[float, Dict[str, float]]]] = None
         self.current_story_metadata: Optional[Dict] = None
+        self.current_story_bundle: Optional[Dict[str, Any]] = None
         self.alignment_info: Optional[Dict] = None
         self.current_story_text_features: Optional[Dict[str, float]] = None
         # 評分聚合權重與文體偵測（僅用全文）
@@ -893,7 +897,8 @@ class MultiAspectEvaluator:
                       image_context: Optional[Dict[str, Any]] = None,
                       branch_id: str = "canonical",
                       source_document: Optional[str] = None,
-                      evaluation_scope: str = "canonical") -> MultiAspectReport:
+                      evaluation_scope: str = "canonical",
+                      story_bundle: Optional[Dict[str, Any]] = None) -> MultiAspectReport:
         """以檔案路徑為輸入，完成整體六維度評估。
 
         參數:
@@ -920,6 +925,31 @@ class MultiAspectEvaluator:
         # 註冊文檔到來源管理器
         self.source_manager.register_documents(document_paths)
         self.current_story_metadata = self._load_story_metadata(document_paths, story_title)
+        try:
+            self.current_story_bundle = story_bundle or collect_story_bundle(
+                None,
+                branch_id=branch_id,
+                source_document=source_document or (
+                    document_paths.get("full_story.txt")
+                    if isinstance(document_paths.get("full_story.txt"), str)
+                    else None
+                ),
+            )
+        except Exception as exc:
+            logger.warning("⚠️ 無法載入生成評估契約，將以全文相容模式評估: %s", exc)
+            self.current_story_bundle = None
+        if isinstance(self.current_story_bundle, dict) and self.current_story_bundle:
+            bundle_input = self.current_story_bundle.get("input") or {}
+            bundle_metadata = {
+                "generation_contract": summarize_story_bundle(self.current_story_bundle),
+            }
+            for key in ("age_group", "category", "subcategory", "theme", "language"):
+                if bundle_input.get(key) is not None:
+                    bundle_metadata[key] = bundle_input.get(key)
+            if isinstance(self.current_story_metadata, dict):
+                self.current_story_metadata = {**self.current_story_metadata, **bundle_metadata}
+            else:
+                self.current_story_metadata = bundle_metadata
         self.alignment_info = None
         # 僅用全文進行文體偵測，供權重覆蓋（若有設定）
         try:
@@ -1059,9 +1089,11 @@ class MultiAspectEvaluator:
                 ))
                 for r in dimension_results
             },
+            story_bundle_summary=summarize_story_bundle(self.current_story_bundle),
         )
         # 重置情境以免影響下一本故事
         self.current_story_metadata = None
+        self.current_story_bundle = None
         self.alignment_info = None
         self.current_story_text_features = None
         return report

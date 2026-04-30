@@ -39,9 +39,9 @@ RUN python scripts/setup_env.py \
     --gpu-series 50 \
     --skip-smoke
 
+# Root requirements.txt is the single dependency source for evaluation too.
+
 # 再安裝評測專屬 extras。
-COPY evaluation/requirements.txt ./evaluation/requirements.txt
-RUN /opt/venv/bin/python -m pip install -r ./evaluation/requirements.txt --constraint ./requirements.txt
 
 # 複製評測模組內容。
 COPY evaluation/ /app

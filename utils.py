@@ -993,6 +993,10 @@ def setup_logging(
 
 	formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
+	import os
+	if os.environ.get("DEMO_MODE") == "1":
+		console = False
+
 	if console:
 		stream_handler = logging.StreamHandler()
 		stream_handler.setFormatter(formatter)

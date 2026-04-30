@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shutil
 import time
@@ -696,6 +697,19 @@ class StoryPipeline:
 			self._major_step_total,
 			name,
 		)
+		if os.environ.get("DEMO_TERMINAL_EVENTS") == "1":
+			payload = {
+				"index": self._major_step_index,
+				"total": self._major_step_total,
+				"name": name,
+			}
+			print(f"::DEMO_STEP::{json.dumps(payload, ensure_ascii=False)}", flush=True)
+
+	def _emit_demo_info(self, message: str, detail: str = "") -> None:
+		if os.environ.get("DEMO_TERMINAL_EVENTS") != "1":
+			return
+		payload = {"message": message, "detail": detail}
+		print(f"::DEMO_INFO::{json.dumps(payload, ensure_ascii=False)}", flush=True)
 
 	def _generation_for(self, step: str) -> GenerationParams:
 		"""取得指定步驟應用的生成參數。"""
@@ -1096,6 +1110,11 @@ class StoryPipeline:
 		# outline + title + story + (narration/dialogue/scene/pose per branch) + cover + meta
 		self._major_step_total = 3 + (branch_total * 4) + 2
 		self._major_step_index = 0
+		self._emit_demo_info(
+			"故事條件",
+			f"Age={self.profile.age_label}, Category={self.profile.category_label}, "
+			f"Theme={self.profile.theme_label}, Pages={self.profile.layout.total_pages if self.profile.layout else 'auto'}",
+		)
 		self._log_major_step("outline")
 		outline_candidate_count = max(1, int(getattr(self.options, "outline_candidates", 1) or 1))
 		outline = self._rank_step_candidates(
@@ -1132,6 +1151,11 @@ class StoryPipeline:
 					self.logger.warning(f"Detected turning point {detected_turning_point} outside valid range {turning_point_range}, keeping default")
 		
 		self.logger.info("Outline generated with turning point at Page %d", detected_turning_point)
+		self._emit_demo_info(
+			"KG 結構控制",
+			f"turning_point=Page {detected_turning_point}, "
+			f"branches={self.profile.layout.branch_count if self.profile.layout else 0}",
+		)
 		
 		self._log_major_step("title")
 		title_candidate_count = max(1, int(getattr(self.options, "title_candidates", 1) or 1))
@@ -1154,6 +1178,7 @@ class StoryPipeline:
 		title = self._finalize_story_root(raw_title)
 		self.base_context["story_title"] = title
 		self.base_context["branch_context"] = "" # Default for Trunk
+		self._emit_demo_info("標題確認", title)
 		self._log_major_step("story")
 
 		# --- Rigid 3-Stage Orchestration (Trunk -> Branch Loop -> Ending) ---
@@ -1168,6 +1193,10 @@ class StoryPipeline:
 		main_pages = [] 
 		
 		self.logger.info(f"Layout Rigid Plan: Trunk={layout.trunk_pages}, Decision={layout.decision_page}, Branches={layout.branch_count}")
+		self._emit_demo_info(
+			"版型規劃",
+			f"trunk_pages={list(layout.trunk_pages)}, decision_page={layout.decision_page}, branches={layout.branch_count}",
+		)
 		
 		# --- Stage 1: Trunk Generation (Canonical: option_1) ---
 		# We generate the shared trunk IN option_1 directly.
@@ -1207,6 +1236,10 @@ class StoryPipeline:
 			raise ValueError("Branch slots missing or insufficient. KG must provide complete branch slots.")
 			
 		self.logger.info(f"Using Strict Branch Slots: {[s['label'] for s in branch_slots]}")
+		self._emit_demo_info(
+			"分支選項約束",
+			", ".join(str(s.get("label", "")) for s in branch_slots if isinstance(s, dict)) or "linear story",
+		)
 		
 		generated_branches_ids = []
 		
@@ -1245,6 +1278,7 @@ class StoryPipeline:
 		else:
 			convergence_anchor = outline_events[-1] if outline_events else "a gentle resolution"
 		self.logger.info(f"[Convergence] Anchor Event: '{convergence_anchor}'")
+		self._emit_demo_info("一致性錨點", convergence_anchor)
 		self.base_context["converge_ending"] = converge_ending
 		self.base_context["branch_end_page"] = branch_end_page
 		self.base_context["convergence_anchor"] = convergence_anchor
@@ -2177,6 +2211,104 @@ class StoryPipeline:
 		"""Compiles Page 1..Total into full_story.txt in the branch dir."""
 		compile_full_story(branch_dir, total_pages=total_pages, logger=self.logger)
 
+	def _write_assessment_inputs(self, generated_branches_ids: Sequence[str], story_meta: Dict[str, Any]) -> None:
+		"""Persist generation-aware assessment inputs for downstream quality gates."""
+		manifest: Dict[str, Any] = {
+			"schema_version": "1.0",
+			"story_id": self.story_id,
+			"story_title": story_meta.get("story_title") or self.story_title,
+			"relative_path": self.relative_path,
+			"input": story_meta.get("input", {}),
+			"model": story_meta.get("model", {}),
+			"layout": story_meta.get("layout", {}),
+			"branches": [],
+			"step_history": list(self.step_history),
+		}
+		total_pages = self._total_pages()
+		for bid in generated_branches_ids:
+			branch_dir = self.file_manager.language_root / "branches" / bid
+			if not branch_dir.exists():
+				continue
+			branch_meta = {}
+			branch_meta_path = branch_dir / "metadata.json"
+			if branch_meta_path.exists():
+				try:
+					branch_meta = json.loads(branch_meta_path.read_text(encoding="utf-8"))
+				except Exception:
+					branch_meta = {}
+			pages: List[Dict[str, Any]] = []
+			page_quality: List[Dict[str, Any]] = []
+			history: List[str] = []
+			for idx in range(1, total_pages + 1):
+				page_path = branch_dir / f"page_{idx}.txt"
+				page_text = ""
+				if page_path.exists():
+					page_text = page_path.read_text(encoding="utf-8", errors="replace").strip()
+				struct_path = branch_dir / f"page_{idx}_struct.json"
+				state_path = branch_dir / f"page_{idx}_state.json"
+				try:
+					page_structure = json.loads(struct_path.read_text(encoding="utf-8")) if struct_path.exists() else {}
+				except Exception:
+					page_structure = {}
+				try:
+					state_snapshot = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+				except Exception:
+					state_snapshot = {}
+				scorecard = self._score_story_page_candidate(
+					page_text,
+					idx=idx,
+					page_structure=page_structure,
+					history=history,
+				) if page_text else {"score": 0.0, "issues": ["missing_page_text"], "signals": {}, "word_count": 0}
+				if page_text:
+					history.append(page_text)
+				page_record = {
+					"page": idx,
+					"text_path": str(page_path) if page_path.exists() else None,
+					"structure_path": str(struct_path) if struct_path.exists() else None,
+					"state_path": str(state_path) if state_path.exists() else None,
+					"narration_path": str(branch_dir / f"page_{idx}_narration.txt") if (branch_dir / f"page_{idx}_narration.txt").exists() else None,
+					"dialogue_path": str(branch_dir / f"page_{idx}_dialogue.txt") if (branch_dir / f"page_{idx}_dialogue.txt").exists() else None,
+					"image_prompt_path": str(branch_dir / "resource" / f"page_{idx}_prompt.txt") if (branch_dir / "resource" / f"page_{idx}_prompt.txt").exists() else None,
+					"image_path": str(branch_dir / "image" / "main" / f"page_{idx}_scene.png") if (branch_dir / "image" / "main" / f"page_{idx}_scene.png").exists() else None,
+					"page_function": page_structure.get("page_function"),
+					"branch_trait": page_structure.get("branch_trait") or branch_meta.get("branch_trait"),
+					"state": state_snapshot,
+					"quality": scorecard,
+				}
+				pages.append(page_record)
+				page_quality.append({"page": idx, **scorecard})
+			asset_manifest = {
+				"branch_id": bid,
+				"resource_dir": str(branch_dir / "resource"),
+				"image_dir": str(branch_dir / "image" / "main"),
+				"cover_image": str(branch_dir / "image" / "main" / "book_cover.png") if (branch_dir / "image" / "main" / "book_cover.png").exists() else None,
+				"page_images": [page["image_path"] for page in pages if page.get("image_path")],
+				"page_prompts": [page["image_prompt_path"] for page in pages if page.get("image_prompt_path")],
+			}
+			assessment_input = {
+				"schema_version": "1.0",
+				"story": manifest,
+				"branch": branch_meta,
+				"pages": pages,
+				"asset_manifest": asset_manifest,
+			}
+			write_json_or_raise(branch_dir / "page_quality.json", {"branch_id": bid, "pages": page_quality})
+			write_json_or_raise(branch_dir / "asset_manifest.json", asset_manifest)
+			write_json_or_raise(branch_dir / "assessment_input.json", assessment_input)
+			manifest["branches"].append(
+				{
+					"branch_id": bid,
+					"metadata": branch_meta,
+					"assessment_input": str(branch_dir / "assessment_input.json"),
+					"page_quality": str(branch_dir / "page_quality.json"),
+					"asset_manifest": str(branch_dir / "asset_manifest.json"),
+					"page_count": len(pages),
+					"min_page_quality": min((float(item.get("score", 0.0)) for item in page_quality), default=0.0),
+				}
+			)
+		write_json_or_raise(self.paths["resource"] / "generation_manifest.json", manifest)
+
 	def _copy_branch_state(self, src_bid: str, dst_bid: str, decision_page: int) -> None:
 		"""物理複製主線 (Trunk) 頁面 (1..decision_page) 從來源分支到目標分支。"""
 		copy_branch_state(
@@ -2303,6 +2435,7 @@ class StoryPipeline:
 		
 		meta_path = self.paths["story_meta"]
 		write_text_or_raise(meta_path, json.dumps(meta, ensure_ascii=False, indent=2))
+		self._write_assessment_inputs(generated_branches_ids, meta)
 		self.logger.info("Finished pipeline in %.2fs", meta["timestamps"]["generation_time_sec"])
 		return meta
 
@@ -2828,18 +2961,7 @@ class StoryPipeline:
 		return any(marker in lowered for marker in pose_markers)
 
 	def _current_image_family(self) -> str:
-		token = str(getattr(self.options, "sdxl_base", "") or "").strip().lower()
-		if not token:
-			return "unknown"
-		if "flux.1-schnell" in token or "flux-1-schnell" in token or "schnell" in token:
-			return "flux_schnell"
-		if "flux" in token:
-			return "flux"
-		if ("stable-diffusion-3.5" in token and "turbo" in token) or ("sd3" in token and "turbo" in token):
-			return "sd3_turbo"
-		if "stable-diffusion-3.5" in token or "sd3" in token:
-			return "sd3"
-		return "sdxl"
+		return "flux_schnell"
 
 	def _image_prompt_budget(self, step: str) -> Tuple[int, int, int]:
 		clip_cfg = self.system_config.get("validation", {}).get("clip_tokens", {})
@@ -2851,13 +2973,6 @@ class StoryPipeline:
 				return (10, 36, 60)
 			if step == "cover":
 				return (20, 72, 96)
-		if family in {"flux", "sd3_turbo", "sd3"}:
-			if step == "scene":
-				return (20, 92, 124)
-			if step == "pose":
-				return (10, 40, 68)
-			if step == "cover":
-				return (22, 92, 124)
 		if step == "scene":
 			return (
 				int(clip_cfg.get("scene_min", 20)),

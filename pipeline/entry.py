@@ -118,5 +118,17 @@ def main(options: Optional[ChiefOptions] = None) -> int:
 
     runner = ChiefRunner(selected_options)
     summary = runner.run()
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    
+    import os
+    if os.environ.get("DEMO_MODE") == "1":
+        print("\n=== Demo Run Summary ===")
+        print(f"Total Books: {summary.get('total')}")
+        print(f"Success: {summary.get('success')}")
+        if _summary_exit_code(summary) != 0:
+            print("Finished with errors.")
+        else:
+            print("All finished successfully.")
+    else:
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        
     return _summary_exit_code(summary)

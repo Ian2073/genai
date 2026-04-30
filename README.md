@@ -442,7 +442,7 @@ python scripts/check_root_layout.py --workspace-root . --strict
 
 評測模組已納入主線路徑 `evaluation/`，並由主線入口統一調度：
 
-- `Build_GenAI.bat` 會先安裝生成主線，再把 `evaluation/requirements.txt` 當 extras 併入同一 `genai_env`。預設會先套用 root `requirements.txt` constraint（生成版本優先）；若與 GPU profile 的 torch 組合衝突，會自動重試為不套 constraints。
+- `Build_GenAI.bat` / `Build_GenAI.sh` 現在只使用 root `requirements.txt` 作為單一依賴來源，生成與評測共用同一個 `genai_env`。
 - 主線評估模型目前為 `Qwen2.5-14B-Instruct-GPTQ-Int4`、`bge-large-zh-v1.5`、`roberta-base-go_emotions`、`gliner_large-v2.1`。
 - `entity_consistency` 另外搭配 `fastcoref` backend；`multimodal_alignment` 預設以 heuristic 檢查為主，若本地存在 Gemma 4 checkpoint 才會額外加權 reviewer。
 

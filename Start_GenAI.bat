@@ -5,8 +5,8 @@ TITLE GenAI Start (Unified Local)
 set "PROJECT_DIR=%~dp0"
 cd /d "%PROJECT_DIR%"
 
-set "MODE=toggle_dashboard"
-set "AUTO_DASHBOARD=1"
+set "MODE=demo"
+set "AUTO_DASHBOARD=0"
 set "DASH_ARGS="
 set "EVAL_ARGS="
 set "COMPAT_GENAI_ONLY=0"
@@ -46,6 +46,12 @@ if /I "%~1"=="--force-non-dashboard" (
 	goto :parse_args
 )
 if /I "%~1"=="--no-dashboard" (
+	set "AUTO_DASHBOARD=0"
+	shift
+	goto :parse_args
+)
+if /I "%~1"=="--demo" (
+	set "MODE=demo"
 	set "AUTO_DASHBOARD=0"
 	shift
 	goto :parse_args
@@ -98,7 +104,49 @@ if /I "%MODE%"=="dashboard" goto :dashboard
 if /I "%MODE%"=="dashboard_status" goto :dashboard_status
 if /I "%MODE%"=="dashboard_stop" goto :dashboard_stop
 if /I "%MODE%"=="dashboard_restart" goto :dashboard_restart
+if /I "%MODE%"=="demo" goto :demo
+if /I "%MODE%"=="terminal" goto :terminal
 
+:demo
+echo ====================================================
+echo   GenAI Demo Recording Setup
+echo ====================================================
+echo.
+set DEMO_MODE=1
+echo [READY] This window will not start generation automatically.
+echo [READY] Start screen recording first, then run the command below.
+echo.
+if exist "%AUTO_ACTIVATE%" (
+	echo [INFO] Activating auto environment: %AUTO_ENV_DIR%
+	call "%AUTO_ACTIVATE%"
+	if errorlevel 1 (
+		echo [ERROR] genai_env activation failed.
+		goto :fail
+	)
+	echo.
+	echo Demo command:
+	echo   python scripts\terminal_demo.py%DASH_ARGS%
+	echo.
+	cmd /k
+	endlocal
+	goto :eof
+)
+
+echo [INFO] Auto environment not found, activating conda env: genai
+call conda activate genai
+if errorlevel 1 (
+	echo [ERROR] conda env "genai" not found or activation failed.
+	goto :fail
+)
+echo.
+echo Demo command:
+echo   python scripts\terminal_demo.py%DASH_ARGS%
+echo.
+cmd /k
+endlocal
+goto :eof
+
+:terminal
 echo ====================================================
 echo   GenAI Local Terminal Mode (Unified)
 echo ====================================================

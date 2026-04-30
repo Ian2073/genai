@@ -110,3 +110,10 @@ urllib3>=2.0.7,<3
 
 # Dataset helper（�?測批次�??�工?��?使用�?
 datasets==2.19.2
+
+# --- Evaluation / Service runtime ---
+fastapi==0.95.2
+uvicorn==0.22.0
+fastcoref==2.1.6
+pydantic==1.10.13
+ultralytics>=8.2.0

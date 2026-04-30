@@ -13,7 +13,7 @@
 - 偵測 GPU 類型（RTX 50 / RTX 40 / CPU）
 - 安裝對應的 PyTorch profile
 - 依 `requirements.txt` 安裝過濾後依賴
-- 安裝 `evaluation/requirements.txt` 額外依賴（先嘗試 root constraints，衝突時自動回退重試）
+- `requirements.txt` 為唯一依賴來源，生成與評測都從這一份安裝
 - 安裝專用 spaCy 模型 wheel 並套用專案 allowlist
 - 清理 `torch_extensions` 下舊的 `exllamav2_ext` JIT 快取（避免 MSVC toolset 變動後 linker 符號錯誤）
 - 執行 `scripts/doctor.py` 診斷

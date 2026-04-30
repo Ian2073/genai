@@ -1076,9 +1076,17 @@ class ChiefRunner:
 					degradation={"reason": "final_eval_exception", "branch": final_eval_branch},
 				)
 				return False
+
+		import os
+		if os.environ.get("DEMO_MODE") == "1":
+			print(f"\n========================================\n✅ Book {index} completed successfully!\n========================================")
 	
 	def _sweep_memory(self, stage_name: str) -> None:
 		"""在階段切換前徹底清理 VRAM。"""
+		import os
+		if os.environ.get("DEMO_MODE") == "1":
+			print(f"\n========================================\n🌟 Starting: {stage_name}\n========================================")
+		
 		self._write_status_snapshot(current_stage=f"CLEANUP:{stage_name}")
 		self.logger.info("Sweeping VRAM before stage: %s", stage_name)
 		max_attempts = 3
@@ -1154,6 +1162,9 @@ class ChiefRunner:
 				)
 				story_meta = self._run_stage_story(index, profile, trace_id, book_context, result, workload_complexity)
 		else:
+			import os
+			if os.environ.get("DEMO_MODE") == "1":
+				print(f"\n========================================\n🌟 Starting: Stage 1 (Story Generation)\n========================================")
 			# Stage 1: Story (LLM)
 			story_meta = self._run_stage_story(
 				index, profile, trace_id, book_context, result, workload_complexity
@@ -1526,7 +1537,14 @@ class ChiefRunner:
 		result["success"] = not result["errors"] and verified
 		result["duration_sec"] = round(time.time() - start, 2)
 		self.observability.memory.fragmentation(label="book_end")
-		
+
+		import os
+		if os.environ.get("DEMO_MODE") == "1":
+			if result["success"]:
+				print(f"\n========================================\n✅ Book {index} completed successfully in {result['duration_sec']} sec!\n========================================\n")
+			else:
+				print(f"\n========================================\n❌ Book {index} failed in {result['duration_sec']} sec.\n========================================\n")
+
 		return story_meta
 
 	def run(self) -> Dict[str, object]:

@@ -152,20 +152,6 @@ if [[ ! -x "$GENAI_PY" ]]; then
   GENAI_PY="$BASE_PY_EXE"
 fi
 
-if [[ -f "$PROJECT_DIR/evaluation/requirements.txt" ]]; then
-  echo
-  echo "[INFO] Installing evaluation extras into unified environment..."
-  if ! "$GENAI_PY" -m pip install -r "$PROJECT_DIR/evaluation/requirements.txt" --constraint "$PROJECT_DIR/requirements.txt"; then
-    echo "[WARN] Evaluation extras install with root constraints failed."
-    echo "[INFO] Retrying evaluation extras without root constraints to avoid profile conflicts..."
-    if ! "$GENAI_PY" -m pip install -r "$PROJECT_DIR/evaluation/requirements.txt"; then
-      echo
-      echo "[ERROR] Failed to install evaluation extras."
-      exit 1
-    fi
-  fi
-fi
-
 echo
 echo "[INFO] Running environment diagnostics..."
 DOCTOR_PY="$PROJECT_DIR/$AUTO_ENV_DIR/bin/python"

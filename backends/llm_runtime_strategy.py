@@ -49,27 +49,9 @@ class ModelAssessment:
 
 DEFAULT_MODEL_PRESETS = [
     CandidatePreset(
-        path=Path("models/Qwen3-14B-AWQ"),
-        source="preferred_qwen3_awq",
-        cuda_quantization=None,
-        cpu_quantization=None,
-    ),
-    CandidatePreset(
         path=Path("models/Qwen2.5-14B-Instruct-GPTQ-Int4"),
         source="preferred_gptq",
         cuda_quantization="gptq",
-        cpu_quantization=None,
-    ),
-    CandidatePreset(
-        path=Path("models/Qwen3-8B"),
-        source="fallback_qwen3",
-        cuda_quantization="4bit",
-        cpu_quantization=None,
-    ),
-    CandidatePreset(
-        path=Path("models/Qwen3.5-9B"),
-        source="fallback_qwen35",
-        cuda_quantization="4bit",
         cpu_quantization=None,
     ),
 ]
@@ -319,6 +301,16 @@ def assess_candidate(candidate: ModelCandidate, *, device: str) -> ModelAssessme
                 f"model metadata is gptq-prequantized; requested quantization '{effective_quantization}' will be ignored"
             )
         effective_quantization = "gptq"
+
+    if quant_method == "awq":
+        return ModelAssessment(
+            candidate=candidate,
+            status="blocked",
+            effective_quantization="awq",
+            reasons=["AWQ text model support is disabled in the simplified runtime policy; use the GPTQ primary model instead"],
+            model_type=model_type,
+            quant_method=quant_method,
+        )
 
     if effective_quantization == "gptq" and quant_method != "gptq":
         return ModelAssessment(

@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Generation Demo Studio</title>
+  <link rel="stylesheet" href="/static/css/generation_demo.css"/>
+</head>
+<body>
+  <main class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">論文 Demo / Structured Generation Control</p>
+        <h1>Generation Demo Studio</h1>
+        <p class="hero-copy">
+          把 demo 拆成總覽、Prompt、KG、結構化控制、證據五個視圖，讓答辯時可以一段一段講，而不是把所有細節同時攤開。
+        </p>
+      </div>
+      <div class="hero-actions">
+        <button class="btn primary" id="btn_presentation_mode" type="button">Presentation Mode</button>
+        <a class="btn ghost" href="/">回主 Dashboard</a>
+      </div>
+    </header>
+
+    <section class="card control-card">
+      <div class="section-head">
+        <div>
+          <h2>Demo 控制面板</h2>
+          <p>先決定故事條件，再刷新 preview。下面五個視圖會共用同一組條件與證據。</p>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div>
+          <label for="saved_template_select">已存使用者模板</label>
+          <div class="inline-row">
+            <select id="saved_template_select">
+              <option value="">不套用</option>
+            </select>
+            <button class="btn ghost mini" id="btn_apply_saved_template" type="button">套用</button>
+          </div>
+        </div>
+        <div>
+          <label for="age">年齡</label>
+          <select id="age">
+            <option value="2-3">2-3</option>
+            <option selected value="4-5">4-5</option>
+            <option value="6-8">6-8</option>
+          </select>
+        </div>
+        <div>
+          <label for="category">類別</label>
+          <select id="category">
+            <option value="adventure">adventure</option>
+            <option selected value="educational">educational</option>
+            <option value="fun">fun</option>
+            <option value="cultural">cultural</option>
+          </select>
+        </div>
+        <div>
+          <label for="subcategory">子類別</label>
+          <select id="subcategory">
+            <option value="forest">forest</option>
+            <option value="tradition">tradition</option>
+            <option selected value="science">science</option>
+            <option value="magic">magic</option>
+            <option value="holiday">holiday</option>
+          </select>
+        </div>
+        <div>
+          <label for="theme">主題</label>
+          <select id="theme">
+            <option value="friendship">friendship</option>
+            <option value="courage">courage</option>
+            <option selected value="mystery">mystery</option>
+            <option value="family">family</option>
+            <option value="animals">animals</option>
+          </select>
+        </div>
+        <div>
+          <label for="story_input_mode">故事輸入模式</label>
+          <select id="story_input_mode">
+            <option value="preset">preset</option>
+            <option selected value="custom">custom</option>
+          </select>
+        </div>
+        <div>
+          <label for="preview_step">展示階段模板</label>
+          <select id="preview_step">
+            <option value="outline">outline</option>
+            <option selected value="story_plan">story_plan</option>
+          </select>
+        </div>
+        <div>
+          <label for="preview_page">展示頁碼</label>
+          <input id="preview_page" min="1" type="number" value="4"/>
+        </div>
+      </div>
+
+      <div class="form-grid text-grid">
+        <div>
+          <label for="story_prompt">使用者 Prompt</label>
+          <textarea id="story_prompt" placeholder="例如：請強調探索與觀察，讓主角透過發現線索解決問題。"></textarea>
+        </div>
+        <div>
+          <label for="story_materials">使用者 Materials</label>
+          <textarea id="story_materials" placeholder="每行一個素材，例如：&#10;舊地圖&#10;星象儀&#10;樹洞實驗室"></textarea>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn primary" id="btn_refresh_preview" type="button">更新 Demo Preview</button>
+      </div>
+      <div class="message" id="preview_status">等待載入 preview。</div>
+    </section>
+
+    <section class="view-tabs" aria-label="Demo views">
+      <button class="view-tab active" data-demo-view="overview" type="button">Overview</button>
+      <button class="view-tab" data-demo-view="prompt" type="button">Prompt</button>
+      <button class="view-tab" data-demo-view="kg" type="button">KG</button>
+      <button class="view-tab" data-demo-view="control" type="button">Control</button>
+      <button class="view-tab" data-demo-view="evidence" type="button">Evidence</button>
+    </section>
+
+    <section class="demo-panel active" data-panel="overview">
+      <section class="card defense-script-card">
+        <div class="section-head">
+          <div>
+            <h2>口試展示主線</h2>
+          </div>
+          <span class="section-tag">Defense Script</span>
+        </div>
+        <div class="defense-script" id="defense_script"></div>
+      </section>
+
+      <section class="card control-matrix-card">
+        <div class="section-head">
+          <div>
+            <h2>三層控制層級比較</h2>
+          </div>
+          <span class="section-tag">G0 → G1 → G2</span>
+        </div>
+        <div class="control-matrix" id="control_matrix"></div>
+      </section>
+
+      <section class="card research-card">
+        <div class="section-head">
+          <div>
+            <h2>研究三大主張</h2>
+          </div>
+          <span class="section-tag">Key Claims</span>
+        </div>
+        <div class="research-claims" id="research_claims"></div>
+      </section>
+
+      <div class="panel-grid panel-grid-overview">
+        <section class="card run-summary-card">
+          <div class="section-head">
+            <div>
+              <h2>目前展示條件</h2>
+              <p>把本次 demo 用到的輸入、KG 選擇與證據狀態壓成簡短摘要。</p>
+            </div>
+            <span class="section-tag">Current Run</span>
+          </div>
+          <div class="mini-grid" id="overview_story_snapshot"></div>
+          <div class="chip-list" id="overview_control_chips"></div>
+          <div class="message" id="evidence_status">等待載入證據。</div>
+        </section>
+      </div>
+    </section>
+
+    <section class="demo-panel" data-panel="prompt" hidden>
+      <section class="card proof-card">
+        <div class="section-head">
+          <div>
+            <h2>這頁要證明什麼</h2>
+          </div>
+          <span class="section-tag">Prompt Control</span>
+        </div>
+        <div class="proof-grid">
+          <div class="proof-item">
+            <strong>G0</strong>
+            <span>只給基本故事條件，作為無結構控制的 baseline。</span>
+          </div>
+          <div class="proof-item">
+            <strong>G1</strong>
+            <span>加入 KG 角色、場景與 moral guidelines，展示知識先驗如何進入 prompt。</span>
+          </div>
+          <div class="proof-item">
+            <strong>G2</strong>
+            <span>加入 page structure、branch context、scene state，展示具體生成控制。</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Prompt 模式分析</h2>
+            <p>一次只分析一個模式，先看它加了什麼控制，再看模板原文與填入後 prompt 的差異。</p>
+          </div>
+        </div>
+        <div class="prompt-mode-switch" id="prompt_mode_switch"></div>
+        <div class="prompt-analysis-grid">
+          <section class="prompt-analysis-card">
+            <div class="prompt-analysis-top">
+              <div class="mini-grid" id="prompt_analysis_stats"></div>
+              <div class="prompt-analysis-side">
+                <div class="analysis-subsection">
+                  <h4>模式能力</h4>
+                  <div class="chip-list" id="prompt_capability_chips"></div>
+                </div>
+                <div class="analysis-subsection">
+                  <h4>輸入變數</h4>
+                  <div class="chip-list chip-list-compact" id="prompt_variable_chips"></div>
+                </div>
+              </div>
+            </div>
+            <div class="bullet-list" id="prompt_analysis_notes"></div>
+          </section>
+
+          <div class="prompt-detail-stack">
+            <section class="prompt-compare-card">
+              <div class="prompt-compare-head">
+                <div>
+                  <h3>模板原文</h3>
+                  <p>展示模板本身有哪些 placeholder 與控制欄位。</p>
+                </div>
+                <div class="mode-path" id="prompt_template_path">-</div>
+              </div>
+              <div class="compare-grid">
+                <div class="compare-block">
+                  <h4>模板原文 / SYSTEM</h4>
+                  <pre class="console light" id="prompt_raw_system"></pre>
+                </div>
+                <div class="compare-block">
+                  <h4>模板原文 / USER</h4>
+                  <pre class="console light" id="prompt_raw_user"></pre>
+                </div>
+              </div>
+            </section>
+
+            <section class="prompt-compare-card">
+              <div class="prompt-compare-head">
+                <div>
+                  <h3>填入後 Prompt</h3>
+                  <p>展示本次故事條件、KG 與結構化控制實際被填進 prompt 的結果。</p>
+                </div>
+              </div>
+              <div class="compare-grid">
+                <div class="compare-block">
+                  <h4>填入後 / SYSTEM</h4>
+                  <pre class="console" id="prompt_filled_system"></pre>
+                </div>
+                <div class="compare-block">
+                  <h4>填入後 / USER</h4>
+                  <pre class="console" id="prompt_filled_user"></pre>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Prompt 補充資料</h2>
+            <p>需要追問細節時再展開，避免主畫面被長文字佔滿。</p>
+          </div>
+          <span class="section-tag">Details</span>
+        </div>
+        <div class="details-grid">
+          <details class="fold">
+            <summary>KG Prompt Guidelines</summary>
+            <pre class="console light" id="prompt_guidelines"></pre>
+          </details>
+          <details class="fold">
+            <summary>Effective Guidelines（含使用者控制）</summary>
+            <pre class="console light" id="effective_guidelines"></pre>
+          </details>
+          <details class="fold">
+            <summary>User Intent JSON</summary>
+            <pre class="console light" id="user_intent_json">{}</pre>
+          </details>
+        </div>
+      </section>
+    </section>
+
+    <section class="demo-panel" data-panel="kg" hidden>
+      <section class="card proof-card">
+        <div class="section-head">
+          <div>
+            <h2>這頁要證明什麼</h2>
+          </div>
+          <span class="section-tag">KG Prior</span>
+        </div>
+        <div class="proof-grid">
+          <div class="proof-item">
+            <strong>不是裝飾圖</strong>
+            <span>KG 被用來收斂年齡、類別、子類別與主題，不只是展示節點。</span>
+          </div>
+          <div class="proof-item">
+            <strong>可解釋選擇</strong>
+            <span>角色、場景、情緒與教學目標都能回到本次 KG 路徑。</span>
+          </div>
+          <div class="proof-item">
+            <strong>連到控制</strong>
+            <span>KG 選出的變體與分支會進一步影響 prompt 與互動結構。</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>KG 知識規模</h2>
+          </div>
+          <span class="section-tag">Knowledge Snapshot</span>
+        </div>
+        <div class="mini-grid" id="kg_stats_grid"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>KG 選擇路徑</h2>
+            <p>先看這次故事是怎麼被選出來，再看哪些知識元素與控制條件參與生成。</p>
+          </div>
+        </div>
+        <div class="kg-map-note">
+          建議口頭順序：輸入限制決定搜尋範圍，KG 再收斂到子類別與主題，之後才帶出角色、場景、概念與生成控制條件。
+        </div>
+        <div class="kg-path-summary" id="kg_path_summary"></div>
+        <div class="kg-path-board" id="kg_selection_cards"></div>
+      </section>
+
+      <div class="panel-grid">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>知識支撐</h2>
+              <p>把角色、場景、概念、情緒與教學目標分開看，不全部混在一起。</p>
+            </div>
+          </div>
+          <div class="kg-group-board" id="kg_support_groups"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>生成控制</h2>
+              <p>這一區只看本次被選中的變體、分支與控制節點。</p>
+            </div>
+          </div>
+          <div class="kg-group-board" id="kg_control_groups"></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>補充資料</h2>
+            <p>需要更細節時再展開，不讓主畫面直接被 JSON 佔滿。</p>
+          </div>
+        </div>
+        <div class="chip-list" id="kg_lists"></div>
+        <details class="fold" open>
+          <summary>Selected Variations / Branch Slots</summary>
+          <pre class="console light" id="variation_json">{}</pre>
+        </details>
+        <details class="fold">
+          <summary>Interaction Plan</summary>
+          <pre class="console light" id="interaction_plan_json">[]</pre>
+        </details>
+      </section>
+    </section>
+
+    <section class="demo-panel" data-panel="control" hidden>
+      <section class="card control-proof-card">
+        <div class="section-head">
+          <div>
+            <h2>控制生成具體機制</h2>
+            <p>這是回答「你到底怎麼控制生成？」時最重要的一頁。</p>
+          </div>
+          <span class="section-tag">Concrete Control</span>
+        </div>
+        <div class="control-proof-grid" id="control_proof_grid"></div>
+      </section>
+
+      <section class="card control-flow-card">
+        <div class="section-head">
+          <div>
+            <h2>Structured Control Flow</h2>
+          </div>
+          <span class="section-tag">Prompt → Generate → Validate → Retry → Save</span>
+        </div>
+        <div class="control-flow" id="control_flow"></div>
+      </section>
+
+      <div class="panel-grid">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Retry 與一致性摘要</h2>
+              <p>這一頁只講 structured control、validation、retry，不混 KG 細節。</p>
+            </div>
+          </div>
+          <div class="mini-grid" id="retry_summary"></div>
+          <div>
+            <h3>Consistency Controls</h3>
+            <div class="bullet-list" id="retry_controls"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Retry Guidance</h2>
+              <p>展示失敗時系統如何引導修正，而不是單純重跑。</p>
+            </div>
+          </div>
+          <pre class="console light" id="retry_guidance_text"></pre>
+        </section>
+      </div>
+
+      <div class="panel-grid">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Page Structure Sample</h2>
+              <p>展示頁面級結構化控制。</p>
+            </div>
+          </div>
+          <details class="fold">
+            <summary>展開 JSON</summary>
+            <pre class="console light" id="page_structure_json">{}</pre>
+          </details>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Visual / State Context Sample</h2>
+              <p>展示圖像與故事狀態上下文如何被帶入。</p>
+            </div>
+          </div>
+          <details class="fold">
+            <summary>展開 JSON</summary>
+            <pre class="console light" id="visual_context_json">{}</pre>
+          </details>
+        </section>
+      </div>
+    </section>
+
+    <section class="demo-panel" data-panel="evidence" hidden>
+      <section class="card proof-card">
+        <div class="section-head">
+          <div>
+            <h2>這頁要證明什麼</h2>
+          </div>
+          <span class="section-tag">Traceability</span>
+        </div>
+        <div class="proof-grid">
+          <div class="proof-item">
+            <strong>可追溯</strong>
+            <span>prompt、KG profile、story meta 與 log 都能對應到實際生成 run。</span>
+          </div>
+          <div class="proof-item">
+            <strong>可驗證</strong>
+            <span>retry 次數、validation failure 與事件 log 可作為一致性控制證據。</span>
+          </div>
+          <div class="proof-item">
+            <strong>可重現</strong>
+            <span>輸入條件與落盤檔案保留下來，方便比較不同生成策略。</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>最新 Story Output 證據</h2>
+            <p>這一頁是附錄性質，專門放落盤檔案與 retry / validation 事件。</p>
+          </div>
+          <span class="section-tag">Run Evidence</span>
+        </div>
+
+        <div class="inline-row">
+          <input id="story_root_hint" placeholder="可留空，自動抓最新 story root" type="text"/>
+          <button class="btn ghost" id="btn_refresh_evidence" type="button">載入證據</button>
+        </div>
+
+        <div class="mini-grid">
+          <div class="mini wide">
+            <span>Story Root</span>
+            <strong id="evidence_story_root">-</strong>
+          </div>
+          <div class="mini wide">
+            <span>Resource Dir</span>
+            <strong id="evidence_resource_dir">-</strong>
+          </div>
+          <div class="mini">
+            <span>Observed Retry</span>
+            <strong id="evidence_retry_count">0</strong>
+          </div>
+          <div class="mini">
+            <span>Validation Failures</span>
+            <strong id="evidence_validation_failures">0</strong>
+          </div>
+        </div>
+
+        <div class="mini-grid" id="evidence_stats_grid"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>核心輸出檔案</h2>
+            <p>只在最後展示，避免主流程被大量原始 evidence 淹沒。</p>
+          </div>
+        </div>
+        <div class="evidence-grid" id="evidence_files"></div>
+      </section>
+
+      <div class="panel-grid">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Page Prompt Files</h2>
+              <p>實際生成過程中的頁面 prompt。</p>
+            </div>
+          </div>
+          <div class="stack-list" id="page_prompt_list"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Character Prompt Files</h2>
+              <p>角色相關 prompt 證據。</p>
+            </div>
+          </div>
+          <div class="stack-list" id="character_prompt_list"></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Retry / Validation Log Events</h2>
+            <p>將生成時的關鍵事件整理成可講解的清單。</p>
+          </div>
+        </div>
+        <div class="stack-list" id="retry_event_list"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/js/generation_demo.js"></script>
+</body>
+</html>

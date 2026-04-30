@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import mimetypes
 import os
 import sys
@@ -271,6 +272,7 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from utils import (
+  build_story_profile,
   list_character_prompt_files,
   list_page_prompt_files,
   load_or_create_seed,
@@ -280,6 +282,7 @@ from utils import (
 from runtime.story_files import (
   detect_story_languages,
   find_latest_story_root,
+  find_story_resource_dir,
   list_generated_audio_files,
 )
 
@@ -695,6 +698,7 @@ def _default_runner_payload(last_config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 _HTML_TEMPLATE = Path(__file__).parent / "templates" / "dashboard.html"
+_DEMO_HTML_TEMPLATE = Path(__file__).parent / "templates" / "generation_demo.html"
 
 def get_html() -> bytes:
     if _HTML_TEMPLATE.exists():
@@ -712,6 +716,34 @@ def get_html() -> bytes:
         html = html.replace('/static/js/dashboard.js', f'/static/js/dashboard.js?v={js_mtime}')
         return html.encode("utf-8")
     return b"<html><body>Template not found.</body></html>"
+
+
+def _read_versioned_template(
+    template_path: Path,
+    *,
+    asset_pairs: Sequence[Tuple[str, Path]],
+) -> bytes:
+    if template_path.exists():
+        html = template_path.read_text(encoding="utf-8")
+        for public_path, local_path in asset_pairs:
+            try:
+                mtime = int(local_path.stat().st_mtime)
+            except Exception:
+                mtime = 0
+            html = html.replace(public_path, f"{public_path}?v={mtime}")
+        return html.encode("utf-8")
+    return b"<html><body>Template not found.</body></html>"
+
+
+def get_demo_html() -> bytes:
+    base_dir = Path(__file__).parent
+    return _read_versioned_template(
+        _DEMO_HTML_TEMPLATE,
+        asset_pairs=[
+            ("/static/css/generation_demo.css", base_dir / "static" / "css" / "generation_demo.css"),
+            ("/static/js/generation_demo.js", base_dir / "static" / "js" / "generation_demo.js"),
+        ],
+    )
 
 
 
@@ -3960,15 +3992,11 @@ class DashboardRuntime:
         default_width = int(getattr(image_profile, "width", DEFAULT_CHIEF_OPTIONS.photo_width))
         default_height = int(getattr(image_profile, "height", DEFAULT_CHIEF_OPTIONS.photo_height))
         default_base = runtime_defaults.get("image_base") or Path(DEFAULT_CHIEF_OPTIONS.sdxl_base)
-        default_refiner = runtime_defaults.get("image_refiner") or Path(DEFAULT_CHIEF_OPTIONS.sdxl_refiner)
         override_base = _safe_text(overrides.get("base_model_dir"), default="", max_length=1200)
         base_model_dir = Path(override_base) if override_base else Path(default_base)
-        provider = _safe_text(overrides.get("provider"), default=classify_image_provider(base_model_dir), max_length=64).lower()
-        model_family = _safe_text(overrides.get("model_family"), default=classify_image_model(base_model_dir), max_length=64).lower()
-        override_refiner = _safe_text(overrides.get("refiner_model_dir"), default="", max_length=1200)
-        refiner_model_dir = Path(override_refiner) if override_refiner else Path(default_refiner)
-        if not str(model_family).startswith("sdxl"):
-            refiner_model_dir = Path("")
+        provider = classify_image_provider(base_model_dir)
+        model_family = classify_image_model(base_model_dir)
+        refiner_model_dir = Path("")
 
         steps = _safe_int(overrides.get("steps"), default_steps, min_value=1, max_value=150)
         guidance = _safe_float(overrides.get("guidance"), default_guidance)
@@ -5571,6 +5599,645 @@ class DashboardRuntime:
             "server_ts": time.time(),
         }
 
+    @staticmethod
+    def _demo_age_value(token: str) -> int:
+        value = str(token or "").strip()
+        if value == "2-3":
+            return 2
+        if value == "4-5":
+            return 4
+        if value == "6-8":
+            return 6
+        return 5
+
+    @staticmethod
+    def _split_chat_template(text: str) -> Tuple[str, str]:
+        system_marker = "###SYSTEM"
+        user_marker = "###USER"
+        if system_marker not in text or user_marker not in text:
+            return text.strip(), ""
+        system_part = text.split(system_marker, 1)[1].split(user_marker, 1)[0].strip()
+        user_part = text.split(user_marker, 1)[1].strip()
+        return system_part, user_part
+
+    @staticmethod
+    def _text_excerpt(text: str, limit: int = 1600) -> str:
+        normalized = re.sub(r"\r\n?", "\n", str(text or "")).strip()
+        if len(normalized) <= limit:
+            return normalized
+        return normalized[: limit - 3].rstrip() + "..."
+
+    def _read_text_excerpt(self, path: Path, limit: int = 1600) -> str:
+        try:
+            return self._text_excerpt(path.read_text(encoding="utf-8", errors="replace"), limit=limit)
+        except Exception:
+            return ""
+
+    def _first_existing_path(self, candidates: Sequence[Path]) -> Optional[Path]:
+        for candidate in candidates:
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        return None
+
+    def _scan_story_logs(self, story_root: Path, *, limit: int = 14) -> Dict[str, Any]:
+        log_path = self._first_existing_path(sorted(story_root.rglob("generation.log")))
+        if log_path is None:
+            return {
+                "log_path": None,
+                "retry_attempts": 0,
+                "validation_failures": 0,
+                "step_failures": 0,
+                "recent_events": [],
+                "excerpt": "",
+            }
+
+        retry_attempts = 0
+        validation_failures = 0
+        step_failures = 0
+        recent_events: List[Dict[str, str]] = []
+        excerpt_lines: List[str] = []
+        try:
+            lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            lines = []
+
+        for line in lines:
+            line_text = str(line or "")
+            if "[Step " in line_text and " Try " in line_text:
+                retry_attempts += 1
+            if "Validation failed" in line_text:
+                validation_failures += 1
+            if "Failed all" in line_text:
+                step_failures += 1
+            if any(marker in line_text for marker in ("Validation failed", "Rejected output preview", "Failed all", "completed in", "Try ")):
+                excerpt_lines.append(line_text)
+
+        for line_text in excerpt_lines[-limit:]:
+            match = _LOG_LINE_PATTERN.match(line_text)
+            if match:
+                recent_events.append(
+                    {
+                        "timestamp": str(match.group("ts") or ""),
+                        "level": str(match.group("level") or "").lower(),
+                        "message": str(match.group("msg") or "").strip(),
+                    }
+                )
+            else:
+                recent_events.append({"timestamp": "", "level": "info", "message": line_text.strip()})
+
+        return {
+            "log_path": self._to_root_relative_path(log_path),
+            "retry_attempts": retry_attempts,
+            "validation_failures": validation_failures,
+            "step_failures": step_failures,
+            "recent_events": recent_events,
+            "excerpt": self._text_excerpt("\n".join(excerpt_lines[-24:]), limit=3200),
+        }
+
+    @staticmethod
+    def _demo_graph_node(
+        node_id: str,
+        label: str,
+        *,
+        lane: str,
+        group: str,
+        kind: str,
+        detail: str = "",
+        emphasis: str = "normal",
+    ) -> Dict[str, Any]:
+        return {
+            "id": node_id,
+            "label": label,
+            "lane": lane,
+            "group": group,
+            "kind": kind,
+            "detail": detail,
+            "emphasis": emphasis,
+        }
+
+    @staticmethod
+    def _demo_graph_edge(source: str, target: str, relation: str, *, style: str = "kg") -> Dict[str, Any]:
+        return {
+            "source": source,
+            "target": target,
+            "relation": relation,
+            "style": style,
+        }
+
+    def _build_focused_kg_graph(self, profile: Any, pipeline: Any) -> Dict[str, Any]:
+        kg = getattr(pipeline, "kg", None)
+        if kg is None:
+            return {"lanes": [], "nodes": [], "edges": [], "legend": []}
+
+        nodes: List[Dict[str, Any]] = []
+        edges: List[Dict[str, Any]] = []
+        seen_nodes: set[str] = set()
+        seen_edges: set[Tuple[str, str, str, str]] = set()
+
+        def add_node(node_id: str, label: str, *, lane: str, group: str, kind: str, detail: str = "", emphasis: str = "normal") -> None:
+            if not node_id or node_id in seen_nodes:
+                return
+            seen_nodes.add(node_id)
+            nodes.append(
+                self._demo_graph_node(
+                    node_id,
+                    label,
+                    lane=lane,
+                    group=group,
+                    kind=kind,
+                    detail=detail,
+                    emphasis=emphasis,
+                )
+            )
+
+        def add_edge(source: str, target: str, relation: str, *, style: str = "kg") -> None:
+            if not source or not target:
+                return
+            key = (source, target, relation, style)
+            if key in seen_edges:
+                return
+            seen_edges.add(key)
+            edges.append(self._demo_graph_edge(source, target, relation, style=style))
+
+        age_group = kg.nodes.get(profile.age_group_id)
+        category = kg.nodes.get(profile.category_id)
+        subcategory = kg.nodes.get(profile.subcategory_id) if profile.subcategory_id else None
+        theme = kg.nodes.get(profile.theme_id)
+
+        if age_group:
+            add_node(age_group.id, age_group.label, lane="input", group="selection", kind=age_group.type.value, detail=profile.age_range, emphasis="focus")
+        if category:
+            add_node(category.id, category.label, lane="selection", group="selection", kind=category.type.value, detail="story category", emphasis="focus")
+        if subcategory:
+            add_node(subcategory.id, subcategory.label, lane="selection", group="selection", kind=subcategory.type.value, detail="matched subcategory", emphasis="focus")
+        if theme:
+            add_node(theme.id, theme.label, lane="selection", group="selection", kind=theme.type.value, detail="selected theme", emphasis="focus")
+
+        if age_group and category:
+            add_edge(age_group.id, category.id, "suitable_for")
+        if category and subcategory:
+            add_edge(category.id, subcategory.id, "has_subcategory")
+        if category and theme:
+            add_edge(category.id, theme.id, "contains_theme")
+        if subcategory and theme:
+            add_edge(subcategory.id, theme.id, "supports_theme")
+
+        character_ids = list(((profile.raw_config or {}).get("characters") or {}).keys())[:4]
+        if not character_ids and category:
+            character_ids = [node.id for node in kg.get_targets_by_relation(category.id, "has_character")[:4]]
+        for char_id in character_ids:
+            char = kg.nodes.get(char_id)
+            if not char:
+                continue
+            detail = str((char.properties or {}).get("role") or "")
+            add_node(char.id, char.label, lane="knowledge", group="character", kind=char.type.value, detail=detail)
+            if category:
+                add_edge(category.id, char.id, "has_character")
+
+        for scene in kg.get_targets_by_relation(profile.theme_id, "suggests_scene")[:4]:
+            detail = str((scene.properties or {}).get("scene_type") or "")
+            add_node(scene.id, scene.label, lane="knowledge", group="scene", kind=scene.type.value, detail=detail)
+            if theme:
+                add_edge(theme.id, scene.id, "suggests_scene")
+
+        for concept in kg.get_targets_by_relation(profile.theme_id, "involves_concept")[:3]:
+            detail = str((concept.properties or {}).get("source") or "concept")
+            add_node(concept.id, concept.label, lane="knowledge", group="concept", kind=concept.type.value, detail=detail)
+            if theme:
+                add_edge(theme.id, concept.id, "involves_concept")
+
+        for emotion in kg.get_targets_by_relation(profile.theme_id, "teaches_emotion")[:2]:
+            add_node(emotion.id, emotion.label, lane="knowledge", group="emotion", kind=emotion.type.value, detail="emotion cue")
+            if theme:
+                add_edge(theme.id, emotion.id, "teaches_emotion")
+
+        for objective in kg.get_targets_by_relation(profile.theme_id, "teaches_objective")[:2]:
+            add_node(objective.id, objective.label, lane="knowledge", group="objective", kind=objective.type.value, detail="learning objective")
+            if theme:
+                add_edge(theme.id, objective.id, "teaches_objective")
+
+        selection_trace = dict((profile.raw_config or {}).get("selection_trace") or {})
+        selected_structure = (profile.raw_config or {}).get("selected_structure") or {}
+        selected_dynamic = (profile.raw_config or {}).get("selected_dynamic") or {}
+        selected_catalyst = (profile.raw_config or {}).get("selected_catalyst") or {}
+
+        structure_id = str(selected_structure.get("id") or "")
+        if structure_id:
+            add_node(
+                structure_id,
+                str(selected_structure.get("label") or structure_id),
+                lane="control",
+                group="variation",
+                kind="generation_param",
+                detail="story structure",
+            )
+            if category:
+                add_edge(category.id, structure_id, "selected_structure", style="selection")
+
+        dynamic_id = str(selected_dynamic.get("id") or "")
+        if dynamic_id:
+            add_node(
+                dynamic_id,
+                str(selected_dynamic.get("label") or dynamic_id),
+                lane="control",
+                group="variation",
+                kind="generation_param",
+                detail="character dynamic",
+            )
+            if age_group:
+                add_edge(age_group.id, dynamic_id, "selected_dynamic", style="selection")
+
+        catalyst_id = str(selected_catalyst.get("id") or "")
+        if catalyst_id:
+            add_node(
+                catalyst_id,
+                str(selected_catalyst.get("label") or catalyst_id),
+                lane="control",
+                group="variation",
+                kind="generation_param",
+                detail="story catalyst",
+            )
+            if category:
+                add_edge(category.id, catalyst_id, "selected_catalyst", style="selection")
+
+        branch_slots = list(getattr(getattr(profile, "layout", None), "branch_slots", []) or [])
+        for idx, slot in enumerate(branch_slots[:3], start=1):
+            if isinstance(slot, dict):
+                slot_data = dict(slot)
+            elif hasattr(slot, "to_dict"):
+                slot_data = dict(slot.to_dict())
+            else:
+                slot_data = {}
+            slot_id = f"branch_slot_{idx}"
+            add_node(
+                slot_id,
+                str(slot_data.get("label") or f"Branch {idx}"),
+                lane="control",
+                group="branch",
+                kind="branch_slot",
+                detail=str(slot_data.get("desc") or slot_data.get("type") or ""),
+            )
+            if theme:
+                add_edge(theme.id, slot_id, "branch_archetype", style="selection")
+
+        lanes = [
+            {"id": "input", "label": "Input Constraints"},
+            {"id": "selection", "label": "KG Selection"},
+            {"id": "knowledge", "label": "Semantic Support"},
+            {"id": "control", "label": "Generation Control"},
+        ]
+        legend = [
+            {"style": "kg", "label": "KG 原生關係"},
+            {"style": "selection", "label": "本次生成選中的控制條件"},
+        ]
+        return {
+            "lanes": lanes,
+            "nodes": nodes,
+            "edges": edges,
+            "legend": legend,
+        }
+
+    def _build_demo_story_pipeline(self, payload: Dict[str, Any]) -> Tuple[Any, Any, Dict[str, Any]]:
+        from story_core.story_types import StoryInput
+
+        # Lazy import avoids pulling heavy story dependencies during normal dashboard use.
+        from story import StoryPipeline
+
+        age_token = _safe_text(payload.get("age"), default="", max_length=12)
+        category_token = _safe_text(payload.get("category"), default="", max_length=32).lower() or None
+        subcategory_token = _safe_text(payload.get("subcategory"), default="", max_length=32).lower() or None
+        theme_token = _safe_text(payload.get("theme"), default="", max_length=32).lower() or None
+        input_mode = _safe_text(payload.get("story_input_mode"), default="preset", max_length=16).lower()
+        if input_mode not in {"preset", "custom"}:
+            input_mode = "preset"
+        story_prompt = _safe_text(payload.get("story_prompt"), default="", max_length=4000)
+        story_materials = _safe_text(payload.get("story_materials"), default="", max_length=4000)
+
+        profile = build_story_profile(
+            language="en",
+            age=self._demo_age_value(age_token),
+            category=category_token,
+            subcategory=subcategory_token,
+            theme=theme_token,
+        )
+        story_input = StoryInput(
+            language=profile.language,
+            age_group=profile.age_label,
+            category=profile.category_label,
+            subcategory=profile.subcategory_label,
+            theme=profile.theme_label,
+            input_mode=input_mode,
+            user_prompt=story_prompt if input_mode == "custom" else "",
+            user_materials=story_materials if input_mode == "custom" else "",
+            kg_payload=profile.kg_payload,
+            kg_profile=profile,
+        )
+        demo_logger = logging.getLogger("dashboard.demo.preview")
+        if not demo_logger.handlers:
+            demo_logger.addHandler(logging.NullHandler())
+        options = SimpleNamespace(
+            pages_expected=profile.pages_expected,
+            model_name="demo-preview",
+        )
+        story_root = self.records_dir / "_demo_preview"
+        pipeline = StoryPipeline(
+            story_input,
+            "demo_preview",
+            Path("demo_preview"),
+            self.root_dir / "output",
+            story_root,
+            None,
+            options,
+            demo_logger,
+            kernel_recorder=None,
+        )
+        normalized = {
+            "age": age_token or profile.age_range,
+            "category": category_token or profile.category_id,
+            "subcategory": subcategory_token or (profile.subcategory_id or ""),
+            "theme": theme_token or profile.theme_id,
+            "story_input_mode": input_mode,
+            "story_prompt": story_prompt if input_mode == "custom" else "",
+            "story_materials": story_materials if input_mode == "custom" else "",
+        }
+        return profile, pipeline, normalized
+
+    def _render_demo_prompt_modes(self, profile: Any, pipeline: Any, payload: Dict[str, Any]) -> Dict[str, Any]:
+        from prompts.prompt_utils import load_step_prompts, load_template
+
+        preview_step = _safe_text(payload.get("preview_step"), default="story_plan", max_length=24).lower()
+        if preview_step not in {"outline", "story_plan"}:
+            preview_step = "story_plan"
+
+        base_context = dict(getattr(pipeline, "base_context", {}) or {})
+        pages_expected = _safe_int(profile.pages_expected, profile.pages_expected, min_value=1, max_value=80)
+        g0_context = {
+            **base_context,
+            "theme": profile.theme_label,
+            "category": profile.category_label,
+            "subcategory": profile.subcategory_label,
+            "age_group": profile.age_label,
+            "pages_expected": pages_expected,
+            "characters_csv": "",
+            "kg_scenes": "",
+            "kg_moral": "",
+            "kg_guidelines": "",
+        }
+        g1_context = {
+            **base_context,
+            "theme": profile.theme_label,
+            "category": profile.category_label,
+            "subcategory": profile.subcategory_label,
+            "age_group": profile.age_label,
+            "pages_expected": pages_expected,
+            "kg_guidelines": profile.prompt_guidelines,
+        }
+
+        sample_page = _safe_int(
+            payload.get("preview_page"),
+            int(getattr(profile.layout, "decision_page", 1) or 1),
+            min_value=1,
+            max_value=max(1, pages_expected),
+        )
+        page_structure = pipeline._build_page_structure(sample_page)
+        sample_event = (
+            f"{profile.theme_label} leads the child hero into a gentle turning point that reveals the main challenge."
+        )
+        visual_context = pipeline._build_visual_prompt_context(sample_page, sample_event, page_structure, None)
+        branch_slots = getattr(profile.layout, "branch_slots", []) if getattr(profile, "layout", None) else []
+        branch_text = "Linear Path"
+        if branch_slots:
+            branch_text = ", ".join(
+                f"Option {idx + 1}: {str(slot.get('label') or slot.get('type') or 'branch')}"
+                for idx, slot in enumerate(branch_slots[:3])
+            )
+        g2_template_path = "prompts/A2_story_outline.txt"
+        g2_context: Dict[str, Any] = {
+            **base_context,
+            "theme": profile.theme_label,
+            "category": profile.category_label,
+            "subcategory": profile.subcategory_label,
+            "age_group": profile.age_label,
+            "pages_expected": pages_expected,
+        }
+        if preview_step == "story_plan":
+            g2_template_path = "prompts/A3_a_story_plan.txt"
+            g2_context.update(
+                {
+                    "outline": (
+                        f"Page 1 introduces the setting and characters. "
+                        f"Page {sample_page} escalates the {profile.theme_label.lower()} conflict and prepares the choice."
+                    ),
+                    "page_num": sample_page,
+                    "total_pages": pages_expected,
+                    "current_event": sample_event,
+                    "smart_context": (
+                        f"Previous pages establish {profile.theme_label.lower()} in a {profile.category_label.lower()} story. "
+                        f"This preview focuses on page {sample_page} of {pages_expected}."
+                    ),
+                    "page_structure": json.dumps(page_structure, ensure_ascii=False, indent=2),
+                    "branch_context": branch_text,
+                    "system_core_assumptions": getattr(pipeline.kg, "SYSTEM_CORE_ASSUMPTIONS", ""),
+                    "system_announcement": "DEMO PREVIEW: show how structured control is injected before generation.",
+                    "setup_end": max(1, min(pages_expected, sample_page - 1)),
+                    "diverge_start": max(1, int(page_structure.get("decision_page") or sample_page)),
+                    "diverge_end": max(1, min(pages_expected, (int(page_structure.get("decision_page") or sample_page) + 1))),
+                    "closing_start": max(1, pages_expected - 1),
+                    "closing_end": pages_expected,
+                    "current_phase": str(page_structure.get("page_function") or "NARRATIVE"),
+                    "value_focus": str(page_structure.get("value_focus") or "Observe consequence clearly"),
+                    "value_decision_basis": "Compare safe action, social cue, and narrative consequence.",
+                    "value_emotion_approach": "Keep emotion explicit enough for later consistency checks.",
+                    "value_action_pace": "One clear page-level beat only.",
+                    "character_anchor": ", ".join(getattr(pipeline, "primary_characters", [])[:3]),
+                    "contract_character_card": "Use the current character roster exactly as listed. Do not rename or merge roles.",
+                    "contract_lexical_card": "Prefer stable name references when multiple characters share similar pronouns.",
+                    "detected_turning_point": int(page_structure.get("decision_page") or sample_page),
+                }
+            )
+            g2_context.update(visual_context)
+
+        mode_specs = [
+            {
+                "id": "g0",
+                "label": "G0 Baseline",
+                "description": "無結構資訊的基準條件，只保留最基本故事欄位。",
+                "template_path": "prompts/baseline_outline_nokg.txt",
+                "context": g0_context,
+            },
+            {
+                "id": "g1",
+                "label": "G1 KG Only",
+                "description": "加入 KG 角色、場景與 guidelines，但尚未展示分階段結構控制。",
+                "template_path": "prompts/baseline_outline.txt",
+                "context": g1_context,
+            },
+            {
+                "id": "g2",
+                "label": "G2 Structured Control",
+                "description": "結合 KG、分階段模板與一致性控制，對應論文主張的完整條件。",
+                "template_path": g2_template_path,
+                "context": g2_context,
+            },
+        ]
+
+        rendered_modes: List[Dict[str, Any]] = []
+        for spec in mode_specs:
+            template_text = load_template(Path(spec["template_path"]))
+            raw_system, raw_user = self._split_chat_template(template_text)
+            filled_system, filled_user = load_step_prompts(spec["template_path"], context=spec["context"])
+            rendered_modes.append(
+                {
+                    "id": spec["id"],
+                    "label": spec["label"],
+                    "description": spec["description"],
+                    "template_path": spec["template_path"],
+                    "raw_system": raw_system,
+                    "raw_user": raw_user,
+                    "filled_system": filled_system,
+                    "filled_user": filled_user,
+                }
+            )
+
+        retry_summary = {
+            "configured_max_retries": int(getattr(pipeline, "system_config", {}).get("max_retries_per_step", 0) or 0),
+            "sample_retry_feedback": pipeline._build_step_retry_instruction(
+                "story_plan" if preview_step == "story_plan" else "outline",
+                {"page_num": sample_page, "page_structure": json.dumps(page_structure, ensure_ascii=False)},
+                "Missing required structure or consistency constraint.",
+            ),
+            "controls": [
+                "Dynamic consistency normalizes character names and pronoun aliases after generation.",
+                "Structured plan pages require both <plan> and <state_json> blocks before they are accepted.",
+                "Validation failure appends SYSTEM_FEEDBACK and retry guidance back into the next prompt attempt.",
+                "Targeted quality repair can rewrite weak story pages before final output is saved.",
+            ],
+        }
+
+        return {
+            "preview_step": preview_step,
+            "preview_page": sample_page,
+            "modes": rendered_modes,
+            "page_structure": page_structure,
+            "visual_context": visual_context,
+            "retry_summary": retry_summary,
+        }
+
+    def get_generation_demo_preview(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        profile, pipeline, normalized = self._build_demo_story_pipeline(payload)
+        preview = self._render_demo_prompt_modes(profile, pipeline, payload)
+        selected_variations = dict((profile.kg_payload or {}).get("selected_variations") or {})
+        branch_slots = list(getattr(getattr(profile, "layout", None), "branch_slots", []) or [])
+        interaction_plan = [dict(slot.to_dict()) for slot in (getattr(profile, "interaction_plan", []) or [])]
+        focused_graph = self._build_focused_kg_graph(profile, pipeline)
+        return {
+            "ok": True,
+            "input": normalized,
+            "profile": {
+                "age_group_id": getattr(profile, "age_group_id", ""),
+                "category_id": getattr(profile, "category_id", ""),
+                "subcategory_id": getattr(profile, "subcategory_id", ""),
+                "theme_id": getattr(profile, "theme_id", ""),
+                "age_label": profile.age_label,
+                "age_range": profile.age_range,
+                "category_label": profile.category_label,
+                "subcategory_label": profile.subcategory_label,
+                "theme_label": profile.theme_label,
+                "pages_expected": profile.pages_expected,
+                "visual_style": getattr(profile, "visual_style", ""),
+                "selected_variations": selected_variations,
+                "characters": list((profile.kg_payload or {}).get("characters") or []),
+                "scenes": list((profile.kg_payload or {}).get("scenes") or []),
+                "moral": (profile.kg_payload or {}).get("moral", ""),
+                "prompt_guidelines": self._text_excerpt(profile.prompt_guidelines, limit=2800),
+                "effective_guidelines": self._text_excerpt(getattr(pipeline, "effective_guidelines", ""), limit=2800),
+                "user_intent": dict(getattr(pipeline, "user_story_intent", {}) or {}),
+                "branch_slots": branch_slots,
+                "interaction_plan": interaction_plan,
+                "focused_graph": focused_graph,
+                "raw_config": dict(getattr(profile, "raw_config", {}) or {}),
+            },
+            "preview": preview,
+        }
+
+    def get_generation_demo_story_evidence(self, story_root_hint: Optional[str] = None) -> Dict[str, Any]:
+        story_root = self._resolve_story_root_path(story_root_hint)
+        if story_root is None:
+            return {"ok": False, "error": "No story root resolved for demo evidence."}
+
+        resource_dir = find_story_resource_dir(story_root)
+        outline_path = self._first_existing_path(sorted(story_root.rglob("outline.txt")))
+        page_plan_path = self._first_existing_path(sorted(story_root.rglob("page_*_plan.txt")))
+        story_meta_path = self._first_existing_path([
+            resource_dir / "story_meta.json",
+            story_root / "story_meta.json",
+        ])
+        kg_profile_path = self._first_existing_path([
+            resource_dir / "kg_profile.json",
+            story_root / "kg_profile.json",
+        ])
+        guidelines_path = self._first_existing_path([
+            resource_dir / "kg_guidelines.txt",
+            story_root / "kg_guidelines.txt",
+        ])
+
+        page_prompt_paths = list_page_prompt_files(resource_dir)[:4]
+        character_prompt_paths = list_character_prompt_files(resource_dir)[:4]
+        log_summary = self._scan_story_logs(story_root)
+
+        return {
+            "ok": True,
+            "story_root": self._to_root_relative_path(story_root),
+            "resource_dir": self._to_root_relative_path(resource_dir),
+            "files": {
+                "outline": {
+                    "path": self._to_root_relative_path(outline_path) if outline_path else None,
+                    "excerpt": self._read_text_excerpt(outline_path, limit=1800) if outline_path else "",
+                },
+                "page_plan": {
+                    "path": self._to_root_relative_path(page_plan_path) if page_plan_path else None,
+                    "excerpt": self._read_text_excerpt(page_plan_path, limit=1800) if page_plan_path else "",
+                },
+                "kg_guidelines": {
+                    "path": self._to_root_relative_path(guidelines_path) if guidelines_path else None,
+                    "excerpt": self._read_text_excerpt(guidelines_path, limit=2400) if guidelines_path else "",
+                },
+                "kg_profile": {
+                    "path": self._to_root_relative_path(kg_profile_path) if kg_profile_path else None,
+                    "excerpt": self._text_excerpt(
+                        json.dumps(self._read_json_dict(kg_profile_path), ensure_ascii=False, indent=2),
+                        limit=2400,
+                    ) if kg_profile_path else "",
+                },
+                "story_meta": {
+                    "path": self._to_root_relative_path(story_meta_path) if story_meta_path else None,
+                    "excerpt": self._text_excerpt(
+                        json.dumps(self._read_json_dict(story_meta_path), ensure_ascii=False, indent=2),
+                        limit=2400,
+                    ) if story_meta_path else "",
+                },
+            },
+            "prompt_files": {
+                "page_prompts": [
+                    {
+                        "path": self._to_root_relative_path(path),
+                        "page": page_number_from_prompt(path),
+                        "excerpt": self._text_excerpt(load_prompt(path), limit=1200),
+                    }
+                    for path in page_prompt_paths
+                ],
+                "character_prompts": [
+                    {
+                        "path": self._to_root_relative_path(path),
+                        "name": path.stem,
+                        "excerpt": self._text_excerpt(load_prompt(path), limit=1200),
+                    }
+                    for path in character_prompt_paths
+                ],
+            },
+            "retry": log_summary,
+        }
+
 
 class DashboardHandler(BaseHTTPRequestHandler):
     runtime: DashboardRuntime
@@ -5609,6 +6276,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/":
             body = get_html()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/demo":
+            body = get_demo_html()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -5791,6 +6469,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_json(self.runtime.list_gallery_stories(limit=limit))
             return
 
+        if parsed.path == "/api/demo/story-evidence":
+            story_root_hint = (query.get("story_root") or [""])[0]
+            self._send_json(self.runtime.get_generation_demo_story_evidence(story_root_hint=story_root_hint))
+            return
+
         self._send_json({"ok": False, "error": "not found"}, status=404)
 
     def do_POST(self) -> None:  # noqa: N802
@@ -5861,6 +6544,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
             with open(p, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             self._send_json({"ok": True, "templates": data, "updated": template_index is not None})
+            return
+
+        if parsed.path == "/api/demo/generation-preview":
+            payload = self._read_json_body()
+            try:
+                result = self.runtime.get_generation_demo_preview(payload)
+                self._send_json(result, status=200 if result.get("ok") else 400)
+            except Exception as exc:
+                try:
+                    print(
+                        "[dashboard] /api/demo/generation-preview failed\n" + traceback.format_exc(),
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                except Exception:
+                    pass
+                self._send_json({"ok": False, "error": str(exc)}, status=500)
             return
 
         if parsed.path == "/api/start":
